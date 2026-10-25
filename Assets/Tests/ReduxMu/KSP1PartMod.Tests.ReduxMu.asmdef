@@ -1,0 +1,22 @@
+{
+    "name": "KSP1PartMod.Tests.ReduxMu",
+    "references": [
+        "KSP1PartMod",
+        "KSP1PartMod.Tests.Animation",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll",
+        "Ksp2Redux.dll",
+        "0Harmony.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ]
+}

@@ -19,6 +19,29 @@ namespace KSP1PartMod.Tests.Animation.Mu
         [Test] public void Read_BadMagic_Throws() =>
             Assert.Throws<MuFormatException>(() => MuReader.Read(MuBytes.Header(magic: 1, version: 5).Stream()));
 
+        [TestCase(-1)] [TestCase(6)]
+        public void Read_UnsupportedVersion_Throws(int version)
+        {
+            var e = Assert.Throws<MuFormatException>(() => MuReader.Read(MuBytes.File(MuBytes.Obj("root"), version).Stream()));
+            Assert.AreEqual(4, e.Offset);
+            StringAssert.Contains(version.ToString(), e.Message);
+        }
+
+        [Test] public void Read_TrailingBytes_Throws()
+        {
+            var root = MuBytes.File(MuBytes.Obj("root").Tag(1)).Bytes; // the root closed by an end tag
+            var bytes = root.Concat(new byte[] { 0, 0, 0, 0 }).ToArray();
+            var e = Assert.Throws<MuFormatException>(() => MuReader.Read(new MemoryStream(bytes)));
+            Assert.AreEqual(root.Length, e.Offset);
+        }
+
+        [Test] public void Read_RootClosedByEndTag_Reads() =>
+            Assert.AreEqual("root", MuReader.Read(MuBytes.File(MuBytes.Obj("root").Tag(1)).Stream()).Root.Name);
+
+        [TestCase(0, 1)] [TestCase(2, 1)] [TestCase(3, 0)] [TestCase(5, 0)]
+        public void ObjectHeaderExtraFloats_ByVersion(int version, int expected) =>
+            Assert.AreEqual(expected, MuReader.ObjectHeaderExtraFloats(version));
+
         [Test] public void Read_Header_KeepsVersionAndName()
         {
             var f = MuReader.Read(MuBytes.File(MuBytes.Obj("root"), version: 3, name: "hello").Stream());

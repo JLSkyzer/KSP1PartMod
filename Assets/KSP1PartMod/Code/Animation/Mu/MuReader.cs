@@ -34,6 +34,13 @@ namespace KSP1PartMod.Animation.Mu
     {
         public const int Magic = 76543;
 
+        public const int MaxVersion = 5;
+
+        /// <summary>Floats an object header carries after its position, rotation and scale: one in versions 0 to
+        /// 2 (it equals the x scale in all 219 headers of the 50 stock files of those versions, like a fourth
+        /// scale component), none from version 3.</summary>
+        public static int ObjectHeaderExtraFloats(int version) => version < 3 ? 1 : 0;
+
         private const int FloatSize = 4, IntSize = 4, ColorSize = 16, TextureRefSize = 20;
 
         public static MuFile Read(string path)
@@ -82,8 +89,11 @@ namespace KSP1PartMod.Animation.Mu
                     var magic = Int();
                     if (magic != Magic) throw new MuFormatException(0, $"not a .mu file: magic {magic}, expected {Magic}");
                     _version = Int();
+                    if (_version < 0 || _version > MaxVersion)
+                        throw new MuFormatException(4, $"unsupported version {_version}, expected 0 to {MaxVersion}");
                     var name = Str();
                     var root = ReadObject(null);
+                    if (Pos < _length) throw new MuFormatException(Pos, $"{_length - Pos} byte(s) after the root object");
                     return new MuFile(_version, name, root, _entries);
                 }
                 catch (EndOfStreamException)
@@ -97,9 +107,9 @@ namespace KSP1PartMod.Animation.Mu
             private MuNode ReadObject(MuNode parent)
             {
                 var node = new MuNode(Str(), parent);
-                // local position (3), rotation (4), scale (3); versions 0 to 2 add one more float (1.0 in every
-                // file looked at) that KSP's reader takes for an unknown entry tag and steps over
-                Skip((_version < 3 ? 11 : 10) * FloatSize);
+                // local position (3), rotation (4), scale (3), then the extra float of versions 0 to 2, which
+                // KSP's reader takes for an unknown entry tag and steps over
+                Skip((10 + ObjectHeaderExtraFloats(_version)) * FloatSize);
                 var path = node.Path();
                 while (true)
                 {

@@ -1,7 +1,10 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using NUnit.Framework;
+
+[assembly: InternalsVisibleTo("KSP1PartMod.Tests.ReduxMu")]
 
 namespace KSP1PartMod.Tests.Animation
 {
