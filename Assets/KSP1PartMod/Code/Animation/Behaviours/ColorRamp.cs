@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using KSP1PartMod.Animation.Cfg;
 
@@ -18,7 +19,7 @@ namespace KSP1PartMod.Animation.Behaviours
         public ColorRamp(AnimEntryDef def)
         {
             _kOn = def.Key + ".on";
-            _rate = def.Rate;
+            _rate = Math.Max(1e-4f, def.Rate); // a rate of 0 or less would never reach the target
             _useRate = def.UseRate;
             _r = Channel(def.Curves, 0);
             _g = Channel(def.Curves, 1);
@@ -35,9 +36,12 @@ namespace KSP1PartMod.Animation.Behaviours
 
         public Rgba Color { get; private set; }
 
+        public bool Changed { get; private set; }
+
         public void Toggle()
         {
             On = !On;
+            Changed = true;
             if (!_useRate) SetLevel(On ? 1f : 0f);
         }
 
@@ -47,7 +51,7 @@ namespace KSP1PartMod.Animation.Behaviours
             var target = On ? 1f : 0f;
             if (Level == target) return;
             var step = _rate * dt;
-            SetLevel(On ? System.Math.Min(1f, Level + step) : System.Math.Max(0f, Level - step));
+            SetLevel(On ? Math.Min(1f, Level + step) : Math.Max(0f, Level - step));
         }
 
         public void Load(IReadOnlyDictionary<string, float> saved)
@@ -55,9 +59,14 @@ namespace KSP1PartMod.Animation.Behaviours
             if (!Machine.TryRead(saved, _kOn, out var on)) return;
             On = Machine.Bool(on);
             SetLevel(On ? 1f : 0f);
+            Changed = false;
         }
 
-        public void Save(IDictionary<string, float> into) => into[_kOn] = Machine.Of(On);
+        public void Save(IDictionary<string, float> into)
+        {
+            into[_kOn] = Machine.Of(On);
+            Changed = false;
+        }
 
         private void SetLevel(float level)
         {

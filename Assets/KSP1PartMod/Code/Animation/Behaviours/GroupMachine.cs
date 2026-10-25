@@ -43,6 +43,8 @@ namespace KSP1PartMod.Animation.Behaviours
         /// <summary>KSP1 <c>isDeployed</c>: true from the start of a deploy, false from the start of a retract.</summary>
         public bool Deployed { get; private set; }
 
+        public bool Changed { get; private set; }
+
         public bool IsMoving => _deploySpeed != 0f;
 
         public ClipPose DeployPose => _hasDeploy ? new ClipPose(_deployT, _deploySpeed, 1f, true) : ClipPose.Off;
@@ -54,6 +56,7 @@ namespace KSP1PartMod.Animation.Behaviours
         {
             if (Deployed) return;
             Deployed = true;
+            Changed = true;
             Play(1f, inEditor);
         }
 
@@ -62,6 +65,7 @@ namespace KSP1PartMod.Animation.Behaviours
         {
             if (!Deployed) return;
             Deployed = false;
+            Changed = true;
             _activePlaying = false;
             _deployT = 1f;
             Play(-1f, inEditor);
@@ -94,9 +98,14 @@ namespace KSP1PartMod.Animation.Behaviours
             Deployed = Machine.Bool(d);
             _activePlaying = false;
             Settle();
+            Changed = false;
         }
 
-        public void Save(IDictionary<string, float> into) => into[_kDeployed] = Machine.Of(Deployed);
+        public void Save(IDictionary<string, float> into)
+        {
+            into[_kDeployed] = Machine.Of(Deployed);
+            Changed = false;
+        }
 
         private void Play(float direction, bool inEditor)
         {

@@ -88,5 +88,13 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         {
             var p = Throttle(saved: 0.4f).Pose; Assert.AreEqual((true, 0f, 0.4f), (p.Enabled, p.Speed, p.NormalizedTime));
         }
+
+        [Test] public void Throttle_Changed_OnlyWhenValueMoves()
+        {
+            var f = Throttle(); f.Tick(0.02f, false, 0f, true); Assert.IsFalse(f.Changed);
+            f.Tick(0.02f, true, 1f, true); Assert.IsFalse(f.Changed, "the editor never stores animState");
+            f.Tick(0.02f, false, 1f, true); Assert.IsTrue(f.Changed);
+            f.Save(new Dictionary<string, float>()); Assert.IsFalse(f.Changed);
+        }
     }
 }

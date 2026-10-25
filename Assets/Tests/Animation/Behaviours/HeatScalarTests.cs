@@ -58,5 +58,22 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         {
             var p = Heat().Pose; Assert.AreEqual((true, 0f, 1f), (p.Enabled, p.Speed, p.Weight));
         }
+
+        [TestCase(798f)] [TestCase(500f)] [TestCase(float.NaN)]
+        public void Heat_MaxTempAtOrBelowDraper_ClampsWithoutNaN(float max)
+        {
+            var h = Heat();
+            foreach (var t in new[] { 0f, 600f, 798f, 1000f, 5000f })
+            {
+                h.Tick(0f, t, max);
+                Assert.That(h.Scalar, Is.InRange(0f, 1f), $"T = {t}");
+                Assert.That(h.Pose.NormalizedTime, Is.InRange(0f, 1f), $"T = {t}");
+            }
+        }
+
+        [Test] public void Heat_NeverChanged()
+        {
+            var h = Heat(); h.Tick(0.02f, 1399f, 2000f); Assert.IsFalse(h.Changed);
+        }
     }
 }

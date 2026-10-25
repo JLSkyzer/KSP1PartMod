@@ -24,7 +24,7 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         }
 
         private static DeployMachine Gear(bool deployForward = true, float len = 1f, float inF = 1f, float outF = 1f,
-            DeployState? state = DeployState.Retracted)
+            DeployState? state = null)
         {
             var m = new DeployMachine(new AnimEntryDef
             {
@@ -98,10 +98,10 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
 
         [Test] public void Gear_Reversed_StartsAtOneWhenRetracted() => Assert.AreEqual(1f, Gear(deployForward: false).Pose.NormalizedTime);
 
-        [Test] public void Gear_NoSavedState_StartsDeployed()
+        [Test] public void Gear_NoSavedState_StartsRetracted()
         {
-            var g = Gear(deployForward: false, state: null);
-            Assert.AreEqual((DeployState.Extended, 0f), (g.State, g.Pose.NormalizedTime));
+            var g = Gear(deployForward: false);
+            Assert.AreEqual((DeployState.Retracted, 1f), (g.State, g.Pose.NormalizedTime));
         }
 
         [Test] public void Gear_Reversed_ExtendRunsBackward_AtExtendFactor()
@@ -126,6 +126,24 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         [Test] public void Gear_InEditor_EndsImmediately()
         {
             var g = Gear(len: 3f); g.Extend(true); Assert.AreEqual((DeployState.Extended, 1f), (g.State, g.Pose.NormalizedTime));
+        }
+
+        [Test] public void Deploy_Changed_OnlyWhenASavedValueMoves()
+        {
+            var m = Deploy(); m.Tick(0.02f); Assert.IsFalse(m.Changed);
+            m.Extend(false); Assert.IsTrue(m.Changed);
+            m.Save(new Dictionary<string, float>()); Assert.IsFalse(m.Changed);
+            m.Tick(0.02f); Assert.IsTrue(m.Changed);
+        }
+
+        [Test] public void Deploy_Load_ClearsChanged()
+        {
+            var m = Deploy(); m.Load(SavedValues.Of(DKey, ("state", (float)DeployState.Extended))); Assert.IsFalse(m.Changed);
+        }
+
+        [Test] public void Gear_ZeroSpeedFactor_StillEnds()
+        {
+            var g = Gear(len: 1f, inF: 0f); g.Extend(false); Assert.Greater(g.Pose.Speed, 0f);
         }
 
         [Test] public void Gear_CanReverseMidMotion()

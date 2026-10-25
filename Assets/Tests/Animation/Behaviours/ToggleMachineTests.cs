@@ -102,5 +102,13 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
             var m = Toggle(len: 0f); m.Toggle(false); m.Tick(0.02f);
             Assert.AreEqual((1f, false), (m.Pose.NormalizedTime, m.IsMoving));
         }
+
+        [Test] public void Toggle_Changed_OnlyWhenASavedValueMoves()
+        {
+            var m = Toggle(); m.Tick(0.02f); Assert.IsFalse(m.Changed);
+            m.Toggle(false); Assert.IsTrue(m.Changed);
+            m.Save(new Dictionary<string, float>()); Assert.IsFalse(m.Changed);
+            m.Tick(0.02f); Assert.IsTrue(m.Changed);
+        }
     }
 }

@@ -94,5 +94,14 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
             CollectionAssert.AreEquivalent(new[] { Key + ".deployed" }, d.Keys);
             var n = Group(); n.Load(d); Assert.AreEqual((true, 1f), (n.Deployed, n.DeployPose.NormalizedTime));
         }
+
+        [Test] public void Group_Changed_OnlyOnDeployOrRetract()
+        {
+            var g = Group(); g.Tick(0.02f, false); Assert.IsFalse(g.Changed);
+            g.Deploy(false); Assert.IsTrue(g.Changed);
+            g.Save(new Dictionary<string, float>()); Assert.IsFalse(g.Changed);
+            Run(g, 1f); Assert.IsFalse(g.Changed, "only Deployed is saved");
+            g.Retract(false); Assert.IsTrue(g.Changed);
+        }
     }
 }

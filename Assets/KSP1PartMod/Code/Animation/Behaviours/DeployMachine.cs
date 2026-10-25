@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using KSP1PartMod.Animation.Cfg;
 
@@ -6,11 +7,13 @@ namespace KSP1PartMod.Animation.Behaviours
     public enum DeployState { Retracted, Extending, Extended, Retracting }
 
     /// <summary>One clip between retracted and extended (research notes <c>stock/NOTES.md</c> §2 and §10).
-    /// <para><b>Deploy</b> (the ModuleDeployablePart family): no saved state means Retracted. Extend only from
+    /// No saved state means Retracted for both kinds (gear keeps Redux's start state, by the spec's ruling, where KSP1
+    /// would start it deployed).
+    /// <para><b>Deploy</b> (the ModuleDeployablePart family): Extend only from
     /// Retracted, from time 0 at speed +1 (editor: +<see cref="AnimEntryDef.EditorSpeedMult"/>); Retract only from
     /// Extended, and only when <see cref="AnimEntryDef.Retractable"/> or in the editor, from time 1 at −1. A move ends
     /// when the time reaches its end.</para>
-    /// <para><b>Gear</b> (ModuleWheelDeployment, ModuleLandingLeg): no saved state means Extended. The clip runs
+    /// <para><b>Gear</b> (ModuleWheelDeployment, ModuleLandingLeg): the clip runs
     /// forward to extend when <see cref="AnimEntryDef.DeployForward"/>, backward otherwise; extending runs at
     /// <see cref="AnimEntryDef.SpeedFactorIn"/>, retracting at <see cref="AnimEntryDef.SpeedFactorOut"/>, from the
     /// current time; a move can be reversed halfway; it ends within 0.01 of its end, and at once in the editor
@@ -21,6 +24,7 @@ namespace KSP1PartMod.Animation.Behaviours
     {
         private const float Snap = 1000f;
         private const float GearTolerance = 0.01f;
+        private const float MinFactor = 1e-4f;
 
         private readonly string _kt, _kState;
         private readonly bool _gear, _retractable;
@@ -35,11 +39,13 @@ namespace KSP1PartMod.Animation.Behaviours
             _gear = def.Kind == EntryKind.Gear;
             _retractable = def.Retractable;
             _extendedTime = _gear && !def.DeployForward ? 0f : 1f;
-            _speedIn = _gear ? def.SpeedFactorIn : 1f;
-            _speedOut = _gear ? def.SpeedFactorOut : 1f;
+            // A factor of 0 or less would never end (or run backward): keep it positive.
+            _speedIn = _gear ? Math.Max(MinFactor, def.SpeedFactorIn) : 1f;
+            _speedOut = _gear ? Math.Max(MinFactor, def.SpeedFactorOut) : 1f;
             _editorSpeedMult = def.EditorSpeedMult;
             ClipLength = Machine.Length(clipLength);
-            Settle(_gear ? DeployState.Extended : DeployState.Retracted);
+            Settle(DeployState.Retracted);
+            Changed = false;
         }
 
         public float ClipLength { get; }
@@ -47,6 +53,8 @@ namespace KSP1PartMod.Animation.Behaviours
         public DeployState State { get; private set; }
 
         public bool IsMoving => State == DeployState.Extending || State == DeployState.Retracting;
+
+        public bool Changed { get; private set; }
 
         public ClipPose Pose => new ClipPose(_t, IsMoving ? _speed : 0f, 1f, true);
 
@@ -73,9 +81,10 @@ namespace KSP1PartMod.Animation.Behaviours
         {
             if (!IsMoving || !(dt > 0f)) return;
             _t += _speed * dt / ClipLength;
+            Changed = true;
             var end = State == DeployState.Extending ? _extendedTime : RetractedTime;
             var passed = _speed > 0f ? _t >= end : _t <= end;
-            var near = _gear && System.Math.Abs(Machine.Clamp01(_t) - end) < GearTolerance;
+            var near = _gear && Math.Abs(Machine.Clamp01(_t) - end) < GearTolerance;
             if (passed || near) Settle(State == DeployState.Extending ? DeployState.Extended : DeployState.Retracted);
         }
 
@@ -97,12 +106,14 @@ namespace KSP1PartMod.Animation.Behaviours
                     _speed = target >= _t ? factor : -factor;
                     break;
             }
+            Changed = false;
         }
 
         public void Save(IDictionary<string, float> into)
         {
             into[_kt] = _t;
             into[_kState] = (int)State;
+            Changed = false;
         }
 
         private bool Move(DeployState moving, float factor, bool inEditor)
@@ -115,12 +126,14 @@ namespace KSP1PartMod.Animation.Behaviours
             }
             var speed = inEditor ? factor * _editorSpeedMult : factor;
             State = moving;
+            Changed = true;
             _speed = target >= _t ? speed : -speed;
             return true;
         }
 
         private void Settle(DeployState state)
         {
+            Changed = true;
             State = state;
             _t = state == DeployState.Extended ? _extendedTime : RetractedTime;
             _speed = 0f;

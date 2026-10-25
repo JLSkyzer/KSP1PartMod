@@ -25,6 +25,9 @@ namespace KSP1PartMod.Animation.Behaviours
         /// <summary>The value before the curve (KSP1 <c>inputState</c>).</summary>
         public float Scalar { get; private set; }
 
+        /// <summary>Always false: nothing is saved.</summary>
+        public bool Changed => false;
+
         public ClipPose Pose => new ClipPose(_time, 0f, 1f, true);
 
         /// <param name="dt">Unused: KSP1 reads the temperature every frame without smoothing.</param>
@@ -32,7 +35,10 @@ namespace KSP1PartMod.Animation.Behaviours
         {
             var t = float.IsNaN(temperatureK) ? 0f : temperatureK;
             var x = t - DraperPoint;
-            Scalar = x >= maxTempK ? 1f : x <= 0f ? 0f : x / (maxTempK - DraperPoint);
+            var s = x >= maxTempK ? 1f : x <= 0f ? 0f : x / (maxTempK - DraperPoint);
+            // maxTemp ≤ 798 would divide by zero or a negative span (KSP1 then hands the curve ±inf or a negative
+            // value, which the curve clamps); keep the scalar a number. NaN maxTemp: also 0.
+            Scalar = float.IsNaN(s) ? 0f : s < 0f ? 0f : float.IsInfinity(s) ? 1f : s;
             _time = _curve.Evaluate(Scalar);
         }
 

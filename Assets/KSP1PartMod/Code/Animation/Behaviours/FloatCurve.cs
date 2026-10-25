@@ -11,8 +11,10 @@ namespace KSP1PartMod.Animation.Behaviours
         /// clamped. Keys are sorted by time; a key whose time is already present is dropped (Unity's
         /// <c>AddKey</c> refuses it); a key with a non-finite time or value is dropped.
         /// <para>A NaN tangent is a key KSP1 added with <c>AddKey(time, value)</c>. It gets an automatic smooth
-        /// tangent: for an inner key i, the finite-difference slope (v[i+1] − v[i−1]) / (t[i+1] − t[i−1]); for the
-        /// first and last key, the one-sided slope to its neighbour; 0 for a single key.</para></summary>
+        /// tangent, as Unity's <c>AddKey(time, value)</c> gives it (checked against a real AnimationCurve in
+        /// <c>FloatCurveUnityTests</c>): for an inner key i, the mean of its two segment slopes,
+        /// ((v[i] − v[i−1]) / (t[i] − t[i−1]) + (v[i+1] − v[i]) / (t[i+1] − t[i])) / 2; for the first and last key,
+        /// the slope of its only segment; 0 for a single key.</para></summary>
         public FloatCurve(float[] keys)
         {
             if (keys == null || keys.Length < 4) keys = new[] { 0f, 0f, 1f, 1f, 1f, 1f, 1f, 1f };
@@ -84,7 +86,7 @@ namespace KSP1PartMod.Animation.Behaviours
             if (count < 2) return 0f;
             if (i == 0) return (v[1] - v[0]) / (t[1] - t[0]);
             if (i == count - 1) return (v[i] - v[i - 1]) / (t[i] - t[i - 1]);
-            return (v[i + 1] - v[i - 1]) / (t[i + 1] - t[i - 1]);
+            return ((v[i] - v[i - 1]) / (t[i] - t[i - 1]) + (v[i + 1] - v[i]) / (t[i + 1] - t[i])) * 0.5f;
         }
 
         private static bool Finite(float f) => !float.IsNaN(f) && !float.IsInfinity(f);

@@ -25,5 +25,10 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         {
             var g = Gate(1f); g.Tick(1f); g.Tick(0.5f); Assert.IsFalse(g.Open);
         }
+
+        [Test] public void AeroGate_NeverChanged()
+        {
+            var g = Gate(1f); g.Tick(1f); g.Tick(0f); Assert.IsFalse(g.Changed);
+        }
     }
 }

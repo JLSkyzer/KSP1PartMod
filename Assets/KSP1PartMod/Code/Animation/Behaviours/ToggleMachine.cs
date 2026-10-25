@@ -34,6 +34,8 @@ namespace KSP1PartMod.Animation.Behaviours
 
         public bool IsMoving { get; private set; }
 
+        public bool Changed { get; private set; }
+
         /// <summary>A one-shot that has opened: KSP1's FIXED, no toggle any more.</summary>
         public bool IsFixed => _oneShot && !Closed && !IsMoving;
 
@@ -54,6 +56,7 @@ namespace KSP1PartMod.Animation.Behaviours
         {
             if (!IsMoving || !(dt > 0f)) return;
             _t += _speed * dt / ClipLength;
+            Changed = true;
             if (_t >= 1f || _t <= 0f)
             {
                 // KSP1 snaps animTime to the end the switch points at once the clip has stopped.
@@ -69,6 +72,7 @@ namespace KSP1PartMod.Animation.Behaviours
             // KSP1 resumes a MOVING state at its saved speed; we do not save the speed, so it resumes at flight speed.
             if (Machine.TryRead(saved, _kMoving, out var moving) && Machine.Bool(moving)) Start(Closed ? -1f : 1f);
             else IsMoving = false;
+            Changed = false;
         }
 
         public void Save(IDictionary<string, float> into)
@@ -76,12 +80,14 @@ namespace KSP1PartMod.Animation.Behaviours
             into[_kt] = _t;
             into[_kClosed] = Machine.Of(Closed);
             into[_kMoving] = Machine.Of(IsMoving);
+            Changed = false;
         }
 
         private void Start(float speed)
         {
             _speed = speed;
             IsMoving = true;
+            Changed = true;
         }
     }
 }

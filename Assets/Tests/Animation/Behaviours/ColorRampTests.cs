@@ -72,5 +72,18 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
             CollectionAssert.AreEquivalent(new[] { Key + ".on" }, d.Keys);
             var n = ColorRamp(); n.Load(d); Assert.IsTrue(n.On);
         }
+
+        [Test] public void Color_Changed_OnlyOnToggle()
+        {
+            var c = ColorRamp(); c.Tick(0.02f); Assert.IsFalse(c.Changed);
+            c.Toggle(); Assert.IsTrue(c.Changed);
+            c.Save(new Dictionary<string, float>()); Assert.IsFalse(c.Changed);
+            c.Tick(0.02f); Assert.IsFalse(c.Changed, "the level is not saved");
+        }
+
+        [Test] public void Color_ZeroRate_StillRamps()
+        {
+            var c = ColorRamp(rate: 0f); c.Toggle(); c.Tick(1f); Assert.Greater(c.Level, 0f);
+        }
     }
 }

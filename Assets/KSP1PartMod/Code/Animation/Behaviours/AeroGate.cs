@@ -17,6 +17,9 @@ namespace KSP1PartMod.Animation.Behaviours
 
         public bool Open { get; private set; }
 
+        /// <summary>Always false: nothing is saved.</summary>
+        public bool Changed => false;
+
         public bool Tick(float controllerScalar) =>
             Open = System.Math.Abs(controllerScalar - _deployedPosition) < Tolerance;
 

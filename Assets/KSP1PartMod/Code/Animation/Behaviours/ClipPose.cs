@@ -45,7 +45,12 @@ namespace KSP1PartMod.Animation.Behaviours
         /// <summary>Missing or unreadable values keep the defaults.</summary>
         void Load(IReadOnlyDictionary<string, float> saved);
 
+        /// <summary>Writes every saved value and clears <see cref="Changed"/>.</summary>
         void Save(IDictionary<string, float> into);
+
+        /// <summary>A saved value differs from the last <see cref="Load"/> or <see cref="Save"/>: the caller re-encodes
+        /// the state only then.</summary>
+        bool Changed { get; }
     }
 
     internal static class Machine

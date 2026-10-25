@@ -31,6 +31,8 @@ namespace KSP1PartMod.Animation.Behaviours
         /// <summary>KSP1 <c>animState</c>: the smoothed value kept between frames.</summary>
         public float Value { get; private set; }
 
+        public bool Changed { get; private set; }
+
         public ClipPose Pose => new ClipPose(_time, 0f, _weight, true);
 
         public void Tick(float dt, bool inEditor, float throttle, bool operational)
@@ -52,16 +54,23 @@ namespace KSP1PartMod.Animation.Behaviours
             if (v > 0.99995f && Value < target) v = 1f;
             if (v < 5e-5f && target < Value) v = 0f;
             _time = v;
-            if (!inEditor) Value = v;
+            if (inEditor || v == Value) return;
+            Value = v;
+            Changed = true;
         }
 
         public void Load(IReadOnlyDictionary<string, float> saved)
         {
             if (!Machine.TryRead(saved, _ks, out var s)) return;
             Value = _time = Machine.Clamp01(s);
+            Changed = false;
         }
 
-        public void Save(IDictionary<string, float> into) => into[_ks] = Value;
+        public void Save(IDictionary<string, float> into)
+        {
+            into[_ks] = Value;
+            Changed = false;
+        }
 
         /// <summary>Unity's Mathf.Lerp: the factor is clamped to 0..1.</summary>
         private static float Lerp(float a, float b, float k) => a + (b - a) * Machine.Clamp01(k);
