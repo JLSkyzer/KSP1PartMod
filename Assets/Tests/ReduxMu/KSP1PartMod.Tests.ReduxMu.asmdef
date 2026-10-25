@@ -13,7 +13,8 @@
     "precompiledReferences": [
         "nunit.framework.dll",
         "Ksp2Redux.dll",
-        "0Harmony.dll"
+        "0Harmony.dll",
+        "Newtonsoft.Json.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [

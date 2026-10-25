@@ -36,6 +36,7 @@ namespace KSP1PartMod
             Log = SWLogger;
             Animations = ReadAnimationSettings();
             ApplyMuReaderFix(Animations);
+            AnimationLoadStep.Register();
             TechTreeLoadStep.Register(this);
         }
 
