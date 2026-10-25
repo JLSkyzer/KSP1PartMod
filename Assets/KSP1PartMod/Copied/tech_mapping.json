@@ -22,6 +22,8 @@
     "propulsionSystems": "tNode_0v_rockets_01",
     "spaceExploration": "tNode_0v_utility",
     "advFlightControl": "tNode_0v_rcs",
+    "_largeControl": "Old stock id (2 parts in real KSP1 mods), same target as advFlightControl",
+    "largeControl": "tNode_0v_rcs",
     "landing": "tNode_1v_utility_02",
     "aerodynamicSystems": "tNode_1v_aero_03",
     "electrics": "tNode_1v_electronics_01",

@@ -23,8 +23,10 @@ namespace KSP1PartMod.Tests.Placement
             Assert.IsTrue(Read(("TechRequired", "start")).HiddenByConfig);
         [Test] public void ReadInfo_EmptyCategory_IsHidden() =>
             Assert.IsTrue(Read(("TechRequired", "start"), ("category", "  // none yet")).HiddenByConfig);
-        [Test] public void ReadInfo_Unresearcheable_IsHidden() =>
-            Assert.IsTrue(Read(("TechRequired", "unresearcheable"), ("category", "Utility")).HiddenByConfig);
+        [TestCase("unresearcheable")] [TestCase("Unresearcheable")] [TestCase("HIDDEN")] [TestCase("hidden")]
+        [TestCase("none")] [TestCase("unavailable")] [TestCase("ORPHANS")] [TestCase("Orphans // x")]
+        public void ReadInfo_OutOfTreeMarker_IsHidden(string tech) =>
+            Assert.IsTrue(Read(("TechRequired", tech), ("category", "Utility")).HiddenByConfig);
         [Test] public void ReadInfo_MissingTechRequired_IsNullNotHidden()
         { var p = Read(("category", "Engine")); Assert.IsNull(p.TechRequired); Assert.IsFalse(p.HiddenByConfig); }
         [Test] public void ReadInfo_KeepsPartAndModNames()

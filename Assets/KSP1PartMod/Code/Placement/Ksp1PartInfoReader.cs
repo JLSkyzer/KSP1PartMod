@@ -4,6 +4,9 @@ namespace KSP1PartMod.Placement
 {
     public static class Ksp1PartInfoReader
     {
+        // TechRequired values meaning "in no tree" (KSP1 mods use several): such parts are hidden.
+        private static readonly string[] OutOfTreeMarkers = { "Unresearcheable", "HIDDEN", "none", "unavailable", "ORPHANS" };
+
         // Largest first: the first profile found wins.
         private static readonly string[][] SizeProfiles =
         {
@@ -19,10 +22,10 @@ namespace KSP1PartMod.Placement
             string category = Clean(getValue("category"));
             bool techHidden = bool.TryParse(Clean(getValue("TechHidden")), out bool hidden) && hidden;
             // KSP1's default category is none (never shown): a part without category (EVA kerbals, flag) is hidden too.
-            // Unresearcheable is KSP1's placeholder for comets and asteroids, not a tree node.
             bool hiddenByConfig = techHidden || category == null
                 || string.Equals(category, "none", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(tech, "Unresearcheable", StringComparison.OrdinalIgnoreCase);
+                || (tech != null && Array.Exists(OutOfTreeMarkers,
+                    m => string.Equals(m, tech, StringComparison.OrdinalIgnoreCase)));
             return new Ksp1PartInfo(partName, modName, tech, category, ReadSize(getValue("bulkheadProfiles")), hiddenByConfig);
         }
 
