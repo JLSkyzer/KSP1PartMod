@@ -1,5 +1,9 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 - 2026-10-25
 
-- Project scaffold: SDK template 26w42c, mod `KSP1PartMod`, plugin that logs its version at startup.
+- Places the KSP1 parts imported by Redux in the tech tree of campaigns that enable the mod.
+- Mapping table from the stock 1.12 and Community Tech Tree nodes to KSP2 nodes, with a category fallback and a catch-all.
+- New robotics and miscellaneous nodes, created only when they receive parts.
+- `overrides.json` to move a part or a whole KSP1 node.
+- English and French names for the new nodes.
