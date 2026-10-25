@@ -17,7 +17,7 @@ namespace KSP1PartMod
     public class KSP1PartModPlugin : KerbalMod
     {
         public const string ModId = "KSP1PartMod";
-        public const string Version = "0.2.0";
+        public const string Version = "0.2.1";
         public const string AnimationSettingsFile = "animations.json";
 
         private static string _modFolder;
@@ -35,12 +35,15 @@ namespace KSP1PartMod
         {
             Log = SWLogger;
             // First: nothing about animations may cost the tech-tree placement.
-            TechTreeLoadStep.Register(this);
+            TechTreeLoadStep.Register();
             Animations = ReadAnimationSettings();
             ApplyMuReaderFix(Animations);
+            if (Animations.Diagnostics) MaterialDiagnostics.Apply(new Harmony(MaterialDiagnostics.HarmonyId));
+            else Log.LogInfo("[KSP1PartMod] diag: material dump disabled by " + AnimationSettingsFile);
             try
             {
                 AnimationLoadStep.Register();
+                if (Animations.Enabled) EcsTypeRegistration.TryRegister("pre-initialization");
             }
             catch (Exception e)
             {
@@ -94,6 +97,7 @@ namespace KSP1PartMod
         {
             Log = SWLogger;
             Log.LogInfo("[KSP1PartMod] loaded " + Version);
+            if (Animations.Enabled) EcsTypeRegistration.TryRegister("initialization");
         }
     }
 }

@@ -1,4 +1,4 @@
-# KSP1PartMod 0.2.0 : liste de tests en jeu des animations KSP1 (2026-10-25)
+# KSP1PartMod 0.2.1 : liste de tests en jeu des animations KSP1 (2026-10-25)
 
 Phase 1 des animations : chargement des modèles `.mu` anciens, modules d'animation KSP1 recréés
 sous Redux. Rien de cela n'a encore été lancé dans le jeu. Cette liste dit quoi regarder et quelle
@@ -16,6 +16,30 @@ ligne du log le prouve. La liste du placement dans l'arbre technologique reste v
   Les lignes `mu:` apparaissent au démarrage du jeu, les lignes `anim:` au chargement d'une campagne,
   celles par pièce à la création du module (VAB ou vol).
 - Relever aussi, à part, tout `Failed to load KSP1 model` et `Missing KSP1 model` (lignes de Redux).
+
+## 0. Correctifs de la 0.2.1 (premier test en jeu)
+
+- [ ] **Types ECS** : au démarrage ou au premier chargement de campagne, deux lignes
+  `[KSP1PartMod] anim: registered ECS type Module_Ksp1Animations as index <n> (…, UnityEngine.Object)` et
+  `… PartComponentModule_Ksp1Animations as index <n> (…, managed component, direct, shared statics refreshed)`
+  (ou `already registered`). Une ligne `ECS TypeManager not initialized yet` avant elles est normale.
+- [ ] **Plus aucune** `Unknown Type: KSP1PartMod.Game.Animation.Module_Ksp1Animations` ni `[VAB] [ASYNC] Caught Error
+  during loading for part …` : le Mk2Pod et la mk1-3pod se posent, se suppriment et se reposent ; les jambes
+  d'atterrissage s'animent.
+- [ ] Si `ECS registration failed, KSP1 animation modules disabled for this session` apparaît, suivie de
+  `ECS types not registered (Failed), no animation module added` : aucune pièce ne doit être cassée (pas
+  d'animation KSP1, le reste marche). Noter la raison donnée.
+- [ ] **Placement aux chargements suivants** : charger une campagne, revenir au menu, en charger une autre (ou la
+  même). Chaque chargement donne `placed n part(s) in m node(s)` ; plus aucune `could not start the placement coroutine`.
+- [ ] **Nouveaux nœuds visibles** : ligne `[KSP1PartMod] new node <id> at (<x>,<y>) next to <ancre> (<ax>,<ay>), tree y
+  range [<min>,<max>]`. Dans le R&D, le nœud est dans la zone visible, à côté de son ancre, sans chevauchement.
+- [ ] **Diagnostic des matériaux** (pièces rouges, icônes noires) : dans le VAB, lignes `[KSP1PartMod] diag: …` une
+  fois par pièce pour `mk1pod_v2`, `Mk2Pod`, `liquidEngine` et les 5 premières autres pièces KSP1 chargées :
+  `diag: <pièce>: <n> renderer(s)`, puis par matériau `renderer '<chemin>' shader '<nom>' _Color=… _PaintA=… _PaintB=…
+  _EmissionColor=… _EmissiveColor=… mask=… keywords=[…]` (seules les propriétés présentes). Ligne d'armement au
+  démarrage : `diag: material dump armed for …`. Coupure : `"diagnostics": false` dans `animations.json`. Ces lignes
+  décrivent le modèle du VAB après le remplacement des shaders par Redux ; les icônes viennent d'une autre copie du
+  modèle, reconstruite par Redux.
 
 ## 1. Chargement
 
@@ -83,7 +107,7 @@ Lancer un vaisseau portant les pièces ci-dessous. À chaque fois, la ligne de l
 
 ## 7. Placement dans l'arbre technologique
 
-- [ ] Reprendre `docs/testing/2026-10-25-in-game-checklist.md` (le log annonce maintenant `[KSP1PartMod] loaded 0.2.0`).
+- [ ] Reprendre `docs/testing/2026-10-25-in-game-checklist.md` (le log annonce maintenant `[KSP1PartMod] loaded 0.2.1`).
 
 ## En cas de régression
 
@@ -96,4 +120,4 @@ Lancer un vaisseau portant les pièces ci-dessous. À chaque fois, la ligne de l
 
 ## À rapporter
 
-Les lignes `mu:`, la ligne `step start`, toutes les lignes `mod <nom>`, toutes les lignes `not bound`, les lignes `data #`, `throttle from`, `heat from`, `shader '…'`, `action labels`, `aero gate`, `gear bridge`, `restricted Redux runtime`, `Redux runtime left untouched`, et toute ligne d'erreur ou d'avertissement du mod. Dire aussi, par pièce testée : bouge / ne bouge pas.
+Les lignes `registered ECS type`, `new node`, `diag:`, `mu:`, la ligne `step start`, toutes les lignes `mod <nom>`, toutes les lignes `not bound`, les lignes `data #`, `throttle from`, `heat from`, `shader '…'`, `action labels`, `aero gate`, `gear bridge`, `restricted Redux runtime`, `Redux runtime left untouched`, et toute ligne d'erreur ou d'avertissement du mod. Dire aussi, par pièce testée : bouge / ne bouge pas.

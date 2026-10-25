@@ -23,14 +23,13 @@ namespace KSP1PartMod.Game
         private const float TimeoutSeconds = 30f;
         private const float PollSeconds = 0.25f;
 
-        private static MonoBehaviour _host;
+        private static CoroutineRunner _runner;
         private static TechTreeWriter _writer;
         // Bumped at each unload, so a step still waiting for the previous campaign stops.
         private static int _generation;
 
-        public static void Register(MonoBehaviour host)
+        public static void Register()
         {
-            _host = host ? host : throw new ArgumentNullException(nameof(host));
             SaveLoad.AddCampaignLoadAction(KSP1PartModPlugin.ModId, StepName, CampaignPhase.Loaded, OnCampaignLoad);
         }
 
@@ -43,7 +42,7 @@ namespace KSP1PartMod.Game
                 // replaces the campaign, and when a load fails; the IL reading only found the failed-load caller. To
                 // settle in game. Correct either way: Place reverts first and the game rebuilds the store at each load.
                 SaveLoad.OnCampaignUnload(OnCampaignUnload);
-                if (_host.StartCoroutine(WaitThenPlace(done, _generation)) == null)
+                if (Runner().StartCoroutine(WaitThenPlace(done, _generation)) == null)
                 {
                     KSP1PartModPlugin.Log.LogError("[KSP1PartMod] could not start the placement coroutine");
                     done();
@@ -54,6 +53,18 @@ namespace KSP1PartMod.Game
                 KSP1PartModPlugin.Log.LogError("[KSP1PartMod] placement failed: " + e);
                 done();
             }
+        }
+
+        /// <summary>Our own hidden, persistent host: the plugin's GameObject can be inactive on a later load
+        /// (seen in game, 2026-10-25), and StartCoroutine on an inactive object returns null. Re-created if destroyed.</summary>
+        private static CoroutineRunner Runner()
+        {
+            if (_runner && _runner.isActiveAndEnabled) return _runner;
+            if (_runner) UnityEngine.Object.Destroy(_runner.gameObject);
+            var go = new GameObject("KSP1PartMod.CoroutineRunner") { hideFlags = HideFlags.HideAndDontSave };
+            UnityEngine.Object.DontDestroyOnLoad(go);
+            _runner = go.AddComponent<CoroutineRunner>();
+            return _runner;
         }
 
         private static void OnCampaignUnload()
@@ -154,6 +165,7 @@ namespace KSP1PartMod.Game
             writer.Apply(plan);
 
             foreach (var line in plan.LogLines) log.LogInfo(line);
+            foreach (var note in writer.Notes) log.LogInfo(note);
             foreach (var problem in writer.Problems) log.LogWarning(problem);
             var nodes = writer.AddedParts.Select(p => p.node).Distinct().Count();
             log.LogInfo($"[KSP1PartMod] placed {writer.AddedParts.Count} part(s) in {nodes} node(s), " +
@@ -178,5 +190,10 @@ namespace KSP1PartMod.Game
                 return Overrides.Empty;
             }
         }
+    }
+
+    /// <summary>Empty host for <see cref="TechTreeLoadStep"/>'s coroutines.</summary>
+    internal sealed class CoroutineRunner : MonoBehaviour
+    {
     }
 }

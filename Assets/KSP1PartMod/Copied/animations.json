@@ -1,8 +1,9 @@
 {
-  "_note": "KSP1PartMod animation settings. enabled: master switch for KSP1 animations. fix_mu_reader: patch Redux's .mu reader so models of format version 0 to 2 load (false leaves Redux untouched). own_first_deployable: remove Redux's deployable module from the part and let KSP1PartMod play that clip too. shader_property_map: KSP1 material property -> KSP2 property names to try, in order; when present it replaces the built-in map.",
+  "_note": "KSP1PartMod animation settings. enabled: master switch for KSP1 animations. fix_mu_reader: patch Redux's .mu reader so models of format version 0 to 2 load (false leaves Redux untouched). own_first_deployable: remove Redux's deployable module from the part and let KSP1PartMod play that clip too. shader_property_map: KSP1 material property -> KSP2 property names to try, in order; when present it replaces the built-in map. diagnostics: log once, in the VAB, the materials of a few KSP1 parts (lines '[KSP1PartMod] diag:'), for bug reports.",
   "enabled": true,
   "fix_mu_reader": true,
   "own_first_deployable": false,
+  "diagnostics": true,
   "shader_property_map": {
     "_note": "Starting guesses, not verified in game.",
     "_EmissiveColor": ["_EmissiveColor", "_EmissionColor"],

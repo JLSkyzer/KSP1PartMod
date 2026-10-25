@@ -19,6 +19,9 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>KSP1 material property -> KSP2 property names to try, in order (ordinal keys). A map in the
         /// file replaces the default one.</summary>
         public IReadOnlyDictionary<string, string[]> ShaderPropertyMap { get; }
+        /// <summary>One-shot material dump of a few KSP1 parts in the VAB (<c>diag:</c> lines), independent of
+        /// <see cref="Enabled"/>.</summary>
+        public bool Diagnostics { get; }
 
         /// <summary>Starting guesses, not verified in game. Each settings object gets its own copy.</summary>
         private static IReadOnlyDictionary<string, string[]> DefaultShaderPropertyMap() =>
@@ -29,11 +32,12 @@ namespace KSP1PartMod.Animation.Settings
             });
 
         public static readonly AnimationSettings Defaults =
-            new AnimationSettings(true, true, false, DefaultShaderPropertyMap());
+            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true);
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
-            IReadOnlyDictionary<string, string[]> shaderPropertyMap)
+            IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics)
         {
+            Diagnostics = diagnostics;
             Enabled = enabled;
             FixMuReader = fixMuReader;
             OwnFirstDeployable = ownFirstDeployable;
@@ -55,7 +59,8 @@ namespace KSP1PartMod.Animation.Settings
                     return Defaults;
                 }
                 var problems = new List<string>();
-                bool enabled = Defaults.Enabled, fix = Defaults.FixMuReader, own = Defaults.OwnFirstDeployable;
+                bool enabled = Defaults.Enabled, fix = Defaults.FixMuReader, own = Defaults.OwnFirstDeployable,
+                    diagnostics = Defaults.Diagnostics;
                 IReadOnlyDictionary<string, string[]> map = null;
                 foreach (var p in root.Properties())
                 {
@@ -64,6 +69,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "enabled": ReadBool(p, ref enabled, problems); break;
                         case "fix_mu_reader": ReadBool(p, ref fix, problems); break;
                         case "own_first_deployable": ReadBool(p, ref own, problems); break;
+                        case "diagnostics": ReadBool(p, ref diagnostics, problems); break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:
                             if (!p.Name.StartsWith("_")) problems.Add($"unknown key \"{p.Name}\" ignored");
@@ -71,7 +77,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap());
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics);
             }
             catch (Exception e)
             {

@@ -39,6 +39,13 @@ namespace KSP1PartMod.Game.Animation
         {
             try
             {
+                // Without an ECS type index every part carrying our module fails to load: add nothing then.
+                if (!EcsTypeRegistration.TryRegister("campaign load"))
+                {
+                    KSP1PartModPlugin.Log.LogWarning(
+                        $"[KSP1PartMod] anim: ECS types not registered ({EcsTypeRegistration.Status}), no animation module added");
+                    return;
+                }
                 Apply(KSP1PartModPlugin.Animations.OwnFirstDeployable);
             }
             catch (Exception e)

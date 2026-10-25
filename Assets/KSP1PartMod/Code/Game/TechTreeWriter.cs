@@ -14,6 +14,8 @@ namespace KSP1PartMod.Game
         bool HasNode(string id);
         (float x, float y) Position(string id);
         IReadOnlyCollection<(float x, float y)> AllPositions();
+        /// <summary>The y of every node in the same tier as id (TierToUnlock), id included.</summary>
+        IReadOnlyCollection<float> TierYs(string id);
         /// <summary>Cost, icon, category, tier and version are taken from anchor.</summary>
         void AddNode(string id, string anchor, (float x, float y) position, string[] requires, string nameKey, string descriptionKey);
         void RemoveNode(string id);
@@ -33,11 +35,15 @@ namespace KSP1PartMod.Game
         private readonly List<string> _addedNodes = new List<string>();
         private readonly List<(string node, string part)> _addedParts = new List<(string, string)>();
         private readonly List<string> _problems = new List<string>();
+        private readonly List<string> _notes = new List<string>();
 
         public TechTreeWriter(ITechTreeStore store) => _store = store ?? throw new ArgumentNullException(nameof(store));
 
         /// <summary>What the last Apply could not write as planned (a missing anchor, node or requirement), as log lines.</summary>
         public IReadOnlyList<string> Problems => _problems;
+
+        /// <summary>One line per node the last Apply created: where, next to what, inside which y range.</summary>
+        public IReadOnlyList<string> Notes => _notes;
 
         /// <summary>The nodes the last Apply created, in order.</summary>
         public IReadOnlyList<string> AddedNodes => _addedNodes;
@@ -51,6 +57,7 @@ namespace KSP1PartMod.Game
         {
             Revert();
             _problems.Clear();
+            _notes.Clear();
 
             var taken = _store.AllPositions().ToList();
             foreach (var spec in plan.NodesToCreate)
@@ -61,7 +68,12 @@ namespace KSP1PartMod.Game
                     _problems.Add($"[KSP1PartMod] node {spec.NodeId} not created: anchor {spec.Anchor} is not in the tree");
                     continue;
                 }
-                var position = NodeLayout.PlaceNewNode(_store.Position(spec.Anchor), (spec.OffsetX, spec.OffsetY), taken);
+                var anchor = _store.Position(spec.Anchor);
+                var range = YRange(spec.Anchor, taken);
+                var position = NodeLayout.PlaceNewNode(anchor, (spec.OffsetX, spec.OffsetY), taken, range);
+                _notes.Add($"[KSP1PartMod] new node {spec.NodeId} at ({F(position.x)},{F(position.y)}) next to {spec.Anchor} " +
+                           $"({F(anchor.x)},{F(anchor.y)}), tree y range " +
+                           (range.HasValue ? $"[{F(range.Value.min)},{F(range.Value.max)}]" : "[none]"));
                 // A required node may be missing (a stock id gone, or a new node skipped above): require the anchor instead.
                 var requires = new List<string>();
                 foreach (var r in spec.Requires)
@@ -93,6 +105,16 @@ namespace KSP1PartMod.Game
                 }
             }
         }
+
+        /// <summary>The y range of the anchor's tier; the whole tree's when the tier has fewer than two nodes.</summary>
+        private (float min, float max)? YRange(string anchor, IEnumerable<(float x, float y)> all)
+        {
+            var tier = _store.TierYs(anchor);
+            if (tier != null && tier.Count >= 2) return NodeLayout.YRange(tier);
+            return NodeLayout.YRange(all.Select(p => p.y));
+        }
+
+        private static string F(float v) => v.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
 
         /// <summary>Removes what this writer added, newest first. Entries it did not add are untouched.</summary>
         public void Revert()
@@ -136,6 +158,12 @@ namespace KSP1PartMod.Game
 
         public IReadOnlyCollection<(float x, float y)> AllPositions() =>
             _nodes.Values.Select(n => (n.TechTreePosition.x, n.TechTreePosition.y)).ToList();
+
+        public IReadOnlyCollection<float> TierYs(string id)
+        {
+            var tier = _nodes[id].TierToUnlock;
+            return _nodes.Values.Where(n => n.TierToUnlock == tier).Select(n => n.TechTreePosition.y).ToList();
+        }
 
         public void AddNode(string id, string anchor, (float x, float y) position, string[] requires, string nameKey,
             string descriptionKey)

@@ -62,7 +62,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
         [Test] public void Settings_Defaults_AreDocumentedValues()
         {
             var d = AnimationSettings.Defaults;
-            Assert.AreEqual((true, true, false), (d.Enabled, d.FixMuReader, d.OwnFirstDeployable));
+            Assert.AreEqual((true, true, false, true), (d.Enabled, d.FixMuReader, d.OwnFirstDeployable, d.Diagnostics));
             CollectionAssert.AreEqual(new[] { "_EmissiveColor", "_EmissionColor" }, d.ShaderPropertyMap["_EmissiveColor"]);
         }
 
@@ -72,6 +72,14 @@ namespace KSP1PartMod.Tests.Animation.Settings
                 "{\"enabled\": false, \"fix_mu_reader\": false, \"own_first_deployable\": true}", out var e);
             Assert.IsNull(e);
             Assert.AreEqual((false, false, true), (s.Enabled, s.FixMuReader, s.OwnFirstDeployable));
+        }
+
+        [Test] public void Settings_Diagnostics_IsRead()
+        {
+            var s = AnimationSettings.Parse("{\"diagnostics\": false}", out var e);
+            Assert.IsNull(e);
+            Assert.IsFalse(s.Diagnostics);
+            Assert.IsTrue(s.Enabled);
         }
 
         [Test] public void Settings_WrongType_KeepsDefaultAndReports()

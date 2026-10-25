@@ -4,7 +4,7 @@ A KSP2 Redux mod that puts the KSP1 parts imported by Redux (from `mods/KSP1`) i
 
 Redux imports KSP1 part configs but does not give them a place in the KSP2 tech tree. This mod does it at each campaign load, without editing the parts.
 
-Status: 0.2.0. Unit-tested outside the game (408 EditMode tests); not yet tested in game. Checklists: `docs/testing/2026-10-25-in-game-checklist.md` (tech tree) and `docs/testing/2026-10-25-animations-in-game-checklist.md` (animations, in French).
+Status: 0.2.1. Unit-tested outside the game (430 EditMode tests); a first in-game test led to 0.2.1, which is not yet tested in game. Checklists: `docs/testing/2026-10-25-in-game-checklist.md` (tech tree) and `docs/testing/2026-10-25-animations-in-game-checklist.md` (animations, in French).
 
 ## Requirements
 
@@ -73,6 +73,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "enabled": true,
   "fix_mu_reader": true,
   "own_first_deployable": false,
+  "diagnostics": true,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissiveColor", "_EmissionColor"],
     "_BurnColor": ["_BurnColor"]
@@ -83,6 +84,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `enabled`: master switch of the animation modules (tech tree placement is unaffected).
 - `fix_mu_reader`: patch Redux's `.mu` reader for format versions 0 to 2. `false` leaves Redux untouched.
 - `own_first_deployable`: remove Redux's deployable module from parts that have one and let this mod play that clip too. Use it when a part with a single Redux deployable (a service bay, for example) does not move.
+- `diagnostics`: log once, in the VAB, the materials of a few KSP1 parts (`[KSP1PartMod] diag:` lines) for bug reports. `false` disables it.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order. When present it replaces the built-in map. The shipped values are starting guesses, not verified in game.
 
 ### Phase 2 (not planned yet)

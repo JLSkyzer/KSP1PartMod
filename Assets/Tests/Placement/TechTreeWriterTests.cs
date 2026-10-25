@@ -19,6 +19,11 @@ namespace KSP1PartMod.Tests.Placement
             public bool HasNode(string id) => Nodes.ContainsKey(id);
             public (float x, float y) Position(string id) => Nodes[id];
             public IReadOnlyCollection<(float x, float y)> AllPositions() => Nodes.Values.ToList();
+            /// <summary>Node -> tier; a node without an entry is in tier 1.</summary>
+            public readonly Dictionary<string, int> Tiers = new Dictionary<string, int>();
+            private int TierOf(string id) => Tiers.TryGetValue(id, out var t) ? t : 1;
+            public IReadOnlyCollection<float> TierYs(string id) =>
+                Nodes.Where(n => TierOf(n.Key) == TierOf(id)).Select(n => n.Value.y).ToList();
             public void AddNode(string id, string anchor, (float x, float y) position, string[] requires, string nameKey, string descriptionKey)
             { Nodes.Add(id, position); Added[id] = (anchor, requires, nameKey, descriptionKey); }
             public void RemoveNode(string id) { Nodes.Remove(id); Added.Remove(id); }
@@ -50,6 +55,9 @@ namespace KSP1PartMod.Tests.Placement
             fake.Nodes["tNode_1v_rockets_01"] = (500f, 0f);
             fake.Nodes["tNode_2v_rockets_01"] = (1000f, 0f);
             fake.Nodes["tNode_x"] = (1500f, 0f);
+            // The tree's vertical extent: new nodes must stay inside [-600, 600].
+            fake.Nodes["tNode_low"] = (2000f, -600f);
+            fake.Nodes["tNode_high"] = (2000f, 600f);
             w = new TechTreeWriter(fake);
         }
 
@@ -62,7 +70,9 @@ namespace KSP1PartMod.Tests.Placement
         [Test] public void Apply_NewNode_UsesLayoutAndKeys()
         {
             w.Apply(PlanWithRobotics);
-            Assert.AreEqual((0f, 200f), fake.Nodes["tNode_ksp1_robotics_01"]);
+            Assert.AreEqual((0f, 120f), fake.Nodes["tNode_ksp1_robotics_01"]);
+            CollectionAssert.Contains(w.Notes, "[KSP1PartMod] new node tNode_ksp1_robotics_01 at (0,120) next to tNode_1v_start (0,0), " +
+                                               "tree y range [-600,600]");
             var added = fake.Added["tNode_ksp1_robotics_01"];
             Assert.AreEqual("tNode_1v_start", added.anchor);
             CollectionAssert.AreEqual(new[] { "tNode_1v_start" }, added.requires);
@@ -74,8 +84,18 @@ namespace KSP1PartMod.Tests.Placement
             // robotics_01 and _02 have the same offset; give their anchors the same spot.
             fake.Nodes["tNode_2v_rockets_01"] = fake.Nodes["tNode_1v_start"];
             w.Apply(Build(new[] { Part("r", "modB", "robotics"), Part("r2", "modB", "advRobotics") }));
-            Assert.AreEqual((0f, 200f), fake.Nodes["tNode_ksp1_robotics_01"]);
-            Assert.AreEqual((0f, 320f), fake.Nodes["tNode_ksp1_robotics_02"]);
+            Assert.AreEqual((0f, 120f), fake.Nodes["tNode_ksp1_robotics_01"]);
+            Assert.AreEqual((0f, -120f), fake.Nodes["tNode_ksp1_robotics_02"]);
+        }
+        [Test] public void Apply_NewNode_StaysInsideItsTierRange()
+        {
+            // Tier 1 spans [0, 100] only; the whole tree's [-600, 600] must not be used.
+            foreach (var id in new[] { "tNode_1v_rockets_01", "tNode_2v_rockets_01", "tNode_x", "tNode_low", "tNode_high" })
+                fake.Tiers[id] = 2;
+            fake.Nodes["tNode_1v_top"] = (900f, 100f);
+            w.Apply(PlanWithRobotics);
+            Assert.That(fake.Nodes["tNode_ksp1_robotics_01"].y, Is.InRange(0f, 100f));
+            Assert.That(w.Notes[0], Does.EndWith("tree y range [0,100]"));
         }
         [Test] public void Apply_NodeAlreadyInStore_IsNotCreatedNorRemoved()
         {

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 - 2026-10-25
+
+Fixes from the first in-game test.
+
+- Parts carrying the KSP1 animation module no longer fail to load in the VAB ("Unknown Type: Module_Ksp1Animations"; they could not be placed again after deletion and their animations did not run). The module's behaviour and component types are now registered with Unity's ECS `TypeManager` at startup or campaign load; if that fails, the module is not added at all for the session (`anim: registered ECS type …` / `ECS registration failed` log lines).
+- The tech-tree placement runs again on later campaign loads: its coroutine now runs on the mod's own hidden, persistent object instead of the plugin's, which can be inactive ("could not start the placement coroutine").
+- New tech nodes stay inside the vertical range of their tier, at the free slot nearest to their anchor, instead of above the visible tree (`new node … tree y range [..]` log line). The configured offset now only chooses the preferred side.
+- One-shot material diagnostic of a few KSP1 parts in the VAB (`diag:` lines), switched off with `"diagnostics": false` in `animations.json`.
+- 430 EditMode tests.
+
 ## 0.2.0 - 2026-10-25
 
 - KSP1 part animations, phase 1: a `Module_Ksp1Animations` module is added to imported parts at campaign load. It drives `ModuleAnimateGeneric` (several per part), heat, throttle, colour, light, gear and aero-gate animations, with a Part Action Menu button and an action-group action per entry, state kept in saves, and symmetry.
