@@ -95,5 +95,12 @@ namespace KSP1PartMod.Tests.Placement
         }
         [Test] public void Build_SamePartTwice_IsPlacedOnce() =>
             CollectionAssert.AreEqual(new[] { "s" }, Build(new[] { Part("s", "modA", "start"), Part("s", "modA", "start") }).PartsByNode["tNode_1v_start"]);
+        [Test] public void Build_LogsResolverNote()
+        {
+            var overrides = Overrides.Parse(@"{ ""parts"": { ""s"": ""tNode_gone"" } }", out _);
+            var plan = PlacementPlan.Build(new[] { Part("s", "modA", "start") }, new PlacementResolver(Map, overrides, Tree), Map, null);
+            var line = plan.LogLines.Single(l => l.StartsWith("[KSP1PartMod] note: s (modA): "));
+            StringAssert.Contains("tNode_gone", line);
+        }
     }
 }

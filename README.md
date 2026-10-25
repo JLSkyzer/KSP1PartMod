@@ -48,7 +48,7 @@ Located in `mods/KSP1PartMod/`. Both maps are optional and win over `tech_mappin
 - `parts`: KSP1 part name (case-sensitive, as in its `.cfg`) to a KSP2 node id.
 - `ksp1_nodes`: KSP1 tech node id (any case) to the KSP2 node id that takes all its parts.
 
-An id missing from the game's tree is ignored and logged. Edit the file and restart the game.
+An id missing from the game's tree is ignored, the part falls through to the next rule, and the log gets a line `[KSP1PartMod] note: <part> (<mod>): …` naming the missing id. Edit the file and restart the game.
 
 ## Known limits
 

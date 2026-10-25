@@ -61,7 +61,7 @@ Dans `mods/KSP1PartMod/overrides.json`, par exemple :
 ```
 
 - [ ] Après redémarrage, la pièce est dans le nœud indiqué, et le résumé du mod compte une pièce en `override`.
-- [ ] Un identifiant de nœud inexistant est ignoré et signalé dans le log, sans casser le chargement.
+- [ ] Un identifiant de nœud inexistant est ignoré, la pièce suit la règle suivante (table, repli), et le log contient `[KSP1PartMod] note: <pièce> (<mod>): … <id> is not in the tree`.
 - [ ] Un fichier JSON invalide donne `[KSP1PartMod] overrides.json: …` et le placement continue sans surcharge.
 
 ## Limites connues

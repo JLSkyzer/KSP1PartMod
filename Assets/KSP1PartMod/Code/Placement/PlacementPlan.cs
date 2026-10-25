@@ -76,6 +76,9 @@ namespace KSP1PartMod.Placement
                     continue;
                 }
 
+                if (!string.IsNullOrEmpty(placement.Note))
+                    log.Add($"{Log}note: {part.PartName} ({modName}): {placement.Note}");
+
                 switch (placement.Source)
                 {
                     case PlacementSource.Table: c.Table++; break;
