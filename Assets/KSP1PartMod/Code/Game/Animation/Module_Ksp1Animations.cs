@@ -96,8 +96,14 @@ namespace KSP1PartMod.Game.Animation
 
         protected override void OnModuleOABUpdate(float deltaTime) => Drive(deltaTime, true);
 
+        /// <summary>Flushes a pending state encode, then nothing is driven any more.</summary>
         protected override void OnShutdown()
         {
+            if (_ready)
+            {
+                _urgent = true;
+                SaveIfChanged();
+            }
             _ready = false;
             _entries.Clear();
         }
@@ -111,7 +117,14 @@ namespace KSP1PartMod.Game.Animation
             if (error != null) Warn($"{_name} {error}; defaults kept for those values");
             foreach (var kv in saved) _values[kv.Key] = kv.Value;
 
-            RestrictReduxRuntime();
+            try
+            {
+                RestrictReduxRuntime();
+            }
+            catch (Exception ex)
+            {
+                Error($"{_name} restricting Redux's runtime failed: {ex}");
+            }
 
             foreach (var def in data.Entries)
             {
@@ -137,7 +150,9 @@ namespace KSP1PartMod.Game.Animation
             Log($"{_name} data #{RuntimeHelpers.GetHashCode(data)} entries {data.Entries.Count} bound {_entries.Count} " +
                 $"({PartBackingMode}; definition data {DefinitionNote()})");
 
-            foreach (var e in _entries) Step(e, 0f, inEditor, catchErrors: true);
+            // Aero gates are applied on the first update: Module_ControlSurface's own init may still overwrite them.
+            foreach (var e in _entries)
+                if (!e.Disabled && e.Aero == null) Step(e, 0f, inEditor, catchErrors: true);
             _ready = true;
         }
 
@@ -219,6 +234,11 @@ namespace KSP1PartMod.Game.Animation
                         note = "gear bridge: no Redux deployable setter (" + bridge + ")";
                         return null;
                     }
+                    if (!GearBridgeRule.NeedsOwnAction(GameInputs.ReduxDefaultActionGroup(this)))
+                    {
+                        note = "gear bridge: Redux already on Gear";
+                        return null;
+                    }
                     Log($"{_name} gear bridge drives {bridge}");
                     break;
                 default:
@@ -246,6 +266,21 @@ namespace KSP1PartMod.Game.Animation
             {
                 var e = _entries[i];
                 if (e.Aero == null) continue;
+                try
+                {
+                    if (!ResolveAeroGate(e)) _entries.RemoveAt(i);
+                }
+                catch (Exception ex)
+                {
+                    Disable(e, ex);
+                }
+            }
+        }
+
+        /// <summary>False when the gate has no controller (logged).</summary>
+        private bool ResolveAeroGate(Entry e)
+        {
+            {
                 var index = e.Def.ControllerModuleIndex;
                 var ours = _entries.FirstOrDefault(o => o.Def.ModuleIndex == index && (o.Toggle != null || o.Deploy != null));
                 if (ours != null)
@@ -263,8 +298,7 @@ namespace KSP1PartMod.Game.Animation
                 else
                 {
                     Log($"{_name} AeroGate 'MODULE[{index}]' not bound: the controller is neither ours nor Redux's deployable ({field})");
-                    _entries.RemoveAt(i);
-                    continue;
+                    return false;
                 }
                 var marker = GetComponent<Ksp1DeployableAeroControlSurface>();
                 if (marker != null)
@@ -274,6 +308,7 @@ namespace KSP1PartMod.Game.Animation
                 }
                 else Log($"{_name} aero gate follows {e.ControllerName} (no Redux aero marker on the part)");
             }
+            return true;
         }
 
         private void AddControls(bool inEditor)
@@ -284,7 +319,24 @@ namespace KSP1PartMod.Game.Animation
             foreach (var e in _entries)
             {
                 var kind = e.Def.Kind;
-                if (!ControlLabels.HasAction(kind)) continue;
+                if (e.Disabled || !ControlLabels.HasAction(kind)) continue;
+                try
+                {
+                    AddControl(e, inEditor, ref sort, ref buttons, ref actions, ref dynamicLabels);
+                }
+                catch (Exception ex)
+                {
+                    Disable(e, ex);
+                }
+            }
+            if (buttons + actions > 0)
+                Log($"{_name} action labels {(dynamicLabels ? "dynamic" : "static")}: {buttons} PAM button(s), {actions} action-group action(s)");
+        }
+
+        private void AddControl(Entry e, bool inEditor, ref int sort, ref int buttons, ref int actions, ref bool dynamicLabels)
+        {
+            {
+                var kind = e.Def.Kind;
                 var on = IsOn(e);
                 var control = new EntryControl(this, e);
                 var key = ContextKeyPrefix + e.Def.Key;
@@ -305,12 +357,11 @@ namespace KSP1PartMod.Game.Animation
                 var group = ParseGroup(e.Def.ActionGroup);
                 var action = NewGroupAction(control, group, e.GroupState, key);
                 action.DisplayName = ControlLabels.Action(e.Def);
+                action.ActionState = on;
                 AddActionGroupAction(action);
                 e.GroupAction = action;
                 actions++;
             }
-            if (buttons + actions > 0)
-                Log($"{_name} action labels {(dynamicLabels ? "dynamic" : "static")}: {buttons} PAM button(s), {actions} action-group action(s)");
         }
 
         /// <summary>A toggle action that sets the state the action group asks for, keyed by the entry: KSP2 computes
@@ -468,6 +519,7 @@ namespace KSP1PartMod.Game.Animation
                 d.AllowControl = open;
                 d.IsCtrlSurfaceActive = open;
                 d.DisableLiftingSurfaceForce = !open;
+                if (!open) d.Deploy.SetValueInternal(false, skipEvent: true);
                 n++;
             }
             Log($"{_name} aero gate {(open ? "open" : "closed")} at {scalar:0.###} ({n} control surface(s), follows {e.ControllerName})");

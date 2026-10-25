@@ -104,6 +104,16 @@ namespace KSP1PartMod.Game.Animation
             return true;
         }
 
+        /// <summary>The name of Redux's deployable <c>Data_Deployable.DefaultActionGroup</c> (where Redux puts its own
+        /// toggle action), or null.</summary>
+        public static string ReduxDefaultActionGroup(Module_Ksp1Animations m)
+        {
+            var module = AnimationBinder.ReduxDeployableModule(m.gameObject);
+            return module != null && module.DataModules.TryGetByType<Data_Deployable>(out var data) && data != null
+                ? data.DefaultActionGroup.ToString()
+                : null;
+        }
+
         private static string[] ModeIds(Module_Engine engine)
         {
             if (engine == null || !engine.DataModules.TryGetByType<Data_Engine>(out var data) || data?.engineModes == null)
