@@ -79,6 +79,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "follow_redux_deployables": true,
   "hide_material_less_renderers": true,
   "fix_part_icons": true,
+  "subcategory_bar": true,
   "diagnostics": true,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissiveColor", "_EmissionColor"],
@@ -93,6 +94,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `follow_redux_deployables`: draw the clip of Redux's single deployables and parachutes from Redux's state (see above). `false` leaves those clips still. Ignored for a part where `own_first_deployable` already gives the clip to this mod.
 - `hide_material_less_renderers`: hide the renderers of KSP1 parts whose materials are all missing (`[KSP1PartMod] render:` lines).
 - `fix_part_icons`: render KSP1 part icons with the KSP2 shader swap (`[KSP1PartMod] icons:` lines). `false` keeps Redux's icons.
+- `subcategory_bar`: the KSP1 sub-category bar of the VAB (see VAB sub-categories). `false` removes it.
 - `diagnostics`: log once, in the VAB, the materials of a few KSP1 parts (`[KSP1PartMod] diag:` lines) for bug reports. `false` disables it.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order. When present it replaces the built-in map. The shipped values are starting guesses, not verified in game.
 
@@ -105,6 +107,15 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 5. Links by module index: cargo bay shielding, docking port gating, science experiments, animation groups with converters.
 6. Deploy limit (cargo bays), `restrictedNode`, one-shot inflatables, crew capacity when open.
 7. Radiator and antenna tracking and breakage, wheel physics, robotics, Waterfall effects.
+
+## VAB sub-categories
+
+Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category is selected, the mod adds a second vertical bar right of the category bar, with the KSP1 part types of that mod in KSP1 editor order: "All" first, then Pods, Fuel Tanks, Engines, Control, Structural, Coupling, Payload, Aerodynamics, Ground, Thermal, Electrical, Communication, Science, Utility, Robotics, Cargo and Other (custom or unknown KSP1 categories). Clicking a type filters the grid.
+
+- Only types with at least one part you can use in this campaign are listed; the bar is hidden when the mod has a single type, during a search and when the panel is collapsed.
+- The chosen type is remembered per mod until the game is closed.
+- "Group by" applies inside the chosen type; the search always looks at every part.
+- Switch it off with `"subcategory_bar": false` in `animations.json`. Log lines start with `[KSP1PartMod] ui:`.
 
 ## Known limits
 

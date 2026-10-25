@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 - 2026-10-25
+
+- **KSP1 sub-category bar in the VAB.** When one of Redux's KSP1 mod categories (Squad, Bluedog_DB, KerbalReusabilityExpansion…) is selected, a second vertical bar appears right of the category bar with the KSP1 part types of that mod, in KSP1 editor order (Pods, Fuel Tanks, Engines, Control, Structural, Coupling, Payload, Aerodynamics, Ground, Thermal, Electrical, Communication, Science, Utility, Robotics, Cargo, Other), after an "All" button. Clicking a type filters the grid; "Group by" and the search keep working (the search ignores the bar). Types come from each part's raw KSP1 `category`; unknown or custom categories go to "Other".
+  - Only types with at least one part the picker would show (tech level, vessel type and hidden parts filters applied) are listed, so no button opens an empty grid. The bar stays hidden when a mod has a single type, while searching, and when the panel is collapsed.
+  - The selected type is remembered per mod (by name) for the session.
+  - Icons: the stock category sprite for the 14 types the game has; Cargo takes Storage (else Payload); Robotics and Other take the icon of their first part. Labels use the game's translation of the stock category, else the KSP1 name (French for Robotique, Autres, Tout).
+  - One Harmony postfix on Redux 26w42c's `AssemblyPartsPicker.ApplyPartsFilter`; the bar is a component added to the picker. If a member it needs is missing, the feature stays off (`ui: sub-category bar off, not found in this Redux: …`). Switch: `"subcategory_bar"` in `animations.json` (default true). Log: `[KSP1PartMod] ui:` lines, including a one-time dump of the picker's RectTransforms.
+  - Not run in game yet; checklist in `docs/testing/2026-10-25-subcategories-in-game-checklist.md`.
+- 574 EditMode tests.
+
 ## 0.2.2 - 2026-10-25
 
 Fixes from the second in-game test.

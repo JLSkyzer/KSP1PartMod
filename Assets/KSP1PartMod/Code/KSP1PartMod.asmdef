@@ -1,6 +1,9 @@
 {
   "name": "KSP1PartMod",
   "rootNamespace": "KSP1PartMod",
+  "references": [
+    "UnityEngine.UI"
+  ],
   "allowUnsafeCode": true,
   "overrideReferences": true,
   "precompiledReferences": [

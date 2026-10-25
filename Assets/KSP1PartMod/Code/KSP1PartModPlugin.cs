@@ -6,6 +6,7 @@ using HarmonyLib;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Game;
 using KSP1PartMod.Game.Animation;
+using KSP1PartMod.Game.Ui;
 using Redux.ExtraModTypes;
 using ILogger = SpaceWarp2.API.Logging.ILogger;
 
@@ -17,7 +18,7 @@ namespace KSP1PartMod
     public class KSP1PartModPlugin : KerbalMod
     {
         public const string ModId = "KSP1PartMod";
-        public const string Version = "0.2.2";
+        public const string Version = "0.3.0";
         public const string AnimationSettingsFile = "animations.json";
 
         private static string _modFolder;
@@ -28,12 +29,16 @@ namespace KSP1PartMod
 
         internal static ILogger Log { get; private set; }
 
+        /// <summary>The loaded plugin, for its campaign feature switch (<c>Enabled</c>).</summary>
+        internal static KSP1PartModPlugin Instance { get; private set; }
+
         /// <summary>animations.json as read at startup.</summary>
         internal static AnimationSettings Animations { get; private set; } = AnimationSettings.Defaults;
 
         public override void OnPreInitialized()
         {
             Log = SWLogger;
+            Instance = this;
             // First: nothing about animations may cost the tech-tree placement.
             TechTreeLoadStep.Register();
             Animations = ReadAnimationSettings();
@@ -45,6 +50,14 @@ namespace KSP1PartMod
             catch (Exception e)
             {
                 Log.LogError("[KSP1PartMod] render: fixes not applied: " + e);
+            }
+            try
+            {
+                OabSubcategories.TryApply(new Harmony(OabSubcategories.HarmonyId), Animations.SubcategoryBar);
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] ui: sub-category bar not armed: " + e);
             }
             if (Animations.Diagnostics) MaterialDiagnostics.Apply(new Harmony(MaterialDiagnostics.HarmonyId));
             else Log.LogInfo("[KSP1PartMod] diag: material dump disabled by " + AnimationSettingsFile);

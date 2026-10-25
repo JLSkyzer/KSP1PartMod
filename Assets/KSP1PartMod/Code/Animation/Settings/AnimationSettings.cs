@@ -29,6 +29,9 @@ namespace KSP1PartMod.Animation.Settings
         public bool HideMaterialLessRenderers { get; }
         /// <summary>Render KSP1 part icons with the KSP2 shader swap (<c>fix_part_icons</c>).</summary>
         public bool FixPartIcons { get; }
+        /// <summary>Second vertical bar of KSP1 part types in the VAB when a KSP1 mod category is selected
+        /// (<c>subcategory_bar</c>).</summary>
+        public bool SubcategoryBar { get; }
 
         /// <summary>Starting guesses, not verified in game. Each settings object gets its own copy.</summary>
         private static IReadOnlyDictionary<string, string[]> DefaultShaderPropertyMap() =>
@@ -39,12 +42,13 @@ namespace KSP1PartMod.Animation.Settings
             });
 
         public static readonly AnimationSettings Defaults =
-            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true);
+            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true);
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
-            bool hideMaterialLess, bool fixIcons)
+            bool hideMaterialLess, bool fixIcons, bool subcategoryBar)
         {
+            SubcategoryBar = subcategoryBar;
             FollowReduxDeployables = followRedux;
             HideMaterialLessRenderers = hideMaterialLess;
             FixPartIcons = fixIcons;
@@ -72,7 +76,8 @@ namespace KSP1PartMod.Animation.Settings
                 var problems = new List<string>();
                 bool enabled = Defaults.Enabled, fix = Defaults.FixMuReader, own = Defaults.OwnFirstDeployable,
                     diagnostics = Defaults.Diagnostics, follow = Defaults.FollowReduxDeployables,
-                    hide = Defaults.HideMaterialLessRenderers, icons = Defaults.FixPartIcons;
+                    hide = Defaults.HideMaterialLessRenderers, icons = Defaults.FixPartIcons,
+                    subcategories = Defaults.SubcategoryBar;
                 IReadOnlyDictionary<string, string[]> map = null;
                 foreach (var p in root.Properties())
                 {
@@ -85,6 +90,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "follow_redux_deployables": ReadBool(p, ref follow, problems); break;
                         case "hide_material_less_renderers": ReadBool(p, ref hide, problems); break;
                         case "fix_part_icons": ReadBool(p, ref icons, problems); break;
+                        case "subcategory_bar": ReadBool(p, ref subcategories, problems); break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:
                             if (!p.Name.StartsWith("_")) problems.Add($"unknown key \"{p.Name}\" ignored");
@@ -92,7 +98,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories);
             }
             catch (Exception e)
             {

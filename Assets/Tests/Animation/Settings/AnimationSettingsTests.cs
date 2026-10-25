@@ -96,6 +96,26 @@ namespace KSP1PartMod.Tests.Animation.Settings
             StringAssert.Contains("\"fix_part_icons\"", text);
         }
 
+        [Test] public void Settings_SubcategoryBar_DefaultTrueAndRead()
+        {
+            Assert.IsTrue(AnimationSettings.Defaults.SubcategoryBar);
+            var s = AnimationSettings.Parse("{\"subcategory_bar\": false}", out var e);
+            Assert.IsNull(e);
+            Assert.IsFalse(s.SubcategoryBar);
+            Assert.IsTrue(s.Enabled);
+            var shipped = AnimationSettings.Parse(File.ReadAllText(ShippedPath), out var e2);
+            Assert.IsNull(e2);
+            Assert.IsTrue(shipped.SubcategoryBar);
+            StringAssert.Contains("\"subcategory_bar\"", File.ReadAllText(ShippedPath));
+        }
+
+        [Test] public void Settings_SubcategoryBar_WrongType_KeepsDefault()
+        {
+            var s = AnimationSettings.Parse("{\"subcategory_bar\": 1}", out var e);
+            StringAssert.Contains("subcategory_bar", e);
+            Assert.IsTrue(s.SubcategoryBar);
+        }
+
         [Test] public void Settings_Diagnostics_IsRead()
         {
             var s = AnimationSettings.Parse("{\"diagnostics\": false}", out var e);
