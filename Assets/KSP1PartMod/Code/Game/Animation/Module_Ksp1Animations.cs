@@ -48,6 +48,8 @@ namespace KSP1PartMod.Game.Animation
         private readonly EncodeGate _gate = new EncodeGate(EncodeInterval);
         private bool _ready;
         private bool _urgent;
+        /// <summary><see cref="AddDataModules"/> found no data and runs on an empty one it made.</summary>
+        private bool _synthesised;
         private string _name;
 
         public override Type PartComponentModuleType => typeof(PartComponentModule_Ksp1Animations);
@@ -60,16 +62,19 @@ namespace KSP1PartMod.Game.Animation
             try
             {
                 base.AddDataModules();
+                Data_Ksp1Animations made = null;
                 if (data == null)
                 {
                     KSP1PartModPlugin.Log?.LogWarning($"[KSP1PartMod] anim: {PartName()} module has no data (type not resolved?)");
-                    data = new Data_Ksp1Animations();
+                    data = made = new Data_Ksp1Animations();
                 }
                 DataModules.TryAddUnique(data, out data);
+                // In flight the simulation's own copy may replace the empty one: that copy is real data.
+                _synthesised = made != null && ReferenceEquals(data, made);
             }
             catch (Exception e)
             {
-                KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {PartName()} module data setup failed: {e}");
+                KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {SafePartName()} module data setup failed: {e}");
             }
         }
 
@@ -88,7 +93,7 @@ namespace KSP1PartMod.Game.Animation
             }
             catch (Exception e)
             {
-                KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {PartName()} module init failed: {e}");
+                KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {SafePartName()} module init failed: {e}");
             }
         }
 
@@ -117,22 +122,18 @@ namespace KSP1PartMod.Game.Animation
             if (error != null) Warn($"{_name} {error}; defaults kept for those values");
             foreach (var kv in saved) _values[kv.Key] = kv.Value;
 
-            try
-            {
-                RestrictReduxRuntime();
-            }
-            catch (Exception ex)
-            {
-                Error($"{_name} restricting Redux's runtime failed: {ex}");
-            }
-
+            var failedClips = new List<string>();
             foreach (var def in data.Entries)
             {
                 if (def == null) continue;
                 try
                 {
                     var e = Build(def, saved, out var note);
-                    if (e == null) Log($"{_name} {def.Kind} '{Subject(def)}' not bound: {note}");
+                    if (e == null)
+                    {
+                        Log($"{_name} {def.Kind} '{Subject(def)}' not bound: {note}");
+                        AddClips(failedClips, def);
+                    }
                     else
                     {
                         if (note != null) Log($"{_name} {def.Kind} '{Subject(def)}' bound: {note}");
@@ -142,8 +143,20 @@ namespace KSP1PartMod.Game.Animation
                 catch (Exception ex)
                 {
                     Error($"{_name} {def.Kind} '{Subject(def)}' disabled for this session: {ex}");
+                    AddClips(failedClips, def);
                 }
             }
+
+            // After Build: the clips of the entries that failed go back to Redux.
+            try
+            {
+                RestrictReduxRuntime(failedClips);
+            }
+            catch (Exception ex)
+            {
+                Error($"{_name} restricting Redux's runtime failed: {ex}");
+            }
+
             ResolveAeroGates();
             AddControls(inEditor);
 
@@ -156,14 +169,28 @@ namespace KSP1PartMod.Game.Animation
             _ready = true;
         }
 
+        private static void AddClips(List<string> clips, AnimEntryDef def)
+        {
+            if (!string.IsNullOrWhiteSpace(def.Clip)) clips.Add(def.Clip);
+            if (!string.IsNullOrWhiteSpace(def.SecondClip)) clips.Add(def.SecondClip);
+        }
+
         /// <summary>Redux's fallback runtime plays every deployable source clip together; it keeps only Redux's own
-        /// (<c>ReduxClips</c>). With <c>own_first_deployable</c> Redux keeps none: the runtime is then also
-        /// disabled. Its layer and start state come from Redux's first source, possibly a solar panel: logged only.</summary>
-        private void RestrictReduxRuntime()
+        /// (<c>ReduxClips</c>) and those of our entries that failed (<see cref="ReduxRuntimeRule.KeptClips"/>). With
+        /// <c>own_first_deployable</c> Redux may keep none: the runtime is then also disabled. Missing data
+        /// (synthesised, no entry, no clip list) leaves it untouched. Its layer and start state come from Redux's
+        /// first source, possibly a solar panel: logged only.</summary>
+        private void RestrictReduxRuntime(IReadOnlyList<string> failedClips)
         {
             var runtime = GetComponentInChildren<Ksp1DeployableAnimationRuntime>(true);
             if (runtime == null) return;
-            var names = (data.ReduxClips ?? new List<string>()).Where(c => !string.IsNullOrWhiteSpace(c)).ToArray();
+            var skip = ReduxRuntimeRule.SkipReason(_synthesised, data.Entries?.Count ?? 0, data.ReduxClips != null);
+            if (skip != null)
+            {
+                Log($"{_name} Redux runtime left untouched ({skip})");
+                return;
+            }
+            var names = ReduxRuntimeRule.KeptClips(data.ReduxClips, failedClips, runtime.AnimationNames);
             var before = runtime.AnimationNames == null ? "" : string.Join(", ", runtime.AnimationNames);
             runtime.AnimationNames = names;
             if (names.Length == 0)
@@ -255,7 +282,7 @@ namespace KSP1PartMod.Game.Animation
         }
 
         private AnimationState[] Bind(AnimEntryDef def, string clip, out string note) =>
-            AnimationBinder.Bind(gameObject, def, clip, out note).Where(s => s != null).ToArray();
+            AnimationBinder.Bind(gameObject, def, clip, data.ReduxClips, out note).Where(s => s != null).ToArray();
 
         /// <summary>The controller of a KRE aero gate is the KSP1 module at its <c>DeployModuleIndex</c>: one of our
         /// Toggle / Deploy / Gear entries, else Redux's deployable module. Once one is found, Redux's gating marker
@@ -730,6 +757,19 @@ namespace KSP1PartMod.Game.Animation
         // ---------------------------------------------------------------- helpers
 
         private string PartName() => data?.OwningPartData?.partName ?? gameObject.name;
+
+        /// <summary>For catch blocks: never throws (the GameObject may already be destroyed).</summary>
+        private string SafePartName()
+        {
+            try
+            {
+                return PartName();
+            }
+            catch (Exception)
+            {
+                return "<part>";
+            }
+        }
 
         private static string Subject(AnimEntryDef def) =>
             def.Clip ?? def.SecondClip ?? def.ShaderProperty ?? (def.Kind == EntryKind.AeroGate ? "MODULE[" + def.ControllerModuleIndex + "]" : def.Key);

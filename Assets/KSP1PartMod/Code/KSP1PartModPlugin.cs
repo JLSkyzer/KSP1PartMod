@@ -34,10 +34,18 @@ namespace KSP1PartMod
         public override void OnPreInitialized()
         {
             Log = SWLogger;
+            // First: nothing about animations may cost the tech-tree placement.
+            TechTreeLoadStep.Register(this);
             Animations = ReadAnimationSettings();
             ApplyMuReaderFix(Animations);
-            AnimationLoadStep.Register();
-            TechTreeLoadStep.Register(this);
+            try
+            {
+                AnimationLoadStep.Register();
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] anim: step registration failed, no animation module added: " + e);
+            }
         }
 
         /// <summary>Never throws: a missing or broken file logs one line and gives the defaults.</summary>

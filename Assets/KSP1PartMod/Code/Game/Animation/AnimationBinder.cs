@@ -13,16 +13,16 @@ namespace KSP1PartMod.Game.Animation
     /// <c>Animator</c>: such a component is skipped and the note says so. One exception: an Animation bound by
     /// Redux's generic deployable controller (it carries Redux's pose keeper) on a part that has no Redux deployable
     /// module any more, because <c>own_first_deployable</c> removed it. That clip is ours: the <c>Animation</c> is
-    /// enabled again, and the <c>Animator</c> and pose keeper are kept disabled. Runs at init only.</summary>
+    /// enabled again, and the <c>Animator</c> and pose keeper are kept disabled. A clip Redux keeps (in
+    /// <c>ReduxClips</c>, for example a solar panel's) is never taken over. Runs at init only.</summary>
     internal static class AnimationBinder
     {
         private static readonly AnimationState[] None = new AnimationState[0];
 
-        public static IReadOnlyList<AnimationState> Bind(GameObject partRoot, AnimEntryDef e, out string note) =>
-            Bind(partRoot, e, e.Clip, out note);
-
         /// <summary>Binds <paramref name="clip"/> (Group: also the active clip) with the entry's lookup.</summary>
-        public static IReadOnlyList<AnimationState> Bind(GameObject partRoot, AnimEntryDef e, string clip, out string note)
+        /// <param name="reduxClips">The clips Redux's runtime keeps (<c>Data_Ksp1Animations.ReduxClips</c>); may be null.</param>
+        public static IReadOnlyList<AnimationState> Bind(GameObject partRoot, AnimEntryDef e, string clip,
+            ICollection<string> reduxClips, out string note)
         {
             note = null;
             if (partRoot == null || string.IsNullOrWhiteSpace(clip))
@@ -31,7 +31,7 @@ namespace KSP1PartMod.Game.Animation
                 return None;
             }
             var animations = partRoot.GetComponentsInChildren<UnityEngine.Animation>(true);
-            var takeOver = !HasReduxDeployableModule(partRoot);
+            var takeOver = !HasReduxDeployableModule(partRoot) && (reduxClips == null || !reduxClips.Contains(clip));
             var candidates = new AnimationCandidate[animations.Length];
             for (var i = 0; i < animations.Length; i++)
             {

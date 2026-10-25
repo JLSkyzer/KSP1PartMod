@@ -6,7 +6,8 @@
 - Redux's own deployable runtime is kept but restricted to the clips it owns; `own_first_deployable` hands the first deployable over to this mod.
 - The `.mu` reader fix is now guarded by a behavioural self-check and is taken back if it fails (`mu:` log lines).
 - New `animations.json` keys: `enabled`, `own_first_deployable`, `shader_property_map` (with the existing `fix_mu_reader`).
-- 408 EditMode tests. Nothing here has run in game yet; checklist in `docs/testing/2026-10-25-animations-in-game-checklist.md`.
+- Redux's runtime is never stopped on missing data (no data, no entry of ours, no clip list: left untouched and logged), is restricted after our entries are bound so a failed entry's clip goes back to Redux, and a clip Redux keeps is never taken over; the tech-tree step is registered first and a failing animation step registration is logged without costing it.
+- 418 EditMode tests. Nothing here has run in game yet; checklist in `docs/testing/2026-10-25-animations-in-game-checklist.md`.
 
 ## 0.1.0 - 2026-10-25
 
