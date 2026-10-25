@@ -13,7 +13,7 @@ Rien de ce mod n'a encore été lancé dans le jeu. Cette liste dit quoi vérifi
 
 Créer une **nouvelle campagne d'exploration** avec KSP1PartMod activé (Edit Pack), puis la charger.
 
-- [ ] Le log contient `[KSP1PartMod] loaded 0.1.0` au démarrage du jeu.
+- [ ] Le log contient `[KSP1PartMod] loaded <version>` (0.2.0 avec les animations) au démarrage du jeu.
 - [ ] Au chargement de la campagne : `[KSP1PartMod] placed N part(s) in M node(s), created K node(s) in X ms`, avec N > 0.
 - [ ] Une ligne `[KSP1PartMod] mod <nom>: A placed (B table, C override, D fallback, E catch-all), F hidden, G kept` par dossier de `mods/KSP1`. Pour les dossiers KSP1 de série, `E` doit valoir `0 catch-all`. Noter les `E` non nuls : ce sont les pièces à ajouter à la table ou à `overrides.json`.
 - [ ] Pas de ligne `placement failed`, `gave up` ni `tech_mapping.json: …` (avertissement de validation). Si `gave up: import complete=…, tree ready=…` apparaît, l'import KSP1 ou l'arbre n'était pas prêt en 30 s : noter lequel est `false`.
