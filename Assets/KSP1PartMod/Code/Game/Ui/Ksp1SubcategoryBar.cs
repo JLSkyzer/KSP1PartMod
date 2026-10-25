@@ -55,8 +55,17 @@ namespace KSP1PartMod.Game.Ui
         private readonly List<SubButton> _buttons = new List<SubButton>();
         private readonly List<Sprite> _ownedSprites = new List<Sprite>();
         private readonly Shift _contentShift = new Shift(), _searchShift = new Shift();
-        private string _builtFor;
+        private const int CreateAttempts = 3;
+
+        // What the buttons were built for: rebuilt only when one of these changes.
+        private string _builtMod, _builtLanguage;
+        private SubcategoryBarModel _builtModel;
+        private RectTransform _scrollbar, _scrollbarOwner;
         private bool _placedLogged, _failed;
+        private int _createFailures;
+
+        /// <summary>The bar could not be built or broke: its picker must not be filtered.</summary>
+        public bool Failed => _failed;
 
         public void SetModel(PartCategories category, string mod, SubcategoryBarModel model, Ksp1Subcategory? selected,
             Dictionary<Ksp1Subcategory, string> firstParts)
@@ -100,15 +109,24 @@ namespace KSP1PartMod.Game.Ui
             }
             if (_root == null && !Create())
             {
-                _failed = true;
+                // Retried on the next frames; the picker stays unfiltered meanwhile (see OabSubcategories.Filter).
+                if (++_createFailures >= CreateAttempts)
+                {
+                    _failed = true;
+                    KSP1PartModPlugin.Log?.LogWarning($"[KSP1PartMod] ui: no bar on {_picker.name} after {CreateAttempts} attempts, its grid is left unfiltered");
+                }
                 return;
             }
             if (!_root.gameObject.activeSelf) _root.gameObject.SetActive(true);
-            var key = _mod + "|" + _model.Signature + "|" + LocalizationManager.CurrentLanguage;
-            if (key != _builtFor)
+            var language = LocalizationManager.CurrentLanguage;
+            if (!ReferenceEquals(_model, _builtModel) || _mod != _builtMod || language != _builtLanguage)
             {
-                Rebuild();
-                _builtFor = key;
+                // A new model with the same counts keeps the buttons.
+                if (_builtModel == null || _model.Signature != _builtModel.Signature || _mod != _builtMod || language != _builtLanguage)
+                    Rebuild();
+                _builtModel = _model;
+                _builtMod = _mod;
+                _builtLanguage = language;
             }
             foreach (var b in _buttons)
                 if (b.Toggle != null) b.Toggle.SetIsOnWithoutNotify(b.Type == _selected);
@@ -200,7 +218,11 @@ namespace KSP1PartMod.Game.Ui
         private void Rebuild()
         {
             foreach (var b in _buttons)
-                if (b.Go != null) Destroy(b.Go);
+                if (b.Go != null)
+                {
+                    b.Go.SetActive(false);
+                    Destroy(b.Go);
+                }
             _buttons.Clear();
             DestroyOwnedSprites();
 
@@ -331,7 +353,12 @@ namespace KSP1PartMod.Game.Ui
             var parent = _root.parent as RectTransform;
             if (toolbar == null || parent == null) return;
             LocalBounds(toolbar, parent, out var xMin, out var xMax, out var yMin, out var yMax);
-            var scrollbar = toolbar.Find(ScrollbarName) as RectTransform;
+            if (_scrollbarOwner != toolbar || (_scrollbar == null && Time.frameCount % 30 == 0))
+            {
+                _scrollbarOwner = toolbar;
+                _scrollbar = toolbar.Find(ScrollbarName) as RectTransform;
+            }
+            var scrollbar = _scrollbar;
             var scrollWidth = 0f;
             if (scrollbar != null && scrollbar.gameObject.activeSelf)
             {
@@ -434,6 +461,21 @@ namespace KSP1PartMod.Game.Ui
         }
 
         // ---------------------------------------------------------------- hide / destroy
+
+        /// <summary>Gives the grid and the search row their own offsets back at once (before Redux measures
+        /// <c>partContentRT</c> in <c>ExpandCollapsePartsWindow</c>); the next LateUpdate narrows them again if the bar
+        /// is still shown.</summary>
+        public void RestoreNow()
+        {
+            Restore(_contentShift);
+            Restore(_searchShift);
+        }
+
+        private void OnDisable()
+        {
+            try { RestoreNow(); }
+            catch (Exception) { /* nothing more to undo */ }
+        }
 
         private void Hide()
         {

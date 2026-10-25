@@ -16,7 +16,7 @@ MonoBehaviour:
   name: KSP1 Part Mod
   author: JLSkyzer
   description: Puts the KSP1 parts imported by Redux from mods/KSP1 into the tech tree of exploration campaigns.
-  version: 0.3.0
+  version: 0.3.1
   versionCheck: 
   minKsp2Version: '*'
   maxKsp2Version: '*'

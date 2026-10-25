@@ -18,7 +18,7 @@ namespace KSP1PartMod
     public class KSP1PartModPlugin : KerbalMod
     {
         public const string ModId = "KSP1PartMod";
-        public const string Version = "0.3.0";
+        public const string Version = "0.3.1";
         public const string AnimationSettingsFile = "animations.json";
 
         private static string _modFolder;

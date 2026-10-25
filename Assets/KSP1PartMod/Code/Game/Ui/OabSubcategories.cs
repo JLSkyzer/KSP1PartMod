@@ -54,10 +54,52 @@ namespace KSP1PartMod.Game.Ui
                 harmony.Patch(original, postfix: new HarmonyMethod(typeof(OabSubcategories), nameof(AfterApplyPartsFilter)));
                 _armed = true;
                 log.LogInfo("[KSP1PartMod] ui: sub-category bar armed on AssemblyPartsPicker.ApplyPartsFilter");
+                ArmCollapseGuard(harmony);
             }
             catch (Exception e)
             {
                 log.LogError("[KSP1PartMod] ui: sub-category bar not armed: " + e);
+            }
+        }
+
+        /// <summary>Redux's private <c>ExpandCollapsePartsWindow(bool)</c> moves <c>manipulateShipToolbarRT</c> by
+        /// <c>partContentRT.rect.width - 0.5 * its width</c>, measured on collapse and on expand. Our narrowing must not
+        /// be in that width, or the toolbar drifts by one bar width per cycle: a prefix restores the grid first. Optional:
+        /// without it the bar still works.</summary>
+        private static void ArmCollapseGuard(Harmony harmony)
+        {
+            var log = KSP1PartModPlugin.Log;
+            try
+            {
+                var original = AccessTools.Method(typeof(AssemblyPartsPicker), "ExpandCollapsePartsWindow", new[] { typeof(bool) });
+                if (original == null)
+                {
+                    log.LogWarning("[KSP1PartMod] ui: AssemblyPartsPicker.ExpandCollapsePartsWindow not found, collapse guard off");
+                    return;
+                }
+                harmony.Patch(original, prefix: new HarmonyMethod(typeof(OabSubcategories), nameof(BeforeExpandCollapse)));
+                log.LogInfo("[KSP1PartMod] ui: collapse guard armed on AssemblyPartsPicker.ExpandCollapsePartsWindow");
+            }
+            catch (Exception e)
+            {
+                log.LogError("[KSP1PartMod] ui: collapse guard not armed: " + e);
+            }
+        }
+
+        private static bool _collapseGuardBroken;
+
+        private static void BeforeExpandCollapse(AssemblyPartsPicker __instance)
+        {
+            if (_collapseGuardBroken || __instance == null) return;
+            try
+            {
+                var bar = __instance.GetComponent<Ksp1SubcategoryBar>();
+                if (bar != null) bar.RestoreNow();
+            }
+            catch (Exception e)
+            {
+                _collapseGuardBroken = true;
+                KSP1PartModPlugin.Log?.LogError("[KSP1PartMod] ui: collapse guard failed, stopped for this session: " + e);
             }
         }
 
@@ -101,13 +143,16 @@ namespace KSP1PartMod.Game.Ui
 
         private static List<IObjectAssemblyAvailablePart> Filter(AssemblyPartsPicker picker, List<IObjectAssemblyAvailablePart> parts)
         {
-            var bar = picker.GetComponent<Ksp1SubcategoryBar>() ?? picker.gameObject.AddComponent<Ksp1SubcategoryBar>();
+            var bar = picker.GetComponent<Ksp1SubcategoryBar>();
             var plugin = KSP1PartModPlugin.Instance;
             if ((plugin != null && !plugin.Enabled) || !Ksp1OabCategoryRegistry.TryGetCategory(picker.currentCategory, out var entry) || entry == null)
             {
-                bar.Clear();
+                if (bar != null) bar.Clear();
                 return parts;
             }
+            if (bar == null) bar = picker.gameObject.AddComponent<Ksp1SubcategoryBar>();
+            // A bar that could not be built shows nothing: its picker must not be filtered by a selection made elsewhere.
+            if (bar.Failed) return parts;
             var index = Index();
             var types = new List<Ksp1Subcategory>(parts.Count);
             var firstParts = new Dictionary<Ksp1Subcategory, string>();

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 - 2026-10-25
+
+Fixes from the review of 0.3.0 (not run in game yet).
+
+- The ship toolbar (`manipulateShipToolbarRT`) no longer drifts by one bar width each time the parts panel is collapsed and expanded while the sub-category bar is shown: a Harmony prefix on Redux's `AssemblyPartsPicker.ExpandCollapsePartsWindow` gives the grid its own width back before Redux measures it (`ui: collapse guard armed on …`; if the method is missing the bar still works, `collapse guard off`). The grid offsets are also restored when the bar's picker is disabled.
+- A picker whose bar could not be built (three attempts on successive frames, `ui: no bar on … after 3 attempts`) is no longer filtered by a type chosen in another picker.
+- The bar is added only to a picker showing a KSP1 category, its old buttons are hidden before being destroyed, and it no longer allocates a string every frame.
+
 ## 0.3.0 - 2026-10-25
 
 - **KSP1 sub-category bar in the VAB.** When one of Redux's KSP1 mod categories (Squad, Bluedog_DB, KerbalReusabilityExpansion…) is selected, a second vertical bar appears right of the category bar with the KSP1 part types of that mod, in KSP1 editor order (Pods, Fuel Tanks, Engines, Control, Structural, Coupling, Payload, Aerodynamics, Ground, Thermal, Electrical, Communication, Science, Utility, Robotics, Cargo, Other), after an "All" button. Clicking a type filters the grid; "Group by" and the search keep working (the search ignores the bar). Types come from each part's raw KSP1 `category`; unknown or custom categories go to "Other".
