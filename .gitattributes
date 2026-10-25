@@ -1,0 +1,2 @@
+# The mod localization CSV must keep LF line endings (Redux localization format).
+Assets/KSP1PartMod/Copied/localizations/*.csv text eol=lf

@@ -1,0 +1,9 @@
+Key,Type,Desc,English,French
+KSP1PartMod/TechNodes/Names/tNode_ksp1_robotics_01,Text,,Robotics,Robotique
+KSP1PartMod/TechNodes/Descriptions/tNode_ksp1_robotics_01,Text,,"Hinges, pistons and rotation servos to make a craft move by itself.","Charnières, pistons et servomoteurs rotatifs pour qu'un engin bouge par lui-même."
+KSP1PartMod/TechNodes/Names/tNode_ksp1_robotics_02,Text,,Advanced Robotics,Robotique avancée
+KSP1PartMod/TechNodes/Descriptions/tNode_ksp1_robotics_02,Text,,"Stronger, larger actuators for heavier moving parts.","Des actionneurs plus grands et plus puissants pour des pièces mobiles plus lourdes."
+KSP1PartMod/TechNodes/Names/tNode_ksp1_robotics_03,Text,,Experimental Robotics,Robotique expérimentale
+KSP1PartMod/TechNodes/Descriptions/tNode_ksp1_robotics_03,Text,,"Robotic systems for building and working far from Kerbin.","Des systèmes robotisés pour construire et travailler loin de Kerbin."
+KSP1PartMod/TechNodes/Names/tNode_ksp1_misc,Text,,KSP1 Miscellany,Divers KSP1
+KSP1PartMod/TechNodes/Descriptions/tNode_ksp1_misc,Text,,KSP1 parts that fit nowhere else in the tree.,Les pièces KSP1 qui ne trouvent leur place nulle part ailleurs dans l'arbre.

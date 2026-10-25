@@ -1,0 +1,5 @@
+{
+  "_help": "\"parts\" maps a KSP1 part name (case-sensitive, as in its cfg) to the KSP2 tech node id that should unlock it. \"ksp1_nodes\" maps a KSP1 tech node id (any case) to the KSP2 tech node id that should take all its parts. Both win over tech_mapping.json; an id missing from the game's tree is ignored and logged.",
+  "parts": {},
+  "ksp1_nodes": {}
+}
