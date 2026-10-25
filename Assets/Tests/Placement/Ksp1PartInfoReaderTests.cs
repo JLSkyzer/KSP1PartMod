@@ -19,14 +19,20 @@ namespace KSP1PartMod.Tests.Placement
             Assert.IsTrue(Read(("TechHidden", "True")).HiddenByConfig);
         [Test] public void ReadInfo_CategoryNone_IsHidden() =>
             Assert.IsTrue(Read(("category", "none")).HiddenByConfig);
+        [Test] public void ReadInfo_MissingCategory_IsHidden() =>
+            Assert.IsTrue(Read(("TechRequired", "start")).HiddenByConfig);
+        [Test] public void ReadInfo_EmptyCategory_IsHidden() =>
+            Assert.IsTrue(Read(("TechRequired", "start"), ("category", "  // none yet")).HiddenByConfig);
+        [Test] public void ReadInfo_Unresearcheable_IsHidden() =>
+            Assert.IsTrue(Read(("TechRequired", "unresearcheable"), ("category", "Utility")).HiddenByConfig);
         [Test] public void ReadInfo_MissingTechRequired_IsNullNotHidden()
         { var p = Read(("category", "Engine")); Assert.IsNull(p.TechRequired); Assert.IsFalse(p.HiddenByConfig); }
         [Test] public void ReadInfo_KeepsPartAndModNames()
-        { var p = Read(); Assert.AreEqual("p", p.PartName); Assert.AreEqual("m", p.ModName); }
+        { var p = Read(("category", "Utility")); Assert.AreEqual("p", p.PartName); Assert.AreEqual("m", p.ModName); }
         [Test] public void ReadInfo_EmptyAfterComment_IsNull() =>
             Assert.IsNull(Read(("TechRequired", "  // nothing")).TechRequired);
         [Test] public void ReadInfo_TechHiddenGarbage_IsNotHidden() =>
-            Assert.IsFalse(Read(("TechHidden", "maybe")).HiddenByConfig);
+            Assert.IsFalse(Read(("TechHidden", "maybe"), ("category", "Utility")).HiddenByConfig);
 
         [TestCase("size0, srf", "0v")] [TestCase("size1p5", "1.5v")] [TestCase("size3, size2", "3v")]
         [TestCase("mk2, srf", "mk2")] [TestCase("srf", "srf")] [TestCase(null, null)]

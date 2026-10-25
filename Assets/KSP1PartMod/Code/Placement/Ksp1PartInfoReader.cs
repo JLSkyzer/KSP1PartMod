@@ -18,7 +18,11 @@ namespace KSP1PartMod.Placement
             string tech = Clean(getValue("TechRequired"));
             string category = Clean(getValue("category"));
             bool techHidden = bool.TryParse(Clean(getValue("TechHidden")), out bool hidden) && hidden;
-            bool hiddenByConfig = techHidden || string.Equals(category, "none", StringComparison.OrdinalIgnoreCase);
+            // KSP1's default category is none (never shown): a part without category (EVA kerbals, flag) is hidden too.
+            // Unresearcheable is KSP1's placeholder for comets and asteroids, not a tree node.
+            bool hiddenByConfig = techHidden || category == null
+                || string.Equals(category, "none", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tech, "Unresearcheable", StringComparison.OrdinalIgnoreCase);
             return new Ksp1PartInfo(partName, modName, tech, category, ReadSize(getValue("bulkheadProfiles")), hiddenByConfig);
         }
 

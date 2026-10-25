@@ -7,3 +7,4 @@
 - New robotics and miscellaneous nodes, created only when they receive parts.
 - `overrides.json` to move a part or a whole KSP1 node.
 - English and French names for the new nodes.
+- Parts without a category (EVA kerbals, flag) and parts needing the placeholder node Unresearcheable are no longer placed; they no longer create a miscellaneous node.

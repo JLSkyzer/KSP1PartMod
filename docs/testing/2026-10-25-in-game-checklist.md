@@ -36,10 +36,12 @@ Créer une **nouvelle campagne d'exploration** avec KSP1PartMod activé (Edit Pa
 
 - [ ] Débloquer un nœud (y compris un nœud créé par le mod), sauvegarder, quitter vers le menu, recharger : le nœud est toujours débloqué et ses pièces utilisables.
 - [ ] Le log du rechargement contient de nouveau une ligne `[KSP1PartMod] placed …` avec les mêmes nombres.
+- [ ] Au rechargement, les lignes `mod <nom>: …` des dossiers KSP1 de série doivent afficher `0 kept`. Un `kept` non nul est le signe d'un défaut : des objets de nœud partagés entre deux arbres.
+- [ ] **Sauvegarde sans le mod** : débloquer un nœud `tNode_ksp1_*`, sauvegarder, puis désinstaller KSP1PartMod (ou déplacer toutes ses pièces ailleurs par une surcharge) et recharger cette sauvegarde. Ouvrir le R&D et le VAB : la sauvegarde se charge et `Player.log` ne contient aucune exception. Cela vérifie la promesse de la spec : une sauvegarde se recharge encore une fois le mod retiré.
 
 ## 5. Campagne sans le mod, dans la même session
 
-Le jeu reconstruit l'arbre à chaque chargement et l'action est conditionnée à la fonctionnalité du mod : on ne cherche donc **pas** de ligne de retrait.
+Le jeu reconstruit l'arbre à chaque chargement et l'action est conditionnée à la fonctionnalité du mod : on ne cherche donc **pas** de ligne de retrait. La doc officielle de `SaveLoad.OnCampaignUnload` dit que le retrait s'exécute en quittant vers le menu, avant qu'un autre chargement remplace la campagne, et quand un chargement échoue ; une lecture de l'IL (2026-10-25) n'a trouvé que l'appelant du chargement échoué. À trancher en jeu : le code est correct dans les deux cas (`Place` retire d'abord ses ajouts, et le magasin est reconstruit).
 
 - [ ] Depuis le menu, charger (ou créer) une campagne **sans** KSP1PartMod activé.
 - [ ] Aucun nœud `tNode_ksp1_…` dans le R&D, et aucune pièce KSP1 placée par le mod.

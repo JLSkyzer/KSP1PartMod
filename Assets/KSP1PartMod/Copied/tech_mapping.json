@@ -2,7 +2,7 @@
   "_comment": "KSP1 tech node id -> KSP2 tech node id (or new:<key>, a node created by this mod with id tNode_ksp1_<key>). Keys starting with _ are comments. Each KSP1 node goes to the KSP2 node whose parts play the same role at about the same stage of the tree. KSP2 targets checked against the parts dump of Redux 0.2.9 (26w42c), 2026-10-21.",
   "_sources": [
     "KSP1 1.12 stock tree: GameData/Squad/Resources/TechTree.cfg, 63 RDNode ids, read from the mirror https://github.com/rettoph/KerbalSpaceProgram-Config/blob/main/GameData/Squad/Resources/TechTree.cfg (2026-10-25)",
-    "KSP1 ids in use by the KSP1 parts shipped with Redux: TechRequired of <game>/mods/KSP1/**/*.cfg (62 ids, 2026-10-25); Unresearcheable is KSP1's placeholder for comets and asteroids, not a tree node",
+    "KSP1 ids in use by the KSP1 parts shipped with Redux: TechRequired of <game>/mods/KSP1/**/*.cfg (61 ids, 2026-10-25, without Unresearcheable: KSP1's placeholder for comets and asteroids, not a tree node; the mod hides such parts)",
     "Community Tech Tree: https://github.com/post-kerbin-mining-corporation/CommunityTechTree/blob/master/GameData/CommunityTechTree/Tree/CommunityTechTree.cfg (82 new RDNode ids) and its Localization/en-us.cfg for titles (2026-10-25)",
     "KSP2 nodes and their parts: SkySpaceAgency VAB dump parts_Skyzer Adventure_2026-10-21_152656.json (93 node ids)"
   ],
@@ -71,7 +71,6 @@
     "experimentalScience": "tNode_3v_isru_01",
     "experimentalMotors": "tNode_4v_rover_01",
     "experimentalElectrics": "tNode_2v_electronics_02",
-    "Unresearcheable": "new:misc",
 
     "_ctt": "Community Tech Tree (nodes it adds; the stock nodes it moves are above)",
     "nuclearPower": "tNode_3v_electronics_02",

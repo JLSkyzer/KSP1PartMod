@@ -28,7 +28,8 @@ namespace KSP1PartMod.Tests.Placement
         /// <summary>TechRequired values of the KSP1 parts shipped with Redux (mods/KSP1, 2026-10-25).</summary>
         private static readonly string[] StockIdsInUse =
         {
-            "Unresearcheable", "actuators", "advAerodynamics", "advConstruction", "advElectrics", "advExploration",
+            // "Unresearcheable" (comets, asteroids) is also in use but is not a node: the reader hides those parts.
+            "actuators", "advAerodynamics", "advConstruction", "advElectrics", "advExploration",
             "advFlightControl", "advFuelSystems", "advLanding", "advMetalworks", "advRocketry", "advScienceTech",
             "advUnmanned", "advancedMotors", "aerodynamicSystems", "aerospaceTech", "automation", "aviation",
             "basicRocketry", "basicScience", "commandModules", "composites", "electrics", "electronics",
@@ -42,7 +43,7 @@ namespace KSP1PartMod.Tests.Placement
             "supersonicFlight", "survivability", "unmannedTech", "veryHeavyRocketry",
         };
 
-        [Test] public void StockIdsInUse_Has62Ids() => Assert.AreEqual(62, StockIdsInUse.Distinct().Count());
+        [Test] public void StockIdsInUse_Has61Ids() => Assert.AreEqual(61, StockIdsInUse.Distinct().Count());
         [Test] public void Snapshot_Has93Nodes() => Assert.AreEqual(93, Snapshot.Count);
 
         [Test] public void Shipped_Validates_AgainstSnapshot() => CollectionAssert.IsEmpty(Shipped.Validate(Snapshot));

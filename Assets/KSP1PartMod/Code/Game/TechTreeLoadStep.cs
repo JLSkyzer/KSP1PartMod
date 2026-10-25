@@ -39,8 +39,15 @@ namespace KSP1PartMod.Game
             try
             {
                 // SaveLoad.UnloadCampaign clears its list after running it (IL, 2026-10-25): register again at each load.
+                // The official doc of OnCampaignUnload says unloads run on quitting to the main menu, before another load
+                // replaces the campaign, and when a load fails; the IL reading only found the failed-load caller. To
+                // settle in game. Correct either way: Place reverts first and the game rebuilds the store at each load.
                 SaveLoad.OnCampaignUnload(OnCampaignUnload);
-                _host.StartCoroutine(WaitThenPlace(done, _generation));
+                if (_host.StartCoroutine(WaitThenPlace(done, _generation)) == null)
+                {
+                    KSP1PartModPlugin.Log.LogError("[KSP1PartMod] could not start the placement coroutine");
+                    done();
+                }
             }
             catch (Exception e)
             {
