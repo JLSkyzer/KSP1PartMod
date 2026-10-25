@@ -35,6 +35,8 @@ namespace KSP1PartMod.Tests.ReduxMu
         {
             var failing = FailingStock();
             Assert.IsNotEmpty(failing);
+            Samples.Clear();
+            _headers = _extraIsScaleX = 0;
             var extraValues = new SortedSet<float>();
             var causes = new List<string>();
             foreach (var p in failing)
@@ -137,7 +139,43 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual("[KSP1PartMod] mu: fix enabled on Ksp1MuReader.ReadObject",
                 MuReaderFix.ReportFor(typeof(Ksp1MuReader)));
 
+        [Test] public void Fix_ReduxAlreadyFixed_Skips()
+        {
+            using (Fixed())
+            {
+                var second = new Harmony(TestHarmonyId + ".Second");
+                Assert.IsFalse(MuReaderFix.TryApply(second, out var report));
+                Assert.AreEqual("[KSP1PartMod] mu: fix skipped: Redux already reads v0-2", report);
+                Assert.IsFalse(Harmony.GetPatchInfo(ReadObject()).Transpilers.Any(p => p.owner == second.Id));
+            }
+        }
+
+        [Test] public void Fix_SelfCheck_PassesOnGeneratedFiles()
+        {
+            StringAssert.StartsWith("v2: InvalidDataException", MuReaderFix.SelfCheck(2)); // unpatched Redux
+            Assert.IsNull(MuReaderFix.SelfCheck(3));
+            using (Fixed())
+            {
+                Assert.IsNull(MuReaderFix.SelfCheck(2));
+                Assert.IsNull(MuReaderFix.SelfCheck(3));
+            }
+        }
+
+        [Test] public void Fix_Applied_ReportsEnabled()
+        {
+            var h = new Harmony(TestHarmonyId + ".Report");
+            try
+            {
+                Assert.IsTrue(MuReaderFix.TryApply(h, out var report));
+                Assert.AreEqual("[KSP1PartMod] mu: fix enabled on Ksp1MuReader.ReadObject", report);
+            }
+            finally { MuReaderFix.Remove(h); }
+        }
+
         // ---- helpers ----
+
+        private static System.Reflection.MethodInfo ReadObject() =>
+            AccessTools.Method(typeof(Ksp1MuReader), "ReadObject", new[] { typeof(int) });
 
         private sealed class FixScope : IDisposable
         {

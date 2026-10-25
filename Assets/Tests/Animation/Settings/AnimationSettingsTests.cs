@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.IO;
 using KSP1PartMod.Animation.Settings;
 using NUnit.Framework;
@@ -28,6 +29,27 @@ namespace KSP1PartMod.Tests.Animation.Settings
             CollectionAssert.AreEqual(new[] { "_EmissiveColor", "_EmissionColor" }, s.ShaderPropertyMap["_EmissiveColor"]);
             CollectionAssert.AreEqual(new[] { "_BurnColor" }, s.ShaderPropertyMap["_BurnColor"]);
             Assert.IsFalse(s.ShaderPropertyMap.ContainsKey("_note"));
+        }
+
+        [Test] public void Settings_RootNotObject_DefaultsAndError()
+        {
+            var s = AnimationSettings.Parse("[]", out var e);
+            StringAssert.Contains("settings root is not a JSON object", e);
+            Assert.AreSame(AnimationSettings.Defaults, s);
+        }
+
+        [Test] public void Settings_DefaultMap_NotMutableThroughCast()
+        {
+            var map = AnimationSettings.Defaults.ShaderPropertyMap;
+            Assert.IsFalse(map is Dictionary<string, string[]>);
+            Assert.Throws<System.NotSupportedException>(() => ((IDictionary<string, string[]>)map)["_X"] = new[] { "_Y" });
+        }
+
+        [Test] public void Settings_ParsedDefaultMap_HasItsOwnArrays()
+        {
+            var s = AnimationSettings.Parse("{\"enabled\": true}", out _);
+            Assert.AreNotSame(AnimationSettings.Defaults.ShaderPropertyMap["_BurnColor"], s.ShaderPropertyMap["_BurnColor"]);
+            CollectionAssert.AreEqual(new[] { "_BurnColor" }, s.ShaderPropertyMap["_BurnColor"]);
         }
 
         [Test] public void Settings_Empty_Defaults()

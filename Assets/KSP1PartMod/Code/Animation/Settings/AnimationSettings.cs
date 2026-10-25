@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 
@@ -19,16 +20,16 @@ namespace KSP1PartMod.Animation.Settings
         /// file replaces the default one.</summary>
         public IReadOnlyDictionary<string, string[]> ShaderPropertyMap { get; }
 
-        /// <summary>Starting guesses, not verified in game.</summary>
-        private static readonly IReadOnlyDictionary<string, string[]> DefaultShaderPropertyMap =
-            new Dictionary<string, string[]>(StringComparer.Ordinal)
+        /// <summary>Starting guesses, not verified in game. Each settings object gets its own copy.</summary>
+        private static IReadOnlyDictionary<string, string[]> DefaultShaderPropertyMap() =>
+            ReadOnly(new Dictionary<string, string[]>(StringComparer.Ordinal)
             {
                 ["_EmissiveColor"] = new[] { "_EmissiveColor", "_EmissionColor" },
                 ["_BurnColor"] = new[] { "_BurnColor" },
-            };
+            });
 
         public static readonly AnimationSettings Defaults =
-            new AnimationSettings(true, true, false, DefaultShaderPropertyMap);
+            new AnimationSettings(true, true, false, DefaultShaderPropertyMap());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap)
@@ -48,10 +49,14 @@ namespace KSP1PartMod.Animation.Settings
             if (string.IsNullOrWhiteSpace(json)) return Defaults;
             try
             {
-                var root = JObject.Parse(json);
+                if (!(JToken.Parse(json) is JObject root))
+                {
+                    error = "animations.json ignored, settings root is not a JSON object";
+                    return Defaults;
+                }
                 var problems = new List<string>();
                 bool enabled = Defaults.Enabled, fix = Defaults.FixMuReader, own = Defaults.OwnFirstDeployable;
-                var map = Defaults.ShaderPropertyMap;
+                IReadOnlyDictionary<string, string[]> map = null;
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -66,7 +71,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap());
             }
             catch (Exception e)
             {
@@ -99,8 +104,11 @@ namespace KSP1PartMod.Animation.Settings
                 if (names != null) map[entry.Name] = names;
                 else problems.Add($"{p.Name}.{entry.Name} is not a list of property names, ignored");
             }
-            return map;
+            return ReadOnly(map);
         }
+
+        private static IReadOnlyDictionary<string, string[]> ReadOnly(Dictionary<string, string[]> map) =>
+            new ReadOnlyDictionary<string, string[]>(map);
 
         private static bool IsName(JToken t) => t.Type == JTokenType.String && ((string)t).Trim().Length > 0;
     }
