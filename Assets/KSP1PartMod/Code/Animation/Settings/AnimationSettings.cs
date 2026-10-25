@@ -22,6 +22,13 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>One-shot material dump of a few KSP1 parts in the VAB (<c>diag:</c> lines), independent of
         /// <see cref="Enabled"/>.</summary>
         public bool Diagnostics { get; }
+        /// <summary>Draw the clip of each Redux deployable (and parachute) bound to Redux's Mecanim copy, which does not
+        /// move (<c>follow_redux_deployables</c>).</summary>
+        public bool FollowReduxDeployables { get; }
+        /// <summary>Hide renderers of KSP1 parts whose materials are all null (<c>hide_material_less_renderers</c>).</summary>
+        public bool HideMaterialLessRenderers { get; }
+        /// <summary>Render KSP1 part icons with the KSP2 shader swap (<c>fix_part_icons</c>).</summary>
+        public bool FixPartIcons { get; }
 
         /// <summary>Starting guesses, not verified in game. Each settings object gets its own copy.</summary>
         private static IReadOnlyDictionary<string, string[]> DefaultShaderPropertyMap() =>
@@ -32,11 +39,15 @@ namespace KSP1PartMod.Animation.Settings
             });
 
         public static readonly AnimationSettings Defaults =
-            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true);
+            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true);
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
-            IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics)
+            IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
+            bool hideMaterialLess, bool fixIcons)
         {
+            FollowReduxDeployables = followRedux;
+            HideMaterialLessRenderers = hideMaterialLess;
+            FixPartIcons = fixIcons;
             Diagnostics = diagnostics;
             Enabled = enabled;
             FixMuReader = fixMuReader;
@@ -60,7 +71,8 @@ namespace KSP1PartMod.Animation.Settings
                 }
                 var problems = new List<string>();
                 bool enabled = Defaults.Enabled, fix = Defaults.FixMuReader, own = Defaults.OwnFirstDeployable,
-                    diagnostics = Defaults.Diagnostics;
+                    diagnostics = Defaults.Diagnostics, follow = Defaults.FollowReduxDeployables,
+                    hide = Defaults.HideMaterialLessRenderers, icons = Defaults.FixPartIcons;
                 IReadOnlyDictionary<string, string[]> map = null;
                 foreach (var p in root.Properties())
                 {
@@ -70,6 +82,9 @@ namespace KSP1PartMod.Animation.Settings
                         case "fix_mu_reader": ReadBool(p, ref fix, problems); break;
                         case "own_first_deployable": ReadBool(p, ref own, problems); break;
                         case "diagnostics": ReadBool(p, ref diagnostics, problems); break;
+                        case "follow_redux_deployables": ReadBool(p, ref follow, problems); break;
+                        case "hide_material_less_renderers": ReadBool(p, ref hide, problems); break;
+                        case "fix_part_icons": ReadBool(p, ref icons, problems); break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:
                             if (!p.Name.StartsWith("_")) problems.Add($"unknown key \"{p.Name}\" ignored");
@@ -77,7 +92,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons);
             }
             catch (Exception e)
             {

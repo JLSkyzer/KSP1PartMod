@@ -1,8 +1,11 @@
 {
-  "_note": "KSP1PartMod animation settings. enabled: master switch for KSP1 animations. fix_mu_reader: patch Redux's .mu reader so models of format version 0 to 2 load (false leaves Redux untouched). own_first_deployable: remove Redux's deployable module from the part and let KSP1PartMod play that clip too. shader_property_map: KSP1 material property -> KSP2 property names to try, in order; when present it replaces the built-in map. diagnostics: log once, in the VAB, the materials of a few KSP1 parts (lines '[KSP1PartMod] diag:'), for bug reports.",
+  "_note": "KSP1PartMod animation settings. enabled: master switch for KSP1 animations. fix_mu_reader: patch Redux's .mu reader so models of format version 0 to 2 load (false leaves Redux untouched). own_first_deployable: remove Redux's deployable module from the part and let KSP1PartMod play that clip too. follow_redux_deployables: Redux keeps the state of a part's single deployable (and of parachutes) but its Mecanim copy of the clip does not move; KSP1PartMod draws the clip from Redux's state (false leaves those clips still). hide_material_less_renderers: hide the renderers of KSP1 parts whose materials are all missing (drawn with Unity's error colour). fix_part_icons: render KSP1 part icons with the KSP2 shader swap, as Redux does for KSP2 parts (false keeps Redux's black icons). shader_property_map: KSP1 material property -> KSP2 property names to try, in order; when present it replaces the built-in map. diagnostics: log once, in the VAB, the materials of a few KSP1 parts (lines '[KSP1PartMod] diag:'), for bug reports.",
   "enabled": true,
   "fix_mu_reader": true,
   "own_first_deployable": false,
+  "follow_redux_deployables": true,
+  "hide_material_less_renderers": true,
+  "fix_part_icons": true,
   "diagnostics": true,
   "shader_property_map": {
     "_note": "Starting guesses, not verified in game.",

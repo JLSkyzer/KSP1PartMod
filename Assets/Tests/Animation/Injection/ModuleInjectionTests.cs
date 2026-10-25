@@ -46,6 +46,15 @@ namespace KSP1PartMod.Tests.Animation.Injection
             Assert.AreEqual("[KSP1PartMod] anim: mod KRE: 1 part(s), 1 entry (Toggle 1), 0 left to Redux, 0 none",
                 ModuleInjection.SummaryLine("KRE", new[] { PlanWith(1) }));
 
+        [Test] public void Followers_CountsDeployablesAndChutes()
+        {
+            var p = new PartAnimationPlan(new[] { new AnimEntryDef { Kind = EntryKind.ReduxFollower }, new AnimEntryDef { Kind = EntryKind.GearBridge } },
+                new string[0], null, false, new string[0]);
+            var c = new PartAnimationPlan(new[] { new AnimEntryDef { Kind = EntryKind.ChuteFollower } }, new string[0], null, false, new string[0]);
+            Assert.AreEqual("[KSP1PartMod] anim: mod KRE: 2 Redux deployable(s) followed, 1 Redux parachute(s) followed",
+                ModuleInjection.FollowerLine("KRE", new[] { p, p, c, PlanWith(1) }));
+        }
+
         [Test] public void Summary_NoEntries_NoKindList() =>
             Assert.AreEqual("[KSP1PartMod] anim: mod ?: 1 part(s), 0 entries, 0 left to Redux, 1 none",
                 ModuleInjection.SummaryLine(null, new[] { PlanWith(0) }));

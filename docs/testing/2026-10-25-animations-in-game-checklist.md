@@ -107,7 +107,47 @@ Lancer un vaisseau portant les pièces ci-dessous. À chaque fois, la ligne de l
 
 ## 7. Placement dans l'arbre technologique
 
-- [ ] Reprendre `docs/testing/2026-10-25-in-game-checklist.md` (le log annonce maintenant `[KSP1PartMod] loaded 0.2.1`).
+- [ ] Reprendre `docs/testing/2026-10-25-in-game-checklist.md` (le log annonce maintenant `[KSP1PartMod] loaded 0.2.2`).
+
+## 8. Correctifs 0.2.2 (second test en jeu)
+
+Au démarrage, le log doit contenir `[KSP1PartMod] loaded 0.2.2`, `[KSP1PartMod] render: material-less renderer cleanup armed on PartModuleLoadPatcher.ApplyOnGameObject` et `[KSP1PartMod] icons: KSP1 icon shader swap armed on PartIconRenderer.RenderTexture2D`.
+
+### A. Déployables Redux qui ne bougeaient pas (jambes KRE, grilles, aile de booster, portes, panneaux, parachutes)
+
+- [ ] Au chargement de la campagne, une ligne par mod : `[KSP1PartMod] anim: mod KerbalReusabilityExpansion: 29 Redux deployable(s) followed, 0 Redux parachute(s) followed` (attendu, d'après les cfg : Bluedog_DB 198 et 14 parachutes, Squad 36 et 5, SquadExpansion 1).
+- [ ] Poser une jambe KRE (`KRE-FalconLeg-L`) dans le VAB. Lignes `anim: KRE-FalconLeg-L(Clone) follows Redux deployable 'XDeploy' (Module_Deployable)` puis `… ReduxFollower 'XDeploy' bound: on '<objet>', pose keeper disabled, Redux Animator kept; Mecanim copy '…_XDeploy_deploy' empty=<True|False> legacy=False length=… s`. **Noter la valeur de `empty`** : elle confirme (True) ou non la cause.
+- [ ] Bouton Redux « Déployer la pièce » : la jambe **bouge** jusqu'à la position sortie, l'état passe à « Étendu ». Ligne `follower 'XDeploy' -> extend (Redux Extending)` (ou `(Redux Extended)`). Re-cliquer : elle rentre, ligne `-> retract`.
+- [ ] Même chose avec le groupe d'action Gear (touche G en vol).
+- [ ] Grille KRE et aile de booster (`BoosterWingKRE`) : elles bougent ; la ligne `aero gate … follows our reduxfollower:…` remplace maintenant `follows Module_Deployable …`.
+- [ ] Une pièce de série à une seule animation (porte de soute de série, panneau solaire de série) : elle bouge.
+- [ ] Une pièce **à plusieurs animations** (BDB `bluedog_LM_Shelter`, `bluedog_GATV_DockingPort`) : elle bougeait déjà, elle bouge toujours, **pas** de ligne `follows Redux deployable` pour elle.
+- [ ] Parachute de série en vol : ligne `follows Redux parachute 'semiDeploy'/'fullyDeploy' (Module_Parachute)`, puis à l'ouverture `parachute follower -> SemiDeployed` et `-> Deployed` ; la voile se déploie en deux temps.
+- [ ] Toute ligne `ReduxFollower '…' not bound: …` ou `ChuteFollower '…' not bound: …` : la recopier.
+- [ ] En cas de problème : `"follow_redux_deployables": false` dans `animations.json` revient au comportement de 0.2.1.
+
+### B. Zones rouges sur les pièces
+
+- [ ] Lignes `[KSP1PartMod] render: <pièce> hid <n> renderer(s) without material (<chemins>)` : les recopier (une par nom de pièce).
+- [ ] Lignes `[KSP1PartMod] render: <pièce> reentry hull(s): <n> renderer(s) without material, <m> active (left to ReentryMesh)` (les 5 premières pièces) : si `m` vaut 0 partout et que les zones rouges restent, la coque de rentrée n'est pas en cause ; le dire.
+- [ ] Ligne `… deactivated <n> reentry hull(s) without material (…)` : la recopier.
+- [ ] Le cylindre et les bandes rouges ont-ils disparu (VAB, vol) ? Rentrée atmosphérique : l'effet de rentrée apparaît toujours.
+- [ ] En cas de problème : `"hide_material_less_renderers": false`.
+
+### C. Catégories KSP1 absentes quand le jeu démarre dans le VAB
+
+- [ ] Quitter le jeu depuis le VAB, relancer, charger la partie (elle s'ouvre dans le VAB) : les boutons de catégorie KSP1 (Squad, KRE, BDB…) et leurs pièces sont là **sans** ressortir du VAB.
+- [ ] Lignes, dans cet ordre : `placed 1776 part(s) in …`, `[KSP1PartMod] placed after 'Loading Science Data', before the VAB builds its part list`, puis plus tard `[KSP1PartMod] already placed before the VAB, nothing to do at campaign loaded`. Si à la place on lit `not ready after 'Loading Science Data' (…)`, recopier la ligne.
+
+### D. Icônes noires
+
+- [ ] Lignes `[KSP1PartMod] icons: rendered 1 KSP1 icon(s) with hotswapPartShaders=true (KSP2/Parts/Paintable -> KSP2/Scenery/Standard (Opaque)); last '<pièce>' had [<shaders>]`, puis `rendered 10 …`, `100 …`. Recopier la liste `[<shaders>]` : si elle ne contient pas `KSP2/Parts/Paintable`, l'hypothèse est fausse.
+- [ ] Les icônes des pièces KSP1 et des boutons de catégorie KSP1 ne sont plus noires.
+- [ ] En cas de problème : `"fix_part_icons": false`.
+
+### E. Placement enregistré deux fois
+
+- [ ] Une seule ligne `[System] Place KSP1 parts in the tech tree completed` par chargement, aucune ligne `could not start the placement coroutine`.
 
 ## En cas de régression
 
@@ -120,4 +160,4 @@ Lancer un vaisseau portant les pièces ci-dessous. À chaque fois, la ligne de l
 
 ## À rapporter
 
-Les lignes `registered ECS type`, `new node`, `diag:`, `mu:`, la ligne `step start`, toutes les lignes `mod <nom>`, toutes les lignes `not bound`, les lignes `data #`, `throttle from`, `heat from`, `shader '…'`, `action labels`, `aero gate`, `gear bridge`, `restricted Redux runtime`, `Redux runtime left untouched`, et toute ligne d'erreur ou d'avertissement du mod. Dire aussi, par pièce testée : bouge / ne bouge pas.
+Les lignes `registered ECS type`, `new node`, `diag:`, `mu:`, la ligne `step start`, toutes les lignes `mod <nom>`, toutes les lignes `not bound`, les lignes `data #`, `throttle from`, `heat from`, `shader '…'`, `action labels`, `aero gate`, `gear bridge`, `restricted Redux runtime`, `Redux runtime left untouched`, `follows Redux`, `follower`, `render:`, `icons:`, `placed after`, et toute ligne d'erreur ou d'avertissement du mod. Dire aussi, par pièce testée : bouge / ne bouge pas.

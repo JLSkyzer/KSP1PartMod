@@ -74,6 +74,28 @@ namespace KSP1PartMod.Tests.Animation.Settings
             Assert.AreEqual((false, false, true), (s.Enabled, s.FixMuReader, s.OwnFirstDeployable));
         }
 
+        [Test] public void Settings_NewSwitches_DefaultTrueAndRead()
+        {
+            var d = AnimationSettings.Defaults;
+            Assert.AreEqual((true, true, true), (d.FollowReduxDeployables, d.HideMaterialLessRenderers, d.FixPartIcons));
+            var s = AnimationSettings.Parse(
+                "{\"follow_redux_deployables\": false, \"hide_material_less_renderers\": false, \"fix_part_icons\": false}", out var e);
+            Assert.IsNull(e);
+            Assert.AreEqual((false, false, false), (s.FollowReduxDeployables, s.HideMaterialLessRenderers, s.FixPartIcons));
+            Assert.IsTrue(s.Enabled);
+        }
+
+        [Test] public void Settings_ShippedFile_HasNewSwitchesOn()
+        {
+            var s = AnimationSettings.Parse(File.ReadAllText(ShippedPath), out var e);
+            Assert.IsNull(e);
+            Assert.AreEqual((true, true, true), (s.FollowReduxDeployables, s.HideMaterialLessRenderers, s.FixPartIcons));
+            var text = File.ReadAllText(ShippedPath);
+            StringAssert.Contains("\"follow_redux_deployables\"", text);
+            StringAssert.Contains("\"hide_material_less_renderers\"", text);
+            StringAssert.Contains("\"fix_part_icons\"", text);
+        }
+
         [Test] public void Settings_Diagnostics_IsRead()
         {
             var s = AnimationSettings.Parse("{\"diagnostics\": false}", out var e);

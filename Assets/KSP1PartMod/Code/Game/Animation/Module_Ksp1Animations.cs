@@ -268,6 +268,23 @@ namespace KSP1PartMod.Game.Animation
                     }
                     Log($"{_name} gear bridge drives {bridge}");
                     break;
+                case EntryKind.ReduxFollower:
+                {
+                    if (!ReduxFollowerBinder.TryDeployable(this, def, out var state, out e.ReadDeploy, out var module, out note)) return null;
+                    e.States = new[] { state };
+                    e.Machine = e.Follower = new ReduxFollower(def, state.length);
+                    Log($"{_name} follows Redux deployable '{def.Clip}' ({module})");
+                    break;
+                }
+                case EntryKind.ChuteFollower:
+                {
+                    if (!ReduxFollowerBinder.TryChute(this, def, out var semi, out var full, out e.ReadChute, out note)) return null;
+                    e.States = new[] { semi };
+                    e.ActiveStates = new[] { full };
+                    e.Machine = e.Chute = new ChuteFollower(semi.length, full.length, def.SpeedFactorIn, def.SpeedFactorOut);
+                    Log($"{_name} follows Redux parachute '{def.Clip}'/'{def.SecondClip}' (Module_Parachute)");
+                    break;
+                }
                 default:
                     note = "unknown kind";
                     return null;
@@ -309,12 +326,14 @@ namespace KSP1PartMod.Game.Animation
         {
             {
                 var index = e.Def.ControllerModuleIndex;
-                var ours = _entries.FirstOrDefault(o => o.Def.ModuleIndex == index && (o.Toggle != null || o.Deploy != null));
+                var ours = _entries.FirstOrDefault(o => o.Def.ModuleIndex == index && (o.Toggle != null || o.Deploy != null || o.Follower != null));
                 if (ours != null)
                 {
                     var toggle = ours.Toggle;
                     var deploy = ours.Deploy;
-                    e.Controller = () => toggle != null ? toggle.Pose.NormalizedTime : deploy.Pose.NormalizedTime;
+                    var follower = ours.Follower;
+                    e.Controller = () => toggle != null ? toggle.Pose.NormalizedTime
+                        : deploy != null ? deploy.Pose.NormalizedTime : follower.Pose.NormalizedTime;
                     e.ControllerName = "our " + ours.Def.Key;
                 }
                 else if (GameInputs.TryReduxDeployable(this, out var scalar, out _, out _, out var field))
@@ -492,6 +511,24 @@ namespace KSP1PartMod.Game.Animation
                         Apply(e.States, e.Group.DeployPose, e.Def.Layer, ref e.StatesOn);
                         Apply(e.ActiveStates, e.Group.ActivePose, ActiveLayer, ref e.ActiveOn);
                         break;
+                    case EntryKind.ReduxFollower:
+                    {
+                        var state = e.ReadDeploy();
+                        if (e.Follower.Tick(dt, state, inEditor) && e.Follower.Following != null && e.SeenState)
+                            Log($"{_name} follower '{e.Def.Clip}' -> {(e.Follower.Following.Value ? "extend" : "retract")} (Redux {state})");
+                        e.SeenState = true;
+                        Apply(e.States, e.Follower.Pose, e.Def.Layer, ref e.StatesOn);
+                        break;
+                    }
+                    case EntryKind.ChuteFollower:
+                    {
+                        var state = e.ReadChute();
+                        if (e.Chute.Tick(dt, state) && e.SeenState) Log($"{_name} parachute follower -> {state}");
+                        e.SeenState = true;
+                        Apply(e.States, e.Chute.SemiPose, e.Def.Layer, ref e.StatesOn);
+                        Apply(e.ActiveStates, e.Chute.FullPose, e.Def.Layer, ref e.ActiveOn);
+                        break;
+                    }
                     case EntryKind.AeroGate:
                     {
                         var scalar = e.Controller();
@@ -811,6 +848,12 @@ namespace KSP1PartMod.Game.Animation
             public ColorRamp Color;
             public GroupMachine Group;
             public AeroGate Aero;
+            public ReduxFollower Follower;
+            public ChuteFollower Chute;
+            public Func<ReduxDeployState> ReadDeploy;
+            public Func<ReduxChuteState> ReadChute;
+            /// <summary>A follower has seen Redux's first state (shown at once, not logged).</summary>
+            public bool SeenState;
             public AnimationState[] States = NoStates;
             public AnimationState[] ActiveStates = NoStates;
             public bool StatesOn, ActiveOn;

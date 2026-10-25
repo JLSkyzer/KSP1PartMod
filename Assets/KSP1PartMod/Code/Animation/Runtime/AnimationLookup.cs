@@ -91,6 +91,24 @@ namespace KSP1PartMod.Animation.Runtime
             return r;
         }
 
+        /// <summary>For a Redux follower: the holder Redux bound to its Mecanim copy (disabled, with an Animator), the one
+        /// on <paramref name="objectName"/> first, else the first such holder; -1 when the clip is only on legacy holders
+        /// (Redux's fallback runtime plays it).</summary>
+        public static int SelectReduxBound(IReadOnlyList<AnimationCandidate> candidates, string objectName)
+        {
+            if (candidates == null) return -1;
+            var name = objectName?.Trim();
+            var first = -1;
+            for (var i = 0; i < candidates.Count; i++)
+            {
+                var c = candidates[i];
+                if (!c.HasClip || !c.ReduxBound) continue;
+                if (!string.IsNullOrEmpty(name) && string.Equals(c.ObjectName, name, StringComparison.Ordinal)) return i;
+                if (first < 0) first = i;
+            }
+            return first;
+        }
+
         /// <summary>Why nothing was picked, or what is worth knowing about what was; null when there is nothing to
         /// say.</summary>
         public static string Note(LookupResult r, string clip, string objectName)

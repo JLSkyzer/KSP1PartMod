@@ -28,13 +28,67 @@ namespace KSP1PartMod.Game
         // Bumped at each unload, so a step still waiting for the previous campaign stops.
         private static int _generation;
 
+        public const string EarlyStepName = "Place KSP1 parts in the tech tree (before the VAB)";
+        /// <summary><c>KSP.Game.Load.LoadScienceManager</c>: builds the <c>ScienceManager</c> and its tech tree store.</summary>
+        public const string ScienceStep = "Loading Science Data";
+
+        private static readonly PlacementGate Gate = new PlacementGate();
+
+        /// <summary>Once per session (a second call logs and does nothing). Two steps: an early one right after the
+        /// game's "Loading Science Data" (Redux's KSP1 import has run, the tech tree store is new, and the VAB has not
+        /// yet built its part list: <c>ObjectAssemblyPartTracker.Initialize</c> filters parts through
+        /// <c>TechNodeDataStore.PartIDLookup</c> once, at construction), and the <c>Loaded</c> action, which only places
+        /// when the early step could not. In the 2026-10-25 log the <c>Loaded</c> action ran after the VAB was built,
+        /// so a game started in the VAB showed no KSP1 part and no KSP1 category until the VAB was entered again.</summary>
         public static void Register()
         {
+            if (!Gate.TryRegister())
+            {
+                KSP1PartModPlugin.Log.LogWarning("[KSP1PartMod] placement steps already registered, second registration ignored");
+                return;
+            }
             SaveLoad.AddCampaignLoadAction(KSP1PartModPlugin.ModId, StepName, CampaignPhase.Loaded, OnCampaignLoad);
+            try
+            {
+                SaveLoad.AddStepAfter(KSP1PartModPlugin.ModId, EarlyStepName, StockFlow.CampaignLoad, ScienceStep, OnEarlyStep);
+            }
+            catch (Exception e)
+            {
+                KSP1PartModPlugin.Log.LogError("[KSP1PartMod] early placement step not registered, placing at campaign loaded only: " + e);
+            }
+        }
+
+        /// <summary>Synchronous: places when the import and the tree are ready, else leaves it to the Loaded action.
+        /// Always resolves.</summary>
+        private static void OnEarlyStep(Action resolve, Action<string> reject)
+        {
+            try
+            {
+                Gate.Reset();
+                if (Ready(out var imported, out var treeReady))
+                {
+                    Place(TreeStore());
+                    Gate.PlacedEarly();
+                    KSP1PartModPlugin.Log.LogInfo($"[KSP1PartMod] placed after '{ScienceStep}', before the VAB builds its part list");
+                }
+                else
+                    KSP1PartModPlugin.Log.LogInfo(
+                        $"[KSP1PartMod] not ready after '{ScienceStep}' (import complete={Bool(imported)}, tree ready={Bool(treeReady)}), " +
+                        "placing at campaign loaded");
+            }
+            catch (Exception e)
+            {
+                KSP1PartModPlugin.Log.LogError("[KSP1PartMod] early placement failed, retried at campaign loaded: " + e);
+            }
+            finally
+            {
+                resolve();
+            }
         }
 
         private static void OnCampaignLoad(Action done)
         {
+            var finish = new OnceAction(done);
             try
             {
                 // SaveLoad.UnloadCampaign clears its list after running it (IL, 2026-10-25): register again at each load.
@@ -42,16 +96,24 @@ namespace KSP1PartMod.Game
                 // replaces the campaign, and when a load fails; the IL reading only found the failed-load caller. To
                 // settle in game. Correct either way: Place reverts first and the game rebuilds the store at each load.
                 SaveLoad.OnCampaignUnload(OnCampaignUnload);
-                if (Runner().StartCoroutine(WaitThenPlace(done, _generation)) == null)
+                if (Gate.ConsumeEarly())
+                {
+                    KSP1PartModPlugin.Log.LogInfo("[KSP1PartMod] already placed before the VAB, nothing to do at campaign loaded");
+                    finish.Invoke();
+                    return;
+                }
+                // A coroutine runs up to its first yield inside StartCoroutine, which returns null when it ended there:
+                // the placement was ready at once and already called done().
+                if (Runner().StartCoroutine(WaitThenPlace(finish.Invoke, _generation)) == null && !finish.Called)
                 {
                     KSP1PartModPlugin.Log.LogError("[KSP1PartMod] could not start the placement coroutine");
-                    done();
+                    finish.Invoke();
                 }
             }
             catch (Exception e)
             {
                 KSP1PartModPlugin.Log.LogError("[KSP1PartMod] placement failed: " + e);
-                done();
+                finish.Invoke();
             }
         }
 
@@ -70,6 +132,7 @@ namespace KSP1PartMod.Game
         private static void OnCampaignUnload()
         {
             _generation++;
+            Gate.Reset();
             try
             {
                 // The game builds a new TechNodeDataStore at each load, so this store may already be discarded.

@@ -3,8 +3,10 @@ namespace KSP1PartMod.Animation.Cfg
     /// <summary>What one entry of ours does. Toggle: ModuleAnimateGeneric. Deploy: the ModuleDeployablePart family.
     /// Gear: ModuleWheelDeployment, ModuleLandingLeg. Throttle: FXModuleAnimateThrottle. Heat: ModuleAnimateHeat.
     /// Color: ModuleColorChanger. Group: ModuleAnimationGroup. AeroGate: KRE ModuleDeployableAero. GearBridge: a
-    /// Gear action group for a gear clip that Redux's deployable module plays.</summary>
-    public enum EntryKind { Toggle, Deploy, Gear, Throttle, Heat, Color, Group, AeroGate, GearBridge }
+    /// Gear action group for a gear clip that Redux's deployable module plays. ReduxFollower: Redux's single deployable
+    /// source, whose Mecanim copy does not move; we draw its legacy clip from Redux's state. ChuteFollower: the same for
+    /// ModuleParachute (Clip = semi, SecondClip = full, SpeedFactorIn / Out = semi / full deployment speed).</summary>
+    public enum EntryKind { Toggle, Deploy, Gear, Throttle, Heat, Color, Group, AeroGate, GearBridge, ReduxFollower, ChuteFollower }
 
     /// <summary>One KSP1 animation module we drive, read from its cfg. Plain public fields so that Newtonsoft and
     /// <c>IOProvider</c> serialize it into the part definition.</summary>

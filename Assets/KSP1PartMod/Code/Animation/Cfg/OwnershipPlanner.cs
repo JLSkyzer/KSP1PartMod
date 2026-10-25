@@ -57,10 +57,19 @@ namespace KSP1PartMod.Animation.Cfg
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts);
 
+        /// <param name="followRedux">Settings <c>follow_redux_deployables</c>: a part with a single deployable source
+        /// (Redux binds it to its Mecanim copy, which does not move) gets a <see cref="EntryKind.ReduxFollower"/> on
+        /// that clip, and a part with a ModuleParachute a <see cref="EntryKind.ChuteFollower"/>. Redux keeps the
+        /// state; we only draw it. Two or more sources go to Redux's legacy runtime, which moves: left alone.</param>
+        public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
+            ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux) =>
+            Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux);
+
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
         /// table.</summary>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
-            ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts)
+            ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
+            bool followRedux = false)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -89,10 +98,18 @@ namespace KSP1PartMod.Animation.Cfg
             if (reduxSource != null && !remove) reduxClips.Add(reduxSource.Clip);
 
             var entries = new List<AnimEntryDef>();
+            var chuteSeen = false;
             for (var i = 0; i < modules.Count; i++)
             {
                 var module = modules[i];
                 var name = NameOf(module);
+                if (followRedux && !chuteSeen && "ModuleParachute".Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Redux binds the first ModuleParachute (Ksp1ParachuteModuleBuilder, FirstOrDefault) to its Mecanim copy.
+                    chuteSeen = true;
+                    Add(entries, EntryParser.ChuteFollower(module, i));
+                    continue;
+                }
                 var kind = EntryParser.Kind(name);
                 if (kind == null) continue;
                 var isSource = sources.Any(s => s.Index == i);
@@ -100,6 +117,8 @@ namespace KSP1PartMod.Animation.Cfg
                 {
                     // (4) Redux keeps it; a gear gets our Gear action group on top.
                     if (kind == EntryKind.Gear) Add(entries, Bridge(EntryParser.Parse(module, i, 0)));
+                    // One source: Redux's Mecanim copy (Ksp1GenericDeployableAnimatorBuilder). Several: its legacy runtime.
+                    if (followRedux && sources.Count == 1) Add(entries, EntryParser.ReduxFollower(module, i));
                     continue;
                 }
                 if (!isSource && SourceModules.Any(s => s.Equals(name, StringComparison.OrdinalIgnoreCase)))

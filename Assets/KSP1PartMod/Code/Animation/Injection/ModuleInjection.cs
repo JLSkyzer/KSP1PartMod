@@ -23,6 +23,15 @@ namespace KSP1PartMod.Animation.Injection
             return plan?.Entries != null && plan.Entries.Count > 0 ? InjectionAction.Add : InjectionAction.None;
         }
 
+        /// <summary>One line per KSP1 mod folder: the deployables and parachutes whose Redux clip we draw.</summary>
+        public static string FollowerLine(string modName, IEnumerable<PartAnimationPlan> plans)
+        {
+            var entries = (plans ?? Enumerable.Empty<PartAnimationPlan>()).Where(p => p?.Entries != null)
+                .SelectMany(p => p.Entries).Where(e => e != null).ToList();
+            return $"[KSP1PartMod] anim: mod {modName ?? "?"}: {entries.Count(e => e.Kind == EntryKind.ReduxFollower)} Redux deployable(s) followed, " +
+                   $"{entries.Count(e => e.Kind == EntryKind.ChuteFollower)} Redux parachute(s) followed";
+        }
+
         /// <summary>One line per KSP1 mod folder: its parts, our entries by kind (in <see cref="EntryKind"/> order),
         /// the parts where Redux keeps a clip, and the parts with neither.</summary>
         public static string SummaryLine(string modName, IEnumerable<PartAnimationPlan> plans)

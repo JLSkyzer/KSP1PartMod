@@ -95,3 +95,5 @@ The KSP1PartMod mod (`JLSkyzer/KSP1PartMod`) does exactly this with a Harmony tr
 - **Turning it off:** set `"fix_mu_reader": false` in `mods/KSP1PartMod/animations.json`.
 
 The patch will be removed once Redux reads these files itself.
+
+> See also `2026-10-25-ksp1-mecanim-copy-icons-reentry.md` (draft, not sent): single deployables and parachutes that do not move, black KSP1 icons, reentry hull without material.

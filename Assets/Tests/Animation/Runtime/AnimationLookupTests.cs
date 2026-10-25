@@ -18,6 +18,20 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         public void Strategy_PerKind(EntryKind kind, LookupStrategy expected) =>
             Assert.AreEqual(expected, AnimationLookup.For(kind));
 
+        [Test] public void ReduxBound_PrefersNamedHolder() =>
+            Assert.AreEqual(2, AnimationLookup.SelectReduxBound(new[] { C("a", true, true), C("b", true), C("leg", true, true) }, "leg"));
+
+        [Test] public void ReduxBound_FirstBoundWithoutName() =>
+            Assert.AreEqual(1, AnimationLookup.SelectReduxBound(new[] { C("a", true), C("b", true, true), C("c", true, true) }, null));
+
+        [Test] public void ReduxBound_NameMissing_FallsBackToFirstBound() =>
+            Assert.AreEqual(0, AnimationLookup.SelectReduxBound(new[] { C("a", true, true) }, "zzz"));
+
+        [Test] public void ReduxBound_OnlyLegacyHolders_None() =>
+            Assert.AreEqual(-1, AnimationLookup.SelectReduxBound(new[] { C("a", true), C("b", false, true) }, null));
+
+        [Test] public void ReduxBound_Null_None() => Assert.AreEqual(-1, AnimationLookup.SelectReduxBound(null, null));
+
         [Test]
         public void FirstMatch_TakesTheFirstHolder()
         {

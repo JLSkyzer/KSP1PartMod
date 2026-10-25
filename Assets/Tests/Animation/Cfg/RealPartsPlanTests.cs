@@ -91,6 +91,75 @@ namespace KSP1PartMod.Tests.Animation.Cfg
 
         [Test] public void Plan_RealParts_CountsPerKind() => TestContext.WriteLine(CountsPerKindAndMod());
 
+        private static PartAnimationPlan FollowPlanOf(RealPart p) =>
+            OwnershipPlanner.Plan(p.Modules, HasNativeSolar(p), new HashSet<string>(), false, true);
+
+        /// <summary>Redux 26w42c path of a part's deployable sources (<c>Ksp1DeployableModuleBuilder.ConfigurePrefab</c>):
+        /// one source goes to the Mecanim copy (<c>Ksp1GenericDeployableAnimatorBuilder</c>, does not move), two or more
+        /// to the legacy fallback runtime (<c>Ksp1DeployableAnimationRuntime</c>, moves).</summary>
+        private static string ReduxPath(RealPart p)
+        {
+            var n = ReduxSourceNames(p).Count();
+            return n == 0 ? "none" : n == 1 ? "Animator copy" : "legacy runtime";
+        }
+
+        [Test] public void Follow_EverySingleSourcePartHasOneFollower_AllRealParts()
+        {
+            var bad = AllParts().Where(p => (ReduxSourceNames(p).Count() == 1) !=
+                                            (FollowPlanOf(p).Entries.Count(e => e.Kind == EntryKind.ReduxFollower) == 1))
+                .Select(p => p.ToString()).ToList();
+            CollectionAssert.IsEmpty(bad);
+        }
+
+        [Test] public void Follow_FollowerClipIsReduxClip_AllRealParts()
+        {
+            var bad = AllParts().Where(p => FollowPlanOf(p).Entries.Where(e => e.Kind == EntryKind.ReduxFollower)
+                    .Any(e => !FollowPlanOf(p).ReduxClips.Contains(e.Clip, StringComparer.OrdinalIgnoreCase)))
+                .Select(p => p.ToString()).ToList();
+            CollectionAssert.IsEmpty(bad);
+        }
+
+        [Test] public void Follow_EveryParachutePartHasOneChuteFollower_AllRealParts()
+        {
+            var bad = AllParts().Where(p => p.Modules.Any(m => "ModuleParachute".Equals(m.GetValue("name"), StringComparison.OrdinalIgnoreCase))
+                                            != (FollowPlanOf(p).Entries.Count(e => e.Kind == EntryKind.ChuteFollower) == 1))
+                .Select(p => p.ToString()).ToList();
+            CollectionAssert.IsEmpty(bad);
+        }
+
+        [Test] public void Follow_EntryKeysUniquePerPart_AllRealParts()
+        {
+            var bad = AllParts().Where(p => FollowPlanOf(p).Entries.GroupBy(e => e.Key).Any(g => g.Count() > 1))
+                .Select(p => p.ToString()).ToList();
+            CollectionAssert.IsEmpty(bad);
+        }
+
+        /// <summary>The census of the fix: parts getting a follower, per mod and per KSP1 module; and the parts whose
+        /// name or modules suggest a wing or aero surface, with the path Redux takes.</summary>
+        [Test] public void Follow_Census_AllRealParts()
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("| Mod | Parts | Followed (Animator copy) | Legacy runtime (multi-source) | Parachutes followed | By KSP1 module |");
+            sb.AppendLine("|---|---|---|---|---|---|");
+            foreach (var mod in AllParts().GroupBy(p => p.Mod, StringComparer.OrdinalIgnoreCase).OrderBy(g => g.Key))
+            {
+                var followed = mod.Select(p => (p, f: FollowPlanOf(p).Entries.FirstOrDefault(e => e.Kind == EntryKind.ReduxFollower)))
+                    .Where(x => x.f != null).ToList();
+                var byModule = followed.GroupBy(x => x.p.Modules[x.f.ModuleIndex].GetValue("name")?.Trim() ?? "?", StringComparer.OrdinalIgnoreCase)
+                    .OrderByDescending(g => g.Count()).Select(g => $"{g.Key} {g.Count()}");
+                var legacy = mod.Count(p => ReduxPath(p) == "legacy runtime");
+                var chutes = mod.Count(p => FollowPlanOf(p).Entries.Any(e => e.Kind == EntryKind.ChuteFollower));
+                sb.AppendLine($"| {mod.Key} | {mod.Count()} | {followed.Count} | {legacy} | {chutes} | {string.Join(", ", byModule)} |");
+            }
+            sb.AppendLine("Aero / wing candidates (ModuleDeployableAero, ModuleControlSurface or ModuleAeroSurface with a deployable source):");
+            foreach (var p in AllParts().Where(p => p.Modules.Any(m =>
+                         new[] { "ModuleDeployableAero", "ModuleControlSurface", "ModuleAeroSurface" }.Contains(m.GetValue("name")?.Trim(), StringComparer.OrdinalIgnoreCase))
+                     && ReduxSourceNames(p).Any()))
+                sb.AppendLine($"  {p.Mod}/{p.Name}: {ReduxSourceNames(p).Count()} source(s) [{string.Join(", ", ReduxSourceNames(p))}] -> {ReduxPath(p)}");
+            TestContext.WriteLine(sb.ToString());
+            Assert.Pass(sb.ToString());
+        }
+
         private static string CountsPerKindAndMod()
         {
             var kinds = (EntryKind[])Enum.GetValues(typeof(EntryKind));

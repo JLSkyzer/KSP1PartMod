@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2 - 2026-10-25
+
+Fixes from the second in-game test.
+
+- **Redux deployables that did not move now move** (KRE landing legs, grid fins and booster wing, and every part with a single `ModuleAnimateGeneric`, `ModuleDeployableSolarPanel`, `ModuleWheelDeployment` or `ModuleLandingLeg`, plus every `ModuleParachute`). Redux binds those clips to a Mecanim copy that moves nothing; the new "Redux follower" entries draw the original clip from Redux's own state (`Data_Deployable` / `Data_Parachute`) at KSP1 speed. Redux keeps its PAM toggle, state, action groups and shielding. Parts with several deployable sources go through Redux's legacy runtime, which works, and are left alone. Switch: `"follow_redux_deployables"` (default true). Log: `anim: <part> follows Redux deployable '<clip>' (<module>)` and one `anim: mod <name>: <n> Redux deployable(s) followed, <m> Redux parachute(s) followed` line per mod.
+- **Renderers without any material** on KSP1 parts (drawn with Unity's error colour) are disabled on every part instance, in the VAB and in flight, whether or not the part carries the animation module. Redux's generated reentry hull is never disabled (it gets its material when the reentry effect turns it on); an active hull without a material is switched off instead. Switch: `"hide_material_less_renderers"` (default true). Log: `render: <part> hid <n> renderer(s) without material (<paths>)`.
+- **Black KSP1 part icons**: icons are rendered with the same shader swap as Redux's KSP2 parts (`KSP2/Parts/Paintable` → `KSP2/Scenery/Standard (Opaque)`). Switch: `"fix_part_icons"` (default true). Log: `icons: rendered <n> KSP1 icon(s) with hotswapPartShaders=true …`. Icons already rendered in a session stay as they were until the game restarts.
+- **KSP1 parts and their VAB categories missing when the game starts in the VAB**: the tech-tree placement now runs right after the game's "Loading Science Data" step, before the VAB builds its part list; the campaign-loaded action only places when that early step could not. Log: `placed after 'Loading Science Data', before the VAB builds its part list`.
+- The tech-tree placement no longer reports "completed" twice nor "could not start the placement coroutine" when it was ready at once, and its steps are registered once per session.
+- 518 EditMode tests.
+
 ## 0.2.1 - 2026-10-25
 
 Fixes from the first in-game test.

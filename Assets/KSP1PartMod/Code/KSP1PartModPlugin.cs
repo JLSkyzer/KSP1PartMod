@@ -17,7 +17,7 @@ namespace KSP1PartMod
     public class KSP1PartModPlugin : KerbalMod
     {
         public const string ModId = "KSP1PartMod";
-        public const string Version = "0.2.1";
+        public const string Version = "0.2.2";
         public const string AnimationSettingsFile = "animations.json";
 
         private static string _modFolder;
@@ -38,6 +38,14 @@ namespace KSP1PartMod
             TechTreeLoadStep.Register();
             Animations = ReadAnimationSettings();
             ApplyMuReaderFix(Animations);
+            try
+            {
+                RenderFixes.Apply(new Harmony(RenderFixes.HarmonyId), Animations.HideMaterialLessRenderers, Animations.FixPartIcons);
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] render: fixes not applied: " + e);
+            }
             if (Animations.Diagnostics) MaterialDiagnostics.Apply(new Harmony(MaterialDiagnostics.HarmonyId));
             else Log.LogInfo("[KSP1PartMod] diag: material dump disabled by " + AnimationSettingsFile);
             try

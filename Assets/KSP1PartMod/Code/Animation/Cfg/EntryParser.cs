@@ -38,6 +38,39 @@ namespace KSP1PartMod.Animation.Cfg
             return e;
         }
 
+        /// <summary>A follower of Redux's deployable source <paramref name="module"/>: the source's own entry (its KSP1
+        /// speeds, direction and layer), re-kinded. Null when the module has no clip.</summary>
+        internal static AnimEntryDef ReduxFollower(IKsp1Node module, int moduleIndex)
+        {
+            var e = Parse(module, moduleIndex, 0);
+            if (e == null || string.IsNullOrEmpty(e.Clip)) return null;
+            e.Kind = EntryKind.ReduxFollower;
+            e.WrapMode = ClampForever;
+            e.ActionGroup = null;
+            SetKey(e, 0);
+            return e;
+        }
+
+        /// <summary>KSP1 ModuleParachute fallbacks: clip names as Redux reads them
+        /// (<c>Ksp1ParachuteModuleBuilder.ConfigurePrefab</c>); speeds assumed from KSP1 1.12 (semi 0.5 is stock,
+        /// research note <c>stock/NOTES.md</c> §9; full 0.16667 is the upper end of the stock cfg values).</summary>
+        internal static AnimEntryDef ChuteFollower(IKsp1Node m, int moduleIndex)
+        {
+            if (m == null) return null;
+            var e = new AnimEntryDef
+            {
+                Kind = EntryKind.ChuteFollower,
+                ModuleIndex = moduleIndex,
+                Clip = Text(m, "semiDeployedAnimation") ?? "semiDeploy",
+                SecondClip = Text(m, "fullyDeployedAnimation") ?? "fullyDeploy",
+                SpeedFactorIn = Float(m, "semiDeploymentSpeed", 0.5f),
+                SpeedFactorOut = Float(m, "deploymentSpeed", 0.16667f),
+                WrapMode = ClampForever,
+            };
+            SetKey(e, 0);
+            return e;
+        }
+
         /// <summary>The entry kind a KSP1 module name gives (never GearBridge), or null.</summary>
         internal static EntryKind? Kind(string moduleName)
         {
