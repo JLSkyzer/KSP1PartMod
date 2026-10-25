@@ -17,7 +17,9 @@ namespace KSP1PartMod.Game
         /// <summary>Cost, icon, category, tier and version are taken from anchor.</summary>
         void AddNode(string id, string anchor, (float x, float y) position, string[] requires, string nameKey, string descriptionKey);
         void RemoveNode(string id);
-        void AddPart(string nodeId, string part);
+        /// <summary>True only if the part was actually added to the node: false when it is already there or when the
+        /// game already unlocks it with another node (that mapping is never overwritten).</summary>
+        bool AddPart(string nodeId, string part);
         void RemovePart(string nodeId, string part);
     }
 
@@ -34,8 +36,14 @@ namespace KSP1PartMod.Game
 
         public TechTreeWriter(ITechTreeStore store) => _store = store ?? throw new ArgumentNullException(nameof(store));
 
-        /// <summary>What the last Apply could not write (a missing anchor or node), as log lines.</summary>
+        /// <summary>What the last Apply could not write as planned (a missing anchor, node or requirement), as log lines.</summary>
         public IReadOnlyList<string> Problems => _problems;
+
+        /// <summary>The nodes the last Apply created, in order.</summary>
+        public IReadOnlyList<string> AddedNodes => _addedNodes;
+
+        /// <summary>The parts the last Apply actually added, in order.</summary>
+        public IReadOnlyList<(string node, string part)> AddedParts => _addedParts;
 
         /// <summary>Reverts the previous Apply, then creates the plan's new nodes and adds its parts. A new node
         /// already in the store is left as it is (neither created nor removed later); its parts are still added.</summary>
@@ -54,9 +62,17 @@ namespace KSP1PartMod.Game
                     continue;
                 }
                 var position = NodeLayout.PlaceNewNode(_store.Position(spec.Anchor), (spec.OffsetX, spec.OffsetY), taken);
-                // A required node may have been skipped above: require the anchor instead.
-                var requires = spec.Requires.Select(r => _store.HasNode(r) ? r : spec.Anchor).Distinct().ToArray();
-                _store.AddNode(spec.NodeId, spec.Anchor, position, requires,
+                // A required node may be missing (a stock id gone, or a new node skipped above): require the anchor instead.
+                var requires = new List<string>();
+                foreach (var r in spec.Requires)
+                {
+                    if (!_store.HasNode(r))
+                        _problems.Add($"[KSP1PartMod] node {spec.NodeId}: requirement {r ?? "(none)"} is not in the tree, " +
+                                      $"requires its anchor {spec.Anchor} instead");
+                    var required = _store.HasNode(r) ? r : spec.Anchor;
+                    if (!requires.Contains(required)) requires.Add(required);
+                }
+                _store.AddNode(spec.NodeId, spec.Anchor, position, requires.ToArray(),
                     NameKeyPrefix + spec.NodeId, DescriptionKeyPrefix + spec.NodeId);
                 _addedNodes.Add(spec.NodeId);
                 taken.Add(position);
@@ -72,8 +88,8 @@ namespace KSP1PartMod.Game
                 }
                 foreach (var part in pair.Value)
                 {
-                    _store.AddPart(pair.Key, part);
-                    _addedParts.Add((pair.Key, part));
+                    // Only real additions are recorded, so Revert never removes an entry it did not add.
+                    if (_store.AddPart(pair.Key, part)) _addedParts.Add((pair.Key, part));
                 }
             }
         }
@@ -154,18 +170,19 @@ namespace KSP1PartMod.Game
             _nodes.Remove(id);
         }
 
-        public void AddPart(string nodeId, string part)
+        public bool AddPart(string nodeId, string part)
         {
+            // The plan skips parts the game already unlocks; this is the safety net: never steal a part from its node.
+            if (_partLookup.TryGetValue(part, out var holder) && holder != nodeId) return false;
             var node = _nodes[nodeId];
             var parts = node.UnlockedPartsIDs ?? Array.Empty<string>();
-            if (!parts.Contains(part))
-            {
-                var longer = new string[parts.Length + 1];
-                parts.CopyTo(longer, 0);
-                longer[parts.Length] = part;
-                node.UnlockedPartsIDs = longer;
-            }
+            if (parts.Contains(part)) return false; // already there: not ours, left untouched
+            var longer = new string[parts.Length + 1];
+            parts.CopyTo(longer, 0);
+            longer[parts.Length] = part;
+            node.UnlockedPartsIDs = longer;
             _partLookup[part] = nodeId;
+            return true;
         }
 
         public void RemovePart(string nodeId, string part)

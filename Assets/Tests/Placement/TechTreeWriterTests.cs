@@ -22,8 +22,21 @@ namespace KSP1PartMod.Tests.Placement
             public void AddNode(string id, string anchor, (float x, float y) position, string[] requires, string nameKey, string descriptionKey)
             { Nodes.Add(id, position); Added[id] = (anchor, requires, nameKey, descriptionKey); }
             public void RemoveNode(string id) { Nodes.Remove(id); Added.Remove(id); }
-            public void AddPart(string nodeId, string part) => Parts.Add((nodeId, part));
-            public void RemovePart(string nodeId, string part) => Parts.Remove((nodeId, part));
+            /// <summary>Part -> node, as the game's PartIDLookup.</summary>
+            public readonly Dictionary<string, string> Lookup = new Dictionary<string, string>();
+            public bool AddPart(string nodeId, string part)
+            {
+                if (Parts.Contains((nodeId, part))) return false;
+                if (Lookup.TryGetValue(part, out var holder) && holder != nodeId) return false;
+                Parts.Add((nodeId, part));
+                Lookup[part] = nodeId;
+                return true;
+            }
+            public void RemovePart(string nodeId, string part)
+            {
+                Parts.Remove((nodeId, part));
+                if (Lookup.TryGetValue(part, out var holder) && holder == nodeId) Lookup.Remove(part);
+            }
         }
 
         private FakeStore fake;
@@ -80,6 +93,44 @@ namespace KSP1PartMod.Tests.Placement
             Assert.IsFalse(fake.Parts.Any(p => p.Item1 == "tNode_ksp1_robotics_01" || p.Item1 == "tNode_1v_start"));
             CollectionAssert.Contains(fake.Parts, ("tNode_1v_rockets_01", "q"));
             Assert.IsTrue(w.Problems.Any(l => l.StartsWith("[KSP1PartMod]") && l.Contains("tNode_ksp1_robotics_01")));
+        }
+        [Test] public void Apply_PartAlreadyInNode_RevertKeepsIt()
+        {
+            fake.Parts.Add(("tNode_1v_start", "s")); // in the node's array, not in the plan's lookup
+            w.Apply(Plan);
+            Assert.AreEqual(1, fake.Parts.Count(x => x == ("tNode_1v_start", "s")));
+            w.Revert();
+            CollectionAssert.Contains(fake.Parts, ("tNode_1v_start", "s"));
+        }
+        [Test] public void Apply_PartMappedElsewhere_IsNotStolen()
+        {
+            fake.Lookup["s"] = "tNode_x"; // the game unlocks s elsewhere, the plan did not know
+            w.Apply(Plan);
+            CollectionAssert.DoesNotContain(fake.Parts, ("tNode_1v_start", "s"));
+            w.Revert();
+            Assert.AreEqual("tNode_x", fake.Lookup["s"]);
+            CollectionAssert.DoesNotContain(fake.Parts, ("tNode_1v_start", "s"));
+        }
+        [Test] public void Apply_MissingRequirement_IsReported()
+        {
+            // robotics_02 requires robotics_01, which is skipped because its anchor is missing.
+            fake.Nodes.Remove("tNode_1v_start");
+            w.Apply(Build(new[] { Part("r2", "modB", "advRobotics") , Part("r", "modB", "robotics") }));
+            Assert.IsTrue(fake.HasNode("tNode_ksp1_robotics_02"));
+            CollectionAssert.AreEqual(new[] { "tNode_2v_rockets_01" }, fake.Added["tNode_ksp1_robotics_02"].requires);
+            Assert.IsTrue(w.Problems.Any(l => l.StartsWith("[KSP1PartMod]") && l.Contains("tNode_ksp1_robotics_02")
+                                              && l.Contains("requirement tNode_ksp1_robotics_01")), string.Join(" | ", w.Problems));
+        }
+        [Test] public void Apply_MissingStockRequirement_IsReported()
+        {
+            var map = TechMapping.Parse(@"{ ""ksp1_nodes"": { ""robotics"": ""new:robotics_01"" },
+                ""new_nodes"": { ""robotics_01"": { ""anchor"": ""tNode_1v_start"", ""requires"": [ ""tNode_gone"" ] } } }");
+            var tree = new HashSet<string>(Tree) { "tNode_gone" };
+            var plan = PlacementPlan.Build(new[] { Part("r", "modB", "robotics") }, new PlacementResolver(map, Overrides.Empty, tree), map, Existing);
+            w.Apply(plan);
+            CollectionAssert.AreEqual(new[] { "tNode_1v_start" }, fake.Added["tNode_ksp1_robotics_01"].requires);
+            CollectionAssert.Contains(w.Problems,
+                "[KSP1PartMod] node tNode_ksp1_robotics_01: requirement tNode_gone is not in the tree, requires its anchor tNode_1v_start instead");
         }
     }
 }
