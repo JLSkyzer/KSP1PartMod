@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using KSP.Sim.Definitions;
+using KSP1PartMod.Animation.Cfg;
 using UnityEngine;
 
 namespace KSP1PartMod.Game.Animation
@@ -15,10 +17,25 @@ namespace KSP1PartMod.Game.Animation
 
         public override Type PartComponentModuleType => typeof(PartComponentModule_Ksp1Animations);
 
+        /// <summary>Runs before <see cref="OnInitialize"/>, during part instantiation: never throws. With no data
+        /// (for example our <c>$type</c> not resolved when the definition was read), an empty data object takes its
+        /// place, so the part still loads and the module does nothing.</summary>
         protected override void AddDataModules()
         {
-            base.AddDataModules();
-            DataModules.TryAddUnique(data, out data);
+            try
+            {
+                base.AddDataModules();
+                if (data == null)
+                {
+                    KSP1PartModPlugin.Log?.LogWarning($"[KSP1PartMod] anim: {PartName()} module has no data (type not resolved?)");
+                    data = new Data_Ksp1Animations();
+                }
+                DataModules.TryAddUnique(data, out data);
+            }
+            catch (Exception e)
+            {
+                KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {PartName()} module data setup failed: {e}");
+            }
         }
 
         protected override void OnInitialize()
@@ -26,19 +43,16 @@ namespace KSP1PartMod.Game.Animation
             base.OnInitialize();
             try
             {
-                if (data == null)
-                {
-                    KSP1PartModPlugin.Log.LogWarning($"[KSP1PartMod] anim: {PartName()} module has no data");
-                    return;
-                }
+                if (data == null) return; // AddDataModules failed and said so
+                data.Entries ??= new List<AnimEntryDef>();
                 data.SetVisible(data.State, false);
-                var n = data.Entries?.Count ?? 0;
-                KSP1PartModPlugin.Log.LogInfo(
+                var n = data.Entries.Count;
+                KSP1PartModPlugin.Log?.LogInfo(
                     $"[KSP1PartMod] anim: {PartName()} module present ({PartBackingMode}) with {n} {(n == 1 ? "entry" : "entries")}");
             }
             catch (Exception e)
             {
-                KSP1PartModPlugin.Log.LogError($"[KSP1PartMod] anim: {PartName()} module init failed: {e}");
+                KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {PartName()} module init failed: {e}");
             }
         }
 

@@ -69,24 +69,25 @@ namespace KSP1PartMod.Game.Animation
             var plansByMod = new Dictionary<string, List<PartAnimationPlan>>(StringComparer.Ordinal);
             foreach (var entry in entries)
             {
+                // Set by ApplyToPart before it edits the core: if it throws after that, PartJson is still rewritten.
+                var action = InjectionAction.None;
                 try
                 {
-                    var plan = ApplyToPart(entry, ownFirstDeployable, out var action);
+                    var plan = ApplyToPart(entry, ownFirstDeployable, out action);
                     var mod = entry.ModName ?? "?";
                     if (!plansByMod.TryGetValue(mod, out var plans)) plansByMod[mod] = plans = new List<PartAnimationPlan>();
                     plans.Add(plan);
-                    if (action == InjectionAction.None)
-                    {
-                        untouched++;
-                        continue;
-                    }
-                    partJson[entry.PartName] = IOProvider.ToJson(entry.Core);
-                    if (action == InjectionAction.Add) added++;
+                    if (action == InjectionAction.None) untouched++;
+                    else if (action == InjectionAction.Add) added++;
                     else refreshed++;
                 }
                 catch (Exception e)
                 {
                     log.LogError($"[KSP1PartMod] anim: {entry?.PartName} skipped: {e}");
+                }
+                finally
+                {
+                    if (action != InjectionAction.None) RewriteJson(partJson, entry);
                 }
             }
 
@@ -95,11 +96,25 @@ namespace KSP1PartMod.Game.Animation
             log.LogInfo($"[KSP1PartMod] anim: added {added}, refreshed {refreshed}, untouched {untouched} in {clock.ElapsedMilliseconds} ms");
         }
 
+        /// <summary>Keeps <c>PartJson</c> equal to the edited core, which the simulation merges from.</summary>
+        private static void RewriteJson(Dictionary<string, string> partJson, Ksp1ImportedPartRegistry.Entry entry)
+        {
+            try
+            {
+                partJson[entry.PartName] = IOProvider.ToJson(entry.Core);
+            }
+            catch (Exception e)
+            {
+                KSP1PartModPlugin.Log.LogError($"[KSP1PartMod] anim: {entry.PartName} PartJson not rewritten: {e}");
+            }
+        }
+
         /// <summary>Plans one part and edits its definition (<c>Core.modules</c> and
         /// <c>Core.data.serializedPartModules</c> together).</summary>
         private static PartAnimationPlan ApplyToPart(Ksp1ImportedPartRegistry.Entry entry, bool ownFirstDeployable,
             out InjectionAction action)
         {
+            action = InjectionAction.None;
             var log = KSP1PartModPlugin.Log;
             var core = entry.Core;
             var modules = core.data.serializedPartModules ??= new List<SerializedPartModule>();
@@ -109,9 +124,11 @@ namespace KSP1PartMod.Game.Animation
                 StringComparer.Ordinal);
             var plan = OwnershipPlanner.Plan(Ksp1NodeAdapter.Modules(entry.PartNode), behaviours.Contains("Module_SolarPanel"),
                 behaviours, ownFirstDeployable);
-            foreach (var note in plan.Notes) log.LogInfo($"[KSP1PartMod] anim: {entry.PartName} {note}");
-
             action = ModuleInjection.Decide(modules.Select(m => m.Name).ToList(), plan, ModuleName);
+            // From here on the caller rewrites PartJson, even if an edit below throws. Notes once per session: on
+            // the first load (Add), not on each reload that refreshes the same core.
+            if (action == InjectionAction.Add)
+                foreach (var note in plan.Notes) log.LogInfo($"[KSP1PartMod] anim: {entry.PartName} {note}");
 
             // The deployable module actually on the part: the plan only predicts it from the cfg.
             var deployableIndex = modules.FindIndex(m => m.BehaviourType != null && ReduxDeployableBehaviours.Contains(m.BehaviourType.Name));

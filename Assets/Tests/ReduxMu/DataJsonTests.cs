@@ -96,6 +96,29 @@ namespace KSP1PartMod.Tests.ReduxMu
         [Test] public void Component_PointsAtBehaviour() =>
             Assert.AreEqual(typeof(Module_Ksp1Animations), new PartComponentModule_Ksp1Animations().PartBehaviourModuleType);
 
+        /// <summary>A module whose data field was never assigned (definition not read) must not throw during part
+        /// setup; it gets an empty data object. <c>InitForDataModules</c> is the game's public entry to
+        /// <c>AddDataModules</c>.</summary>
+        [Test] public void Module_NoData_SetupDoesNotThrowAndUsesEmptyData()
+        {
+            UnityEngine.TestTools.LogAssert.ignoreFailingMessages = true; // OnDestroy logs, the game being absent
+            var go = new UnityEngine.GameObject("ksp1anim-test");
+            try
+            {
+                Module_Ksp1Animations module;
+                try { module = go.AddComponent<Module_Ksp1Animations>(); }
+                catch (Exception e) { Assert.Ignore("the module cannot be added in EditMode: " + e.Message); return; }
+                Assert.DoesNotThrow(() => module.InitForDataModules());
+                Assert.IsTrue(module.DataModules.TryGetByType<Data_Ksp1Animations>(out var data));
+                CollectionAssert.IsEmpty(data.Entries);
+            }
+            finally
+            {
+                try { UnityEngine.Object.DestroyImmediate(go); }
+                catch (Exception) { /* OnDestroy reaches for the game, absent in EditMode */ }
+            }
+        }
+
         [Test] public void SerializedModuleData_NamedAfterOurDataType() =>
             Assert.AreEqual(nameof(Data_Ksp1Animations), new SerializedModuleData(new Data_Ksp1Animations()).Name);
     }
