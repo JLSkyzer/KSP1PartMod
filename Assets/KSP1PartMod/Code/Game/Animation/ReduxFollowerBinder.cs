@@ -26,11 +26,12 @@ namespace KSP1PartMod.Game.Animation
         public const string ChuteOverrideMarker = "KSP1ParachuteOverride";
 
         public static bool TryDeployable(Module_Ksp1Animations m, AnimEntryDef def, out AnimationState state,
-            out Func<ReduxDeployState> read, out string module, out string note)
+            out Func<ReduxDeployState> read, out string module, out GameObject holder, out string note)
         {
             state = null;
             read = null;
             module = null;
+            holder = null;
             var deployable = PickDeployable(m, def.Clip, out var data);
             if (deployable == null || data == null)
             {
@@ -49,6 +50,7 @@ namespace KSP1PartMod.Game.Animation
                 note = $"clip '{def.Clip}' vanished from '{animation.gameObject.name}'";
                 return false;
             }
+            holder = animation.gameObject;
             var d = data;
             read = () => (ReduxDeployState)(byte)d.CurrentDeployState.GetValue();
             note = $"on '{animation.gameObject.name}', pose keeper {(keeper != null ? "disabled" : "absent")}, Redux Animator kept; " +
@@ -56,11 +58,49 @@ namespace KSP1PartMod.Game.Animation
             return true;
         }
 
+        /// <summary>A Redux follower in tracks-only mode (spec 2a.4): the clip has no legacy state on the instance (no
+        /// Transform curve), so there is no holder to take; only Redux's deployable state is read, for the follower's
+        /// own clock.</summary>
+        public static bool TryDeployableClock(Module_Ksp1Animations m, AnimEntryDef def, out Func<ReduxDeployState> read,
+            out string module, out string note)
+        {
+            read = null;
+            module = null;
+            var deployable = PickDeployable(m, def.Clip, out var data);
+            if (deployable == null || data == null)
+            {
+                note = "no Module_Deployable with a Data_Deployable on the part";
+                return false;
+            }
+            module = deployable.GetType().Name;
+            var d = data;
+            read = () => (ReduxDeployState)(byte)d.CurrentDeployState.GetValue();
+            note = null;
+            return true;
+        }
+
+        /// <summary>The parachute follower in tracks-only mode: Redux's <c>Data_Parachute</c> state only.</summary>
+        public static bool TryChuteClock(Module_Ksp1Animations m, out Func<ReduxChuteState> read, out string note)
+        {
+            read = null;
+            var chute = m.GetComponent<Module_Parachute>();
+            if (chute == null || !chute.DataModules.TryGetByType<Data_Parachute>(out var data) || data == null)
+            {
+                note = "no Module_Parachute with a Data_Parachute on the part";
+                return false;
+            }
+            var d = data;
+            read = () => (ReduxChuteState)(byte)d.deployState.GetValue();
+            note = null;
+            return true;
+        }
+
         public static bool TryChute(Module_Ksp1Animations m, AnimEntryDef def, out AnimationState semi, out AnimationState full,
-            out Func<ReduxChuteState> read, out string note)
+            out Func<ReduxChuteState> read, out GameObject holder, out string note)
         {
             semi = full = null;
             read = null;
+            holder = null;
             var chute = m.GetComponent<Module_Parachute>();
             if (chute == null || !chute.DataModules.TryGetByType<Data_Parachute>(out var data) || data == null)
             {
@@ -83,6 +123,7 @@ namespace KSP1PartMod.Game.Animation
                 note = $"clips '{def.Clip}'/'{def.SecondClip}' not both on '{animation.gameObject.name}'";
                 return false;
             }
+            holder = animation.gameObject;
             var d = data;
             read = () => (ReduxChuteState)(byte)d.deployState.GetValue();
             note = $"on '{animation.gameObject.name}', Redux Animator kept; " +

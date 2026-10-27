@@ -74,7 +74,7 @@ namespace KSP1PartMod.Animation.Tracks
             return new TrackSet
             {
                 Clip = clip.Name, HostPath = hostPath, ModelIndex = modelIndex,
-                Length = clip.Length, WrapMode = clip.WrapMode, Tracks = tracks,
+                Length = clip.Length, WrapMode = clip.WrapMode, HasState = TrackBindingRule.HasState(clip), Tracks = tracks,
             };
         }
 

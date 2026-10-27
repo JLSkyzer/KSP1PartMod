@@ -33,6 +33,9 @@ namespace KSP1PartMod.Animation.Tracks
         /// <summary><see cref="Mu.MuAnimClip.Length"/>.</summary>
         public float Length;
         public int WrapMode;
+        /// <summary><see cref="TrackBindingRule.HasState"/> of the clip: Redux built a legacy state for it on the
+        /// instance. Computed by the worker, which has the clip; the glue never guesses it.</summary>
+        public bool HasState;
         public IReadOnlyList<Track> Tracks;
     }
 

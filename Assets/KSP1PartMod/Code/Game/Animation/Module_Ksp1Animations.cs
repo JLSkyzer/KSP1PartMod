@@ -11,6 +11,7 @@ using KSP1PartMod.Animation.Behaviours;
 using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.State;
+using KSP1PartMod.Animation.Tracks;
 using Redux.Ksp1Import.Modules;
 using UnityEngine;
 
@@ -32,6 +33,10 @@ namespace KSP1PartMod.Game.Animation
         private const string ContextKeyPrefix = "ksp1anim_";
 
         private static readonly AnimationState[] NoStates = new AnimationState[0];
+        private static readonly TrackSampler[] NoSamplers = new TrackSampler[0];
+        /// <summary>(part, clip) pairs already logged as having no owner: once per part type and session.</summary>
+        private static readonly HashSet<string> LoggedNoOwner = new HashSet<string>(StringComparer.Ordinal);
+        private static bool _loggedHeatOff;
         private static readonly MethodInfo ActionContextKeySetter =
             typeof(ModuleActionGroupAction).GetProperty("ContextKey", BindingFlags.Instance | BindingFlags.Public)?.GetSetMethod(true);
         private static bool _loggedContextKeyFallback;
@@ -51,6 +56,20 @@ namespace KSP1PartMod.Game.Animation
         /// <summary><see cref="AddDataModules"/> found no data and runs on an empty one it made.</summary>
         private bool _synthesised;
         private string _name;
+        private int _sort = 10;
+
+        // Tracks (spec 2a.3 / 2a.4). Bound when the TrackCache generation of the current load is ready: at Setup, or on
+        // the first Drive after it (one volatile read per frame while pending); rebound when the generation changes.
+        private bool _tracksWanted, _tracksPending;
+        private int _tracksGeneration = -1;
+        private IReadOnlyDictionary<string, float> _saved;
+        /// <summary>Entries not bound at Setup while the cache was pending: retried once with the tracks.</summary>
+        private readonly List<(AnimEntryDef def, string note)> _retry = new List<(AnimEntryDef, string)>();
+        private ChannelTable _table;
+        private RendererChannels _sink;
+        private PartTransforms _transforms;
+        /// <summary>Tracks of clips Redux's legacy runtime plays: their time is read from Redux.</summary>
+        private readonly List<ReduxTracks> _reduxTracks = new List<ReduxTracks>();
 
         public override Type PartComponentModuleType => typeof(PartComponentModule_Ksp1Animations);
 
@@ -111,6 +130,9 @@ namespace KSP1PartMod.Game.Animation
             }
             _ready = false;
             _entries.Clear();
+            _reduxTracks.Clear();
+            _retry.Clear();
+            _tracksWanted = false;
         }
 
         // ---------------------------------------------------------------- setup
@@ -121,6 +143,19 @@ namespace KSP1PartMod.Game.Animation
             var saved = EntryStateCodec.Decode(data.State.GetValue(), out var error);
             if (error != null) Warn($"{_name} {error}; defaults kept for those values");
             foreach (var kv in saved) _values[kv.Key] = kv.Value;
+            _saved = saved;
+
+            // The tracks of this load, when the worker is done; else the entries are bound as in phase 1 and the
+            // tracks on the first frame the cache is ready.
+            var settings = KSP1PartModPlugin.Animations;
+            _tracksWanted = settings != null && (settings.MaterialCurves || settings.LightCurves);
+            PartTracks tracks = null;
+            var generation = TrackCache.Generation;
+            if (_tracksWanted)
+            {
+                if (TrackCache.Ready) tracks = PartTracksOrNull();
+                else _tracksPending = true;
+            }
 
             var failedClips = new List<string>();
             foreach (var def in data.Entries)
@@ -128,10 +163,12 @@ namespace KSP1PartMod.Game.Animation
                 if (def == null) continue;
                 try
                 {
-                    var e = Build(def, saved, out var note);
+                    var e = Build(def, saved, tracks, out var note);
                     if (e == null)
                     {
-                        Log($"{_name} {def.Kind} '{Subject(def)}' not bound: {note}");
+                        // Pending tracks may still bind it tracks-only: its line waits for them.
+                        if (_tracksPending) _retry.Add((def, note));
+                        else Log($"{_name} {def.Kind} '{Subject(def)}' not bound: {note}");
                         AddClips(failedClips, def);
                     }
                     else
@@ -158,6 +195,7 @@ namespace KSP1PartMod.Game.Animation
             }
 
             ResolveAeroGates();
+            if (_tracksWanted && !_tracksPending) BindTracks(tracks, generation, inEditor, late: false);
             AddControls(inEditor);
 
             Log($"{_name} data #{RuntimeHelpers.GetHashCode(data)} entries {data.Entries.Count} bound {_entries.Count} " +
@@ -168,6 +206,9 @@ namespace KSP1PartMod.Game.Animation
                 if (!e.Disabled && e.Aero == null) Step(e, 0f, inEditor, catchErrors: true);
             _ready = true;
         }
+
+        /// <summary>This part's entry of the current cache, null when the worker has none for it.</summary>
+        private PartTracks PartTracksOrNull() => TrackCache.TryGet(_name, out var t) ? t : null;
 
         private static void AddClips(List<string> clips, AnimEntryDef def)
         {
@@ -202,7 +243,10 @@ namespace KSP1PartMod.Game.Animation
                 Log($"{_name} restricted Redux runtime to [{string.Join(", ", names)}] (had [{before}], layer {runtime.Layer}, start extended {runtime.StartExtended})");
         }
 
-        private Entry Build(AnimEntryDef def, IReadOnlyDictionary<string, float> saved, out string note)
+        /// <param name="tracks">This part's tracks when the cache is ready, else null: an entry whose clip has no
+        /// state but tracks is then bound tracks-only (its machine runs on the TrackSet length); without tracks it is
+        /// not bound, as in phase 1.</param>
+        private Entry Build(AnimEntryDef def, IReadOnlyDictionary<string, float> saved, PartTracks tracks, out string note)
         {
             note = null;
             var e = new Entry(def);
@@ -210,17 +254,21 @@ namespace KSP1PartMod.Game.Animation
             switch (def.Kind)
             {
                 case EntryKind.Toggle:
-                    if ((e.States = Bind(def, def.Clip, out note)).Length == 0) return null;
-                    e.Machine = e.Toggle = new ToggleMachine(def, e.States[0].length, editorSpeed);
+                {
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
+                    e.Machine = e.Toggle = new ToggleMachine(def, length, editorSpeed);
                     break;
+                }
                 case EntryKind.Deploy:
                 case EntryKind.Gear:
-                    if ((e.States = Bind(def, def.Clip, out note)).Length == 0) return null;
-                    e.Machine = e.Deploy = new DeployMachine(def, e.States[0].length, editorSpeed);
+                {
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
+                    e.Machine = e.Deploy = new DeployMachine(def, length, editorSpeed);
                     break;
+                }
                 case EntryKind.Throttle:
                 {
-                    if ((e.States = Bind(def, def.Clip, out note)).Length == 0) return null;
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out _)) return null;
                     e.Machine = e.Throttle = new ThrottleFollower(def);
                     GameInputs.TryEngine(this, def.EngineName, out e.Engine, out var field);
                     Log($"{_name} throttle from {field} ('{def.Clip}', {e.States.Length} state(s))");
@@ -228,10 +276,15 @@ namespace KSP1PartMod.Game.Animation
                 }
                 case EntryKind.Heat:
                 {
-                    if ((e.States = Bind(def, def.Clip, out note)).Length == 0) return null;
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out _)) return null;
                     e.Machine = e.Heat = new HeatScalar(def);
                     GameInputs.TryTemperature(this, out e.Temperature, out var field);
                     Log($"{_name} heat from {field} ('{def.Clip}', {e.States.Length} state(s))");
+                    if (!KSP1PartModPlugin.Animations.HeatGlow && !_loggedHeatOff)
+                    {
+                        _loggedHeatOff = true;
+                        Log("heat glow off by animations.json");
+                    }
                     break;
                 }
                 case EntryKind.Color:
@@ -245,12 +298,12 @@ namespace KSP1PartMod.Game.Animation
                 case EntryKind.Group:
                 {
                     string activeNote = null;
-                    e.States = string.IsNullOrWhiteSpace(def.Clip) ? NoStates : Bind(def, def.Clip, out note);
-                    e.ActiveStates = string.IsNullOrWhiteSpace(def.SecondClip) ? NoStates : Bind(def, def.SecondClip, out activeNote);
+                    float deployLength = 0f, activeLength = 0f;
+                    var deploy = !string.IsNullOrWhiteSpace(def.Clip) && StatesOrTracks(e, def.Clip, tracks, false, ref note, out deployLength);
+                    var active = !string.IsNullOrWhiteSpace(def.SecondClip) && StatesOrTracks(e, def.SecondClip, tracks, true, ref activeNote, out activeLength);
                     if (activeNote != null) note = note == null ? "active: " + activeNote : note + "; active: " + activeNote;
-                    if (e.States.Length == 0 && e.ActiveStates.Length == 0) return null;
-                    e.Machine = e.Group = new GroupMachine(def,
-                        e.States.Length > 0 ? e.States[0].length : 0f, e.ActiveStates.Length > 0 ? e.ActiveStates[0].length : 0f, editorSpeed);
+                    if (!deploy && !active) return null;
+                    e.Machine = e.Group = new GroupMachine(def, deploy ? deployLength : 0f, active ? activeLength : 0f, editorSpeed);
                     break;
                 }
                 case EntryKind.AeroGate:
@@ -271,18 +324,47 @@ namespace KSP1PartMod.Game.Animation
                     break;
                 case EntryKind.ReduxFollower:
                 {
-                    if (!ReduxFollowerBinder.TryDeployable(this, def, out var state, out e.ReadDeploy, out var module, out note)) return null;
-                    e.States = new[] { state };
-                    e.Machine = e.Follower = new ReduxFollower(def, state.length, editorSpeed);
+                    float length;
+                    string module;
+                    if (ReduxFollowerBinder.TryDeployable(this, def, out var state, out e.ReadDeploy, out module, out var holder, out note))
+                    {
+                        e.States = new[] { state };
+                        e.Holders = new List<GameObject> { holder };
+                        length = state.length;
+                    }
+                    else if (TracksOnlyLength(def.Clip, tracks, out length))
+                    {
+                        // Redux's single source, material-only clip: no state to take; our own clock on Redux's state.
+                        if (!ReduxFollowerBinder.TryDeployableClock(this, def, out e.ReadDeploy, out module, out note)) return null;
+                        LogTracksOnly(def, def.Clip, length);
+                    }
+                    else return null;
+                    e.Machine = e.Follower = new ReduxFollower(def, length, editorSpeed);
                     Log($"{_name} follows Redux deployable '{def.Clip}' ({module})");
                     break;
                 }
                 case EntryKind.ChuteFollower:
                 {
-                    if (!ReduxFollowerBinder.TryChute(this, def, out var semi, out var full, out e.ReadChute, out note)) return null;
-                    e.States = new[] { semi };
-                    e.ActiveStates = new[] { full };
-                    e.Machine = e.Chute = new ChuteFollower(semi.length, full.length, def.SpeedFactorIn, def.SpeedFactorOut);
+                    float semiLength, fullLength;
+                    if (ReduxFollowerBinder.TryChute(this, def, out var semi, out var full, out e.ReadChute, out var holder, out note))
+                    {
+                        e.States = new[] { semi };
+                        e.ActiveStates = new[] { full };
+                        e.Holders = new List<GameObject> { holder };
+                        e.ActiveHolders = new List<GameObject> { holder };
+                        semiLength = semi.length;
+                        fullLength = full.length;
+                    }
+                    else
+                    {
+                        var hasSemi = TracksOnlyLength(def.Clip, tracks, out semiLength);
+                        var hasFull = TracksOnlyLength(def.SecondClip, tracks, out fullLength);
+                        if (!hasSemi && !hasFull) return null;
+                        if (!ReduxFollowerBinder.TryChuteClock(this, out e.ReadChute, out note)) return null;
+                        if (hasSemi) LogTracksOnly(def, def.Clip, semiLength);
+                        if (hasFull) LogTracksOnly(def, def.SecondClip, fullLength);
+                    }
+                    e.Machine = e.Chute = new ChuteFollower(semiLength, fullLength, def.SpeedFactorIn, def.SpeedFactorOut);
                     Log($"{_name} follows Redux parachute '{def.Clip}'/'{def.SecondClip}' (Module_Parachute)");
                     break;
                 }
@@ -299,8 +381,59 @@ namespace KSP1PartMod.Game.Animation
             return e;
         }
 
-        private AnimationState[] Bind(AnimEntryDef def, string clip, out string note) =>
-            AnimationBinder.Bind(gameObject, def, clip, data.ReduxClips, out note).Where(s => s != null).ToArray();
+        /// <summary>Binds <paramref name="clip"/>'s legacy states (into <c>States</c>, or <c>ActiveStates</c> when
+        /// <paramref name="active"/>), else, when the clip has no state but tracks, nothing: the entry is tracks-only on
+        /// that clip. <paramref name="length"/> is the first state's length, else the TrackSet's. False when neither;
+        /// <paramref name="note"/> then says why, as in phase 1.</summary>
+        private bool StatesOrTracks(Entry e, string clip, PartTracks tracks, bool active, ref string note, out float length)
+        {
+            var holders = new List<GameObject>();
+            var states = Bind(e.Def, clip, out note, holders);
+            if (states.Length > 0)
+            {
+                if (active) { e.ActiveStates = states; e.ActiveHolders = holders; }
+                else { e.States = states; e.Holders = holders; }
+                length = states[0].length;
+                return true;
+            }
+            if (!TracksOnlyLength(clip, tracks, out length)) return false;
+            note = null;
+            LogTracksOnly(e.Def, clip, length);
+            return true;
+        }
+
+        /// <summary>The clip has tracks of a kind the settings keep, and no state on the instance by
+        /// <see cref="TrackBindingRule.HasState"/> (computed by the worker on the clip): a clip with a state keeps its
+        /// owner. <paramref name="length"/>: the first such set's.</summary>
+        private static bool TracksOnlyLength(string clip, PartTracks tracks, out float length)
+        {
+            length = 0f;
+            if (tracks == null || tracks.Failed || string.IsNullOrWhiteSpace(clip)) return false;
+            var found = false;
+            foreach (var set in tracks.Sets)
+            {
+                if (!string.Equals(set.Clip, clip, StringComparison.Ordinal)) continue;
+                if (set.HasState) return false;
+                if (found || !HasWantedTrack(set)) continue;
+                found = true;
+                length = set.Length;
+            }
+            return found;
+        }
+
+        private static bool HasWantedTrack(TrackSet set)
+        {
+            if (set.Tracks == null) return false;
+            foreach (var t in set.Tracks)
+                if (t != null && TrackBinder.Wanted(t, KSP1PartModPlugin.Animations)) return true;
+            return false;
+        }
+
+        private void LogTracksOnly(AnimEntryDef def, string clip, float length) =>
+            Log($"{_name} {def.Kind} '{clip}' bound tracks-only (no state), length {length:0.###} s");
+
+        private AnimationState[] Bind(AnimEntryDef def, string clip, out string note, List<GameObject> holders) =>
+            AnimationBinder.Bind(gameObject, def, clip, data.ReduxClips, out note, holders).Where(s => s != null).ToArray();
 
         /// <summary>The controller of a KRE aero gate is the KSP1 module at its <c>DeployModuleIndex</c>: one of our
         /// Toggle / Deploy / Gear entries, else Redux's deployable module. Once one is found, Redux's gating marker
@@ -362,14 +495,13 @@ namespace KSP1PartMod.Game.Animation
         {
             int buttons = 0, actions = 0;
             var dynamicLabels = false;
-            var sort = 10;
             foreach (var e in _entries)
             {
                 var kind = e.Def.Kind;
                 if (e.Disabled || !ControlLabels.HasAction(kind)) continue;
                 try
                 {
-                    AddControl(e, inEditor, ref sort, ref buttons, ref actions, ref dynamicLabels);
+                    AddControl(e, inEditor, ref buttons, ref actions, ref dynamicLabels);
                 }
                 catch (Exception ex)
                 {
@@ -380,7 +512,7 @@ namespace KSP1PartMod.Game.Animation
                 Log($"{_name} action labels {(dynamicLabels ? "dynamic" : "static")}: {buttons} PAM button(s), {actions} action-group action(s)");
         }
 
-        private void AddControl(Entry e, bool inEditor, ref int sort, ref int buttons, ref int actions, ref bool dynamicLabels)
+        private void AddControl(Entry e, bool inEditor, ref int buttons, ref int actions, ref bool dynamicLabels)
         {
             {
                 var kind = e.Def.Kind;
@@ -394,7 +526,7 @@ namespace KSP1PartMod.Game.Animation
                     dynamicLabels |= e.LabelOn != e.LabelOff;
                     e.Button = new ModuleAction((Action)control.OnButton);
                     e.Button.SetContextKey(key);
-                    data.AddAction(on ? e.LabelOn : e.LabelOff, e.Button, sort++);
+                    data.AddAction(on ? e.LabelOn : e.LabelOff, e.Button, _sort++);
                     e.ShownOn = on;
                     e.ShownVisible = ButtonVisible(e, inEditor);
                     data.SetVisible(e.Button, e.ShownVisible);
@@ -461,15 +593,271 @@ namespace KSP1PartMod.Game.Animation
             }
         }
 
+        // ---------------------------------------------------------------- tracks
+
+        /// <summary>Binds the material and light tracks of this part (spec 2a.3 / 2a.4) on a fresh table: each clip's
+        /// tracks follow the clip's owner. <paramref name="late"/>: the cache became ready after Setup; the entries not
+        /// bound then are retried, tracks-only. Never throws; a part whose tracks failed keeps its phase 1
+        /// behaviour.</summary>
+        private void BindTracks(PartTracks tracks, int generation, bool inEditor, bool late)
+        {
+            _tracksPending = false;
+            _tracksGeneration = generation;
+            foreach (var e in _entries) e.Tracks = e.ActiveTracks = NoSamplers;
+            _reduxTracks.Clear();
+            _table = new ChannelTable();
+            _sink = new RendererChannels(_table);
+            if (tracks != null && tracks.Failed) tracks = null; // logged by the worker; phase 1 for this part
+
+            if (late) RetryUnbound(tracks, inEditor);
+            if (tracks == null || tracks.Sets.Count == 0) return;
+            try
+            {
+                if (_transforms == null) _transforms = new PartTransforms(gameObject.transform);
+                var reduxLights = ReduxLights();
+                var runtime = GetComponentInChildren<Ksp1DeployableAnimationRuntime>(true);
+                var clips = new List<string>();
+                foreach (var set in tracks.Sets)
+                    if (set?.Clip != null && !clips.Contains(set.Clip)) clips.Add(set.Clip);
+                foreach (var clip in clips)
+                {
+                    try
+                    {
+                        BindClip(tracks, clip, runtime, reduxLights);
+                    }
+                    catch (Exception ex)
+                    {
+                        Error($"{_name} tracks '{clip}' not bound: {ex}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Error($"{_name} binding tracks failed: {ex}");
+            }
+        }
+
+        /// <summary>The entries Setup left unbound while the cache was pending: tracks-only now, or their phase 1 line.</summary>
+        private void RetryUnbound(PartTracks tracks, bool inEditor)
+        {
+            var retry = _retry.ToArray();
+            _retry.Clear();
+            foreach (var (def, setupNote) in retry)
+            {
+                try
+                {
+                    var e = tracks == null ? null : Build(def, _saved, tracks, out _);
+                    if (e == null)
+                    {
+                        Log($"{_name} {def.Kind} '{Subject(def)}' not bound: {setupNote}");
+                        continue;
+                    }
+                    _entries.Add(e);
+                    if (ControlLabels.HasAction(def.Kind))
+                    {
+                        int buttons = 0, actions = 0;
+                        var dynamicLabels = false;
+                        AddControl(e, inEditor, ref buttons, ref actions, ref dynamicLabels);
+                    }
+                    Step(e, 0f, inEditor, catchErrors: true);
+                }
+                catch (Exception ex)
+                {
+                    Error($"{_name} {def.Kind} '{Subject(def)}' disabled for this session: {ex}");
+                }
+            }
+        }
+
+        /// <summary>One clip: its owner is one of our entries (each entry naming it), else Redux's legacy runtime when
+        /// it plays the clip, else nobody (logged once per part type, tracks skipped).</summary>
+        private void BindClip(PartTracks tracks, string clip, Ksp1DeployableAnimationRuntime runtime, IReadOnlyCollection<Light> reduxLights)
+        {
+            var owned = false;
+            foreach (var e in _entries)
+            {
+                if (e.Disabled) continue;
+                var primary = OwnsClip(e, clip, out var activeClip);
+                if (!primary && !activeClip) continue;
+                owned = true;
+                if (primary) e.Tracks = BindEntryClip(e, tracks, clip, e.States.Length > 0 ? e.Holders : null, false, reduxLights);
+                if (activeClip) e.ActiveTracks = BindEntryClip(e, tracks, clip, e.ActiveStates.Length > 0 ? e.ActiveHolders : null,
+                    e.Group != null, reduxLights);
+            }
+            if (owned) return;
+
+            if (runtime != null && runtime.enabled && Contains(runtime.AnimationNames, clip))
+            {
+                BindReduxClip(tracks, clip, runtime, reduxLights);
+                return;
+            }
+            if (LoggedNoOwner.Add(_name + "|" + clip))
+                Log($"tracks: {_name} clip '{clip}' has no owner, tracks skipped");
+        }
+
+        /// <summary>Whether the entry plays <paramref name="clip"/>: as its clip, or as its second clip (Group active,
+        /// parachute full). Color, AeroGate and GearBridge entries own no clip time.</summary>
+        private static bool OwnsClip(Entry e, string clip, out bool second)
+        {
+            second = false;
+            var kind = e.Def.Kind;
+            if (kind == EntryKind.Color || kind == EntryKind.AeroGate || kind == EntryKind.GearBridge) return false;
+            second = (kind == EntryKind.Group || kind == EntryKind.ChuteFollower) && string.Equals(e.Def.SecondClip, clip, StringComparison.Ordinal);
+            return string.Equals(e.Def.Clip, clip, StringComparison.Ordinal);
+        }
+
+        /// <summary>The samplers of one clip of an entry. With states, the hosts are the objects whose
+        /// <c>Animation</c> the entry took (its lookup already chose them). Tracks-only, the model's hosts, chosen with
+        /// the entry's KSP1 lookup (<see cref="AnimationLookup"/>: first, all, or by object name).</summary>
+        private TrackSampler[] BindEntryClip(Entry e, PartTracks tracks, string clip, List<GameObject> holders, bool loop,
+            IReadOnlyCollection<Light> reduxLights)
+        {
+            var hosts = new List<(TrackSet set, int index)>();
+            foreach (var set in tracks.Sets)
+            {
+                if (!string.Equals(set.Clip, clip, StringComparison.Ordinal)) continue;
+                var picked = TrackBinder.Hosts(_transforms, set, tracks, out var note);
+                foreach (var i in picked)
+                    if (holders == null || holders.Contains(_transforms.Transforms[i].gameObject)) hosts.Add((set, i));
+                if (note != null) Log($"{_name} tracks '{clip}': {note}");
+            }
+            if (holders == null && hosts.Count > 1)
+            {
+                hosts.Sort((a, b) => a.index.CompareTo(b.index));
+                var candidates = hosts.Select(h => new AnimationCandidate(_transforms.Transforms[h.index].name, true, false)).ToArray();
+                var lookup = AnimationLookup.Select(candidates, AnimationLookup.For(e.Def.Kind), e.Def.Kind == EntryKind.Gear ? e.Def.AnimatorName : null);
+                hosts = lookup.Picked.Select(i => hosts[i]).ToList();
+            }
+            return BindSets(tracks, clip, hosts, e.Def, loop, reduxLights);
+        }
+
+        /// <summary>A clip Redux's legacy runtime plays (<c>Ksp1DeployableAnimationRuntime</c>, which drives every
+        /// <c>Animation</c> holding it): each host follows its own state's time, weight and enabled flag (read only),
+        /// or, for a clip without state, the runtime's <c>NormalizedTime</c>.</summary>
+        private void BindReduxClip(PartTracks tracks, string clip, Ksp1DeployableAnimationRuntime runtime, IReadOnlyCollection<Light> reduxLights)
+        {
+            var hosts = new List<(TrackSet set, int index)>();
+            foreach (var set in tracks.Sets)
+            {
+                if (!string.Equals(set.Clip, clip, StringComparison.Ordinal)) continue;
+                var picked = TrackBinder.Hosts(_transforms, set, tracks, out var note);
+                foreach (var i in picked)
+                    if (!set.HasState || StateOn(_transforms.Transforms[i], clip) != null) hosts.Add((set, i));
+                if (note != null) Log($"{_name} tracks '{clip}': {note}");
+            }
+            foreach (var (set, sampler, host) in BindEach(tracks, clip, hosts, null, false, reduxLights))
+                _reduxTracks.Add(new ReduxTracks(sampler, set.HasState ? StateOn(host, clip) : null, runtime));
+        }
+
+        private static AnimationState StateOn(Transform host, string clip)
+        {
+            var a = host.GetComponent<UnityEngine.Animation>();
+            return a == null ? null : a[clip];
+        }
+
+        private TrackSampler[] BindSets(PartTracks tracks, string clip, List<(TrackSet set, int index)> hosts, AnimEntryDef def,
+            bool loop, IReadOnlyCollection<Light> reduxLights) =>
+            BindEach(tracks, clip, hosts, def, loop, reduxLights).Select(b => b.sampler).ToArray();
+
+        /// <summary>Binds each set on its chosen hosts, logs one line per set, and returns every sampler with its set and
+        /// host.</summary>
+        private List<(TrackSet set, TrackSampler sampler, Transform host)> BindEach(PartTracks tracks, string clip,
+            List<(TrackSet set, int index)> hosts, AnimEntryDef def, bool loop, IReadOnlyCollection<Light> reduxLights)
+        {
+            var result = new List<(TrackSet, TrackSampler, Transform)>();
+            foreach (var set in tracks.Sets)
+            {
+                if (!string.Equals(set.Clip, clip, StringComparison.Ordinal)) continue;
+                var mine = hosts.Where(h => ReferenceEquals(h.set, set)).Select(h => _transforms.Transforms[h.index]).ToList();
+                if (mine.Count == 0) continue;
+                var bound = TrackBinder.Bind(_transforms, mine, set, def, _table, _sink, KSP1PartModPlugin.Animations, reduxLights, out var note);
+                Log($"{_name} {note}");
+                foreach (var path in bound.ReduxLights) Log($"{_name} light '{path}' left to Module_Light");
+                for (var i = 0; i < bound.Samplers.Length; i++)
+                {
+                    if (loop) bound.Samplers[i].Loop = true; // a Group's active clip loops (KSP1 plays it with WrapMode.Loop)
+                    result.Add((set, bound.Samplers[i], bound.Hosts[i]));
+                }
+            }
+            return result;
+        }
+
+        /// <summary>The lights of every <c>Module_Light</c> of the part (<c>kspLights[*].light</c>): Redux drives them.</summary>
+        private IReadOnlyCollection<Light> ReduxLights()
+        {
+            var lights = new List<Light>();
+            foreach (var m in GetComponentsInChildren<Module_Light>(true))
+            {
+                if (m == null || m.kspLights == null) continue;
+                foreach (var k in m.kspLights)
+                    if (k.light != null) lights.Add(k.light);
+            }
+            return lights;
+        }
+
+        private static bool Contains(string[] names, string clip)
+        {
+            if (names == null) return false;
+            foreach (var n in names)
+                if (string.Equals(n, clip, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        /// <summary>Per frame: re-binds when the cache generation changed or became ready (one volatile read of the
+        /// generation, plus one of <c>Ready</c> while pending); allocation-free otherwise.</summary>
+        private void PollTracks(bool inEditor)
+        {
+            if (!_tracksWanted) return;
+            var generation = TrackCache.Generation;
+            if (!_tracksPending && generation == _tracksGeneration) return;
+            if (!TrackCache.Ready)
+            {
+                _tracksPending = true;
+                return;
+            }
+            try
+            {
+                BindTracks(PartTracksOrNull(), generation, inEditor, late: true);
+            }
+            catch (Exception ex)
+            {
+                _tracksPending = false;
+                _tracksGeneration = generation;
+                Error($"{_name} binding tracks failed: {ex}");
+            }
+        }
+
+        /// <summary>Samples the tracks of the clips Redux's runtime plays, from Redux's time.</summary>
+        private void DriveReduxTracks()
+        {
+            for (var i = 0; i < _reduxTracks.Count; i++)
+            {
+                var r = _reduxTracks[i];
+                if (r.State != null)
+                    r.Sampler.Sample(new ClipPose(r.State.normalizedTime, 0f, r.State.weight, r.State.enabled));
+                else if (r.Runtime != null)
+                    r.Sampler.Sample(new ClipPose(r.Runtime.NormalizedTime, 0f, 1f, true));
+            }
+        }
+
         // ---------------------------------------------------------------- per frame
 
         private void Drive(float dt, bool inEditor)
         {
             if (!_ready) return;
+            PollTracks(inEditor);
             for (var i = 0; i < _entries.Count; i++)
             {
                 var e = _entries[i];
                 if (!e.Disabled) Step(e, dt, inEditor, catchErrors: true);
+            }
+            try
+            {
+                DriveReduxTracks();
+            }
+            catch (Exception ex)
+            {
+                _reduxTracks.Clear();
+                Error($"{_name} tracks of Redux's clips stopped for this session: {ex}");
             }
             SaveIfChanged();
         }
@@ -482,25 +870,26 @@ namespace KSP1PartMod.Game.Animation
                 {
                     case EntryKind.Toggle:
                         e.Toggle.Tick(dt);
-                        Apply(e.States, e.Toggle.Pose, e.Def.Layer, ref e.StatesOn);
+                        Show(e.States, e.Tracks, e.Toggle.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
                     case EntryKind.Deploy:
                     case EntryKind.Gear:
                         e.Deploy.Tick(dt);
-                        Apply(e.States, e.Deploy.Pose, e.Def.Layer, ref e.StatesOn);
+                        Show(e.States, e.Tracks, e.Deploy.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
                     case EntryKind.Throttle:
                     {
                         var (throttle, operational) = e.Engine != null ? e.Engine() : (0f, true);
                         e.Throttle.Tick(dt, inEditor, throttle, operational);
-                        Apply(e.States, e.Throttle.Pose, e.Def.Layer, ref e.StatesOn);
+                        Show(e.States, e.Tracks, e.Throttle.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
                     }
                     case EntryKind.Heat:
                     {
+                        if (!KSP1PartModPlugin.Animations.HeatGlow) break; // heat_glow off: the entry and its tracks stay at rest
                         var (t, max) = e.Temperature != null ? e.Temperature() : (0f, 0f);
                         e.Heat.Tick(dt, t, max);
-                        Apply(e.States, e.Heat.Pose, e.Def.Layer, ref e.StatesOn);
+                        Show(e.States, e.Tracks, e.Heat.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
                     }
                     case EntryKind.Color:
@@ -509,8 +898,8 @@ namespace KSP1PartMod.Game.Animation
                         break;
                     case EntryKind.Group:
                         e.Group.Tick(dt, inEditor);
-                        Apply(e.States, e.Group.DeployPose, e.Def.Layer, ref e.StatesOn);
-                        Apply(e.ActiveStates, e.Group.ActivePose, ActiveLayer, ref e.ActiveOn);
+                        Show(e.States, e.Tracks, e.Group.DeployPose, e.Def.Layer, ref e.StatesOn);
+                        Show(e.ActiveStates, e.ActiveTracks, e.Group.ActivePose, ActiveLayer, ref e.ActiveOn);
                         break;
                     case EntryKind.ReduxFollower:
                     {
@@ -518,7 +907,7 @@ namespace KSP1PartMod.Game.Animation
                         if (e.Follower.Tick(dt, state, inEditor) && e.Follower.Following != null && e.SeenState)
                             Log($"{_name} follower '{e.Def.Clip}' -> {(e.Follower.Following.Value ? "extend" : "retract")} (Redux {state})");
                         e.SeenState = true;
-                        Apply(e.States, e.Follower.Pose, e.Def.Layer, ref e.StatesOn);
+                        Show(e.States, e.Tracks, e.Follower.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
                     }
                     case EntryKind.ChuteFollower:
@@ -526,8 +915,8 @@ namespace KSP1PartMod.Game.Animation
                         var state = e.ReadChute();
                         if (e.Chute.Tick(dt, state) && e.SeenState) Log($"{_name} parachute follower -> {state}");
                         e.SeenState = true;
-                        Apply(e.States, e.Chute.SemiPose, e.Def.Layer, ref e.StatesOn);
-                        Apply(e.ActiveStates, e.Chute.FullPose, e.Def.Layer, ref e.ActiveOn);
+                        Show(e.States, e.Tracks, e.Chute.SemiPose, e.Def.Layer, ref e.StatesOn);
+                        Show(e.ActiveStates, e.ActiveTracks, e.Chute.FullPose, e.Def.Layer, ref e.ActiveOn);
                         break;
                     }
                     case EntryKind.AeroGate:
@@ -548,6 +937,14 @@ namespace KSP1PartMod.Game.Animation
             {
                 Disable(e, ex);
             }
+        }
+
+        /// <summary>The pose on the clip's legacy states (<see cref="Apply"/>), then on its tracks: the tracks sample the
+        /// owner's pose of this frame (spec 2a.4). Allocation-free.</summary>
+        private static void Show(AnimationState[] states, TrackSampler[] tracks, ClipPose pose, int layer, ref bool on)
+        {
+            Apply(states, pose, layer, ref on);
+            TrackSampler.SampleAll(tracks, in pose);
         }
 
         /// <summary>KSP1's hold-pose idiom. A pose that is off disables the states once, then leaves them alone.</summary>
@@ -837,6 +1234,22 @@ namespace KSP1PartMod.Game.Animation
             public void OnGroupToggle() => _module.SetFromGroup(_entry, !IsOn(_entry));
         }
 
+        /// <summary>The tracks of one host of a clip Redux's legacy runtime plays, and where their time comes from.</summary>
+        private sealed class ReduxTracks
+        {
+            public readonly TrackSampler Sampler;
+            /// <summary>The host's legacy state of the clip; null for a clip without state (the runtime's time is used).</summary>
+            public readonly AnimationState State;
+            public readonly Ksp1DeployableAnimationRuntime Runtime;
+
+            public ReduxTracks(TrackSampler sampler, AnimationState state, Ksp1DeployableAnimationRuntime runtime)
+            {
+                Sampler = sampler;
+                State = state;
+                Runtime = runtime;
+            }
+        }
+
         /// <summary>One bound entry and what drives it.</summary>
         private sealed class Entry
         {
@@ -857,6 +1270,11 @@ namespace KSP1PartMod.Game.Animation
             public bool SeenState;
             public AnimationState[] States = NoStates;
             public AnimationState[] ActiveStates = NoStates;
+            /// <summary>The GameObjects of the <c>Animation</c>s holding <see cref="States"/> / <see cref="ActiveStates"/>:
+            /// where the clip's tracks follow the entry. Null for a clip bound tracks-only.</summary>
+            public List<GameObject> Holders, ActiveHolders;
+            /// <summary>The samplers of the clip's (Group: deploy; parachute: semi) and the second clip's tracks.</summary>
+            public TrackSampler[] Tracks = NoSamplers, ActiveTracks = NoSamplers;
             public bool StatesOn, ActiveOn;
             public MaterialWriter Writer;
             public Func<(float throttle, bool operational)> Engine;

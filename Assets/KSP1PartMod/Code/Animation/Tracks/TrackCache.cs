@@ -19,6 +19,11 @@ namespace KSP1PartMod.Animation.Tracks
         public IReadOnlyList<TrackSet> Sets = NoSets;
         /// <summary>One <c>model '&lt;ref&gt;' not found (&lt;tried&gt;)</c> per reference no rule resolved.</summary>
         public IReadOnlyList<string> Missing = NoMissing;
+        /// <summary>Per model reference of the snapshot (the index of <see cref="TrackSet.ModelIndex"/>), the name of
+        /// its <c>.mu</c> root object; null for a reference not read (not found, unreadable, or no clip wanted).
+        /// Redux adds one object per model it loads and none for the others, so the glue finds a set's model on the
+        /// instance by this name and its rank among the loaded models of that name (<see cref="HostPicker"/>).</summary>
+        public IReadOnlyList<string> ModelRoots = NoMissing;
         /// <summary>Curves of the part's named clips that no track takes.</summary>
         public TrackDrops Drops;
     }

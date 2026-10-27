@@ -168,6 +168,27 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             }, Is.Not.AllocatingGCMemory());
         }
 
+        /// <summary>What <c>Module_Ksp1Animations.Drive</c> does per entry and per frame: every sampler of the clip
+        /// from the owner's pose.</summary>
+        [Test]
+        public void SampleAll_10000Frames_NoGcAlloc()
+        {
+            var samplers = new[] { Sampler(), Sampler(colourRest: (0.1f, 0.2f, 0.3f, 1f), only: 'r') };
+            TrackSampler.SampleAll(samplers, Pose(0));
+            Assert.That(() => { for (var i = 1; i <= 10000; i++) TrackSampler.SampleAll(samplers, new ClipPose(i / 10000f, 1, 1, i % 5 != 0)); },
+                Is.Not.AllocatingGCMemory());
+        }
+
+        [Test]
+        public void SampleAll_SamplesEach_NullSafe()
+        {
+            var a = Sampler(rest: 0f, curve: Const(1f));
+            var b = Sampler(rest: 0f, curve: Const(0.5f));
+            TrackSampler.SampleAll(new[] { a, null, b }, Pose(0.5f));
+            TrackSampler.SampleAll(null, Pose(0.5f));
+            Assert.AreEqual((1f, 0.5f), (Submitted(0).X, Submitted(1).X));
+        }
+
         [Test]
         public void Sampler_Looping10000Frames_AllocatesZero()
         {

@@ -154,6 +154,17 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             Assert.AreEqual(1, t.Missing.Count);
         }
 
+        /// <summary>The root object name of each reference's model, null for one not read: the glue maps a set's
+        /// model index to the instance with it (Redux adds no object for a model it cannot load).</summary>
+        [Test]
+        public void TrackCacheBuilder_ModelRoots_PerReference_NullWhenNotRead()
+        {
+            ThreeClipModel("m/a.mu");
+            var t = Build(Snapshot("a", new[] { "nope", "m/a", "m/a" }, "glow"));
+            CollectionAssert.AreEqual(new[] { null, "root", "root" }, t.ModelRoots);
+            CollectionAssert.AreEqual(new[] { 1, 2 }, t.Sets.Select(s => s.ModelIndex));
+        }
+
         // --- snapshot from a cfg ---
 
         private static PartAnimationPlan Plan(params AnimEntryDef[] entries) =>

@@ -84,6 +84,7 @@ namespace KSP1PartMod.Animation.Tracks
             var drops = default(TrackDrops);
             var wanted = new HashSet<string>(s.Clips ?? new string[0], StringComparer.Ordinal);
             var refs = s.ModelRefs ?? new string[0];
+            var roots = new string[refs.Length];
 
             for (var i = 0; i < refs.Length; i++)
             {
@@ -105,12 +106,14 @@ namespace KSP1PartMod.Animation.Tracks
                     if (!(e is MuFormatException)) details.Add(e.ToString());
                     continue;
                 }
+                roots[i] = file.Root.Name ?? "";
                 Collect(file.Root, i, wanted, sets, ref drops);
             }
 
             notes.AddRange(missing);
             result.Sets = sets;
             result.Missing = missing;
+            result.ModelRoots = roots;
             result.Drops = drops;
             result.Note = notes.Count == 0 ? null : string.Join("; ", notes);
             result.Detail = details.Count == 0 ? null : string.Join("\n", details);

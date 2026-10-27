@@ -78,6 +78,13 @@ namespace KSP1PartMod.Animation.Tracks
             return true;
         }
 
+        /// <summary>Samples each of <paramref name="samplers"/> (null items and a null array skipped) from one pose.</summary>
+        public static void SampleAll(TrackSampler[] samplers, in ClipPose pose)
+        {
+            if (samplers == null) return;
+            for (var i = 0; i < samplers.Length; i++) samplers[i]?.Sample(in pose);
+        }
+
         private float Blend(float rest, Curve[] curves, int channel, float t, float weight, bool loop)
         {
             if (channel >= curves.Length) return rest;

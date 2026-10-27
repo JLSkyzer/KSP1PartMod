@@ -21,8 +21,10 @@ namespace KSP1PartMod.Game.Animation
 
         /// <summary>Binds <paramref name="clip"/> (Group: also the active clip) with the entry's lookup.</summary>
         /// <param name="reduxClips">The clips Redux's runtime keeps (<c>Data_Ksp1Animations.ReduxClips</c>); may be null.</param>
+        /// <param name="holders">When given, receives the GameObject of each returned state's <c>Animation</c>, in the
+        /// same order: the hosts on which the clip's material and light tracks follow the entry.</param>
         public static IReadOnlyList<AnimationState> Bind(GameObject partRoot, AnimEntryDef e, string clip,
-            ICollection<string> reduxClips, out string note)
+            ICollection<string> reduxClips, out string note, List<GameObject> holders = null)
         {
             note = null;
             if (partRoot == null || string.IsNullOrWhiteSpace(clip))
@@ -60,7 +62,9 @@ namespace KSP1PartMod.Game.Animation
                         : $"enabled the disabled Animation on '{a.gameObject.name}'");
                 }
                 var state = a[clip];
-                if (state != null) states.Add(state);
+                if (state == null) continue;
+                states.Add(state);
+                holders?.Add(a.gameObject);
             }
             return states;
         }

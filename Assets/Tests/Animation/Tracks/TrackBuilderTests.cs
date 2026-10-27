@@ -34,6 +34,7 @@ namespace KSP1PartMod.Tests.Animation.Tracks
         [Test] public void Build_MixedClip_KeepsOnlyNonTransform() => Assert.AreEqual(1, Build(("", "m_LocalRotation.x", 0), ("", "_EmissiveColor.r", 1)).Tracks.Count);
         [Test] public void Build_Length_IsClipLength() => Assert.AreEqual(2.5f, Build(Keys(0f, 2.5f)).Length);
         [Test] public void Build_UnknownLightProperty_CountedUnknown() { TrackBuilder.FromClip(Clip(("L", "m_Shadows", 2)), "", 0, out var d); Assert.AreEqual(1, d.Unknown); }
+        [Test] public void Build_HasState_FromTheBindingRule() => Assert.AreEqual((true, false), (Build(("", "m_LocalRotation.x", 0), ("", "_EmissiveColor.r", 1)).HasState, Build(("", "_EmissiveColor.r", 1)).HasState));
         [Test] public void Build_CarriesHostAndModel() { var s = TrackBuilder.FromClip(Clip(("", "_Opacity", 1)), "root/host", 3, out _); Assert.AreEqual(("clip", "root/host", 3), (s.Clip, s.HostPath, s.ModelIndex)); }
         [Test]
         public void FromClip_KeylessCurve_LeavesChannelNull()
