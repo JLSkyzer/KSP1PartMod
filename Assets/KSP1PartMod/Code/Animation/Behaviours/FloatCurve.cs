@@ -1,7 +1,7 @@
 namespace KSP1PartMod.Animation.Behaviours
 {
-    /// <summary>KSP1's FloatCurve (a Unity <c>AnimationCurve</c>) without Unity: cubic Hermite between keys, the end
-    /// values outside them. Built from <see cref="Cfg.AnimEntryDef.Curves"/> rows (time, value, inTangent,
+    /// <summary>KSP1's FloatCurve (a Unity <c>AnimationCurve</c>) without Unity: cubic Hermite between keys (a step when
+    /// a tangent is infinite), the end values outside them. Built from <see cref="Cfg.AnimEntryDef.Curves"/> rows (time, value, inTangent,
     /// outTangent, flattened).</summary>
     public sealed class FloatCurve
     {
@@ -72,6 +72,7 @@ namespace KSP1PartMod.Animation.Behaviours
             while (_time[i] < t) i++;
             float t0 = _time[i - 1], t1 = _time[i];
             var dt = t1 - t0;
+            if (float.IsInfinity(_out[i - 1]) || float.IsInfinity(_in[i])) return _value[i - 1];
             var s = (t - t0) / dt;
             var s2 = s * s;
             var s3 = s2 * s;
@@ -79,6 +80,14 @@ namespace KSP1PartMod.Animation.Behaviours
                  + (s3 - 2f * s2 + s) * _out[i - 1] * dt
                  + (-2f * s3 + 3f * s2) * _value[i]
                  + (s3 - s2) * _in[i] * dt;
+        }
+
+        /// <summary>Evaluates a looping clip: t is wrapped into [0, length) first. A length that is not positive and
+        /// finite evaluates like <see cref="Evaluate"/>. Allocation-free.</summary>
+        public float EvaluateLooped(float t, float length)
+        {
+            if (!(length > 0f) || float.IsInfinity(length) || float.IsNaN(t) || float.IsInfinity(t)) return Evaluate(t);
+            return Evaluate(t - (float)System.Math.Floor(t / length) * length);
         }
 
         private static float AutoSlope(float[] t, float[] v, int count, int i)
