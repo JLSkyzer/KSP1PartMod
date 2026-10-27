@@ -65,6 +65,41 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             Assert.AreEqual(("deploy:b:1", 1), (p.Entries.Single().Key, p.Entries.Single().ModuleIndex));
         }
 
+        [Test] public void Plan_SkipModules_OwnFirstDeployableSkipped_StaysRedux()
+        {
+            var modules = new[] { Generic("a"), Generic("b"), CfgText.Module("name = ModuleDeployableAntenna\nanimationName = a") };
+            var own = OwnershipPlanner.Plan(modules, false, new HashSet<string>(), true, false, new HashSet<string>());
+            Assert.IsTrue(own.RemoveReduxDeployable);
+            var p = OwnershipPlanner.Plan(modules, false, new HashSet<string>(), true, false, new HashSet<string> { "ModuleAnimateGeneric" });
+            Assert.IsFalse(p.RemoveReduxDeployable);
+            CollectionAssert.Contains(p.ReduxClips, "a");
+            // The antenna on Redux's clip goes (no clip driven by both); nothing left changes key.
+            CollectionAssert.IsEmpty(p.Entries);
+            StringAssert.Contains("MODULE[2] ModuleDeployableAntenna: clip 'a' is played by Redux", string.Join("\n", p.Notes));
+        }
+
+        [Test] public void Plan_SkipModules_OwnFirstDeployableOtherSkipped_StillRemoves()
+        {
+            var p = OwnershipPlanner.Plan(new[] { Generic("a"), Heat("h") }, false, new HashSet<string>(), true, false,
+                new HashSet<string> { "ModuleAnimateHeat" });
+            Assert.IsTrue(p.RemoveReduxDeployable);
+            Assert.AreEqual("toggle:a:0", p.Entries.Single().Key);
+        }
+
+        [Test] public void Plan_SkipModules_AeroGateOfSkippedController_Dropped()
+        {
+            var modules = new[]
+            {
+                CfgText.Module("name = ModuleDeployableAntenna\nanimationName = d"),
+                CfgText.Module("name = ModuleDeployableAero\nDeployModuleIndex = 0\nDeployModulePos = 1"),
+                Heat("h"),
+            };
+            Assert.AreEqual(3, Plan(modules).Entries.Count);
+            var p = Plan(new HashSet<string> { "ModuleDeployableAntenna" }, modules);
+            Assert.AreEqual(EntryKind.Heat, p.Entries.Single().Kind);
+            StringAssert.Contains("MODULE[1] ModuleDeployableAero: controller MODULE[0] skipped by skip_modules", string.Join("\n", p.Notes));
+        }
+
         [Test] public void Plan_SkipModules_OrdinalNames() =>
             Assert.AreEqual(1, Plan(new HashSet<string>(StringComparer.Ordinal) { "moduleanimateheat" }, Generic("a"), Heat("h")).Entries.Count);
 

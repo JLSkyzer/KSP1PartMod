@@ -176,6 +176,26 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
             Assert.AreEqual(0.2f, c.Level, 1e-6f);
         }
 
+        [Test] public void ColorRamp_ScalarLinked_IgnoresSavedOnAndSavesNothing()
+        {
+            var c = Ramp();
+            c.Load(new Dictionary<string, float> { ["c.on"] = 1f });
+            Assert.AreEqual((false, 0f), (c.On, c.Level));
+            c.SetScalar(1f);
+            var into = new Dictionary<string, float>();
+            c.Save(into);
+            CollectionAssert.IsEmpty(into);
+        }
+
+        [Test] public void ColorRamp_NotLinked_StillSavesOn()
+        {
+            var c = new ColorRamp(new AnimEntryDef { Kind = EntryKind.Color, Key = "c" });
+            c.Load(new Dictionary<string, float> { ["c.on"] = 1f });
+            var into = new Dictionary<string, float>();
+            c.Save(into);
+            Assert.AreEqual((true, 1f), (c.On, into["c.on"]));
+        }
+
         [Test] public void Color_SetScalar_NaN_Zero() { var c = Ramp(); c.SetScalar(float.NaN); Assert.AreEqual((false, 0f), (c.On, c.Level)); }
     }
 }

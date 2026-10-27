@@ -176,7 +176,25 @@ namespace KSP1PartMod.Animation.Cfg
                     skipped.Add(i);
                     notes.Add($"MODULE[{i}] {name}: skipped by skip_modules");
                 }
-                entries.RemoveAll(e => skipped.Contains(e.ModuleIndex));
+                // An aero gate whose controller is skipped has nothing to follow.
+                foreach (var gate in entries.Where(e => e.Kind == EntryKind.AeroGate && !skipped.Contains(e.ModuleIndex)
+                                                        && skipped.Contains(e.ControllerModuleIndex)))
+                    notes.Add($"MODULE[{gate.ModuleIndex}] {NameOf(modules[gate.ModuleIndex])}: controller MODULE[{gate.ControllerModuleIndex}] skipped by skip_modules");
+                entries.RemoveAll(e => skipped.Contains(e.ModuleIndex)
+                                       || e.Kind == EntryKind.AeroGate && skipped.Contains(e.ControllerModuleIndex));
+                // A skip never stops an animation: own_first_deployable gives Redux's source back to Redux, and an
+                // entry of ours on the same clip goes, so that no clip is driven by both.
+                if (remove && skipped.Contains(reduxSource.Index))
+                {
+                    remove = false;
+                    reduxClips.Add(reduxSource.Clip);
+                    foreach (var e in entries.Where(e => e.Kind != EntryKind.AeroGate
+                                                         && Clips(e).Contains(reduxSource.Clip, StringComparer.OrdinalIgnoreCase)).ToList())
+                    {
+                        notes.Add($"MODULE[{e.ModuleIndex}] {NameOf(modules[e.ModuleIndex])}: clip '{reduxSource.Clip}' is played by Redux, left to Redux");
+                        entries.Remove(e);
+                    }
+                }
             }
             // FXModuleThrottleEffects: links our Color entries; never an entry itself.
             notes.AddRange(ScalarSourceParser.Apply(modules, entries, skipModules));

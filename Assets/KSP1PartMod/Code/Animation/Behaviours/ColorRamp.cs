@@ -65,17 +65,20 @@ namespace KSP1PartMod.Animation.Behaviours
             if (t != Level) SetLevel(t);
         }
 
+        /// <summary>A <see cref="AnimEntryDef.ScalarLinked"/> ramp reads nothing (spec 2a.7: its state follows the FX
+        /// setter, which restarts at 0).</summary>
         public void Load(IReadOnlyDictionary<string, float> saved)
         {
-            if (!Machine.TryRead(saved, _kOn, out var on)) return;
+            if (_scalarLinked || !Machine.TryRead(saved, _kOn, out var on)) return;
             On = Machine.Bool(on);
             SetLevel(On ? 1f : 0f);
             Changed = false;
         }
 
+        /// <summary>A <see cref="AnimEntryDef.ScalarLinked"/> ramp writes nothing.</summary>
         public void Save(IDictionary<string, float> into)
         {
-            into[_kOn] = Machine.Of(On);
+            if (!_scalarLinked) into[_kOn] = Machine.Of(On);
             Changed = false;
         }
 
