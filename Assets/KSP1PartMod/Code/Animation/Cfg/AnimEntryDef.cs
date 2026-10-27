@@ -76,5 +76,8 @@ namespace KSP1PartMod.Animation.Cfg
         /// <summary>Color with <see cref="ScalarLinked"/>: the setter's <c>dependOnEngineState</c>,
         /// <c>dependOnOutput</c> and <c>dependOnThrottle</c>.</summary>
         public bool DependOnEngineState, DependOnOutput, DependOnThrottle;
+        /// <summary>Color with <see cref="ScalarLinked"/>: the colour changer's <c>moduleID</c> the setter named (for the
+        /// log).</summary>
+        public string ModuleId;
     }
 }

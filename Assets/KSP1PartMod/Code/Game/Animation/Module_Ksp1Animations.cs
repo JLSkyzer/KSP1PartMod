@@ -181,6 +181,12 @@ namespace KSP1PartMod.Game.Animation
 
             ResolveAeroGates();
             if (_tracksWanted && !_tracksPending) BindTracks(tracks, generation, inEditor, late: false);
+            else
+            {
+                // Colour entries write through the table too: one now, replaced when the tracks bind.
+                NewChannels();
+                FinishChannels();
+            }
             AddControls(inEditor);
 
             Log($"{_name} data #{RuntimeHelpers.GetHashCode(data)} entries {data.Entries.Count} bound {_entries.Count} " +
@@ -276,6 +282,7 @@ namespace KSP1PartMod.Game.Animation
                     Log($"{_name} color '{def.ShaderProperty}' {e.Writer.Note}");
                     note = null;
                     e.Machine = e.Color = new ColorRamp(def);
+                    if (def.ScalarLinked && KSP1PartModPlugin.Animations.ThrottleEffects) LinkThrottle(e);
                     break;
                 case EntryKind.Group:
                 {
@@ -580,6 +587,8 @@ namespace KSP1PartMod.Game.Animation
         private void Drive(float dt, bool inEditor)
         {
             if (!_ready) return;
+            var diagnostics = KSP1PartModPlugin.Animations.Diagnostics;
+            var start = diagnostics ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             PollTracks(inEditor);
             for (var i = 0; i < _entries.Count; i++)
             {
@@ -596,6 +605,7 @@ namespace KSP1PartMod.Game.Animation
                 Error($"{_name} tracks of Redux's clips stopped for this session: {ex}");
             }
             SaveIfChanged();
+            if (diagnostics) ChannelFlush.NoteDrive(System.Diagnostics.Stopwatch.GetTimestamp() - start, _entries.Count);
         }
 
         private void Step(Entry e, float dt, bool inEditor, bool catchErrors)
@@ -629,7 +639,14 @@ namespace KSP1PartMod.Game.Animation
                         break;
                     }
                     case EntryKind.Color:
-                        e.Color.Tick(dt);
+                        if (e.Link != null)
+                        {
+                            // KSP1's FX setter: flight only, the editor holds 0 (ScalarLink); SetScalar every frame.
+                            var target = inEditor ? 0f : LinkTarget(e);
+                            e.Link.Tick(dt, inEditor, target);
+                            e.Color.SetScalar(e.Link.State);
+                        }
+                        else e.Color.Tick(dt);
                         e.Writer.Write(e.Color.Color);
                         break;
                     case EntryKind.Group:
@@ -997,6 +1014,10 @@ namespace KSP1PartMod.Game.Animation
             public TrackSampler[] Tracks = NoSamplers, ActiveTracks = NoSamplers;
             public bool StatesOn, ActiveOn;
             public MaterialWriter Writer;
+            /// <summary>Color: the <c>FXModuleThrottleEffects</c> state it follows (<c>throttle_effects</c>), else null.</summary>
+            public ScalarLink Link;
+            /// <summary>Color with <see cref="Link"/>: the engine's normalized output and the vessel's main throttle.</summary>
+            public Func<float> Output, MainThrottle;
             public Func<(float throttle, bool operational)> Engine;
             public Func<(float t, float max)> Temperature;
             public Func<float> Controller;

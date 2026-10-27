@@ -55,6 +55,56 @@ namespace KSP1PartMod.Game.Animation
             return true;
         }
 
+        /// <summary>Flight only: the vessel's main throttle, <c>VesselComponent.flightCtrlState.mainThrottle</c> (0..1),
+        /// reached as <c>Module_Engine.UpdateThrottle</c> does (<c>part.Model.PartOwner.SimulationObject.Vessel</c>). The
+        /// OAB has no vessel. The reader does not allocate (<c>FlightCtrlState</c> is a struct).</summary>
+        public static bool TryMainThrottle(Module_Ksp1Animations m, out Func<float> read, out string field)
+        {
+            read = null;
+            if (m.PartBackingMode != PartBehaviourModule.PartBackingModes.Flight || m.part == null)
+            {
+                field = "none in the OAB (0)";
+                return false;
+            }
+            var behavior = m.part;
+            field = "VesselComponent.flightCtrlState.mainThrottle";
+            read = () =>
+            {
+                var model = behavior == null ? null : behavior.Model;
+                var vessel = model?.PartOwner?.SimulationObject?.Vessel;
+                return vessel == null ? 0f : vessel.flightCtrlState.mainThrottle;
+            };
+            return true;
+        }
+
+        /// <summary>The engine's normalized output, KSP1's <c>normalizedOutput</c>: <c>Data_Engine.FinalThrustValue</c> (kN,
+        /// 0 when stopped) over the active mode's <c>maxThrust</c>, from the engine <see cref="TryEngine"/> would pick.
+        /// False with no <c>Module_Engine</c> or no <c>Data_Engine</c>: the caller then reads the throttle.</summary>
+        public static bool TryEngineOutput(Module_Ksp1Animations m, string engineName, out Func<float> read, out string field)
+        {
+            read = null;
+            field = "none";
+            var engines = m.GetComponents<Module_Engine>();
+            if (engines == null || engines.Length == 0) return false;
+            Module_Engine engine = null;
+            foreach (var candidate in engines)
+                if (candidate != null && EngineInput.HasMode(engineName, ModeIds(candidate)))
+                {
+                    engine = candidate;
+                    break;
+                }
+            if (engine == null) engine = engines.FirstOrDefault(e => e != null);
+            if (engine == null || !engine.DataModules.TryGetByType<Data_Engine>(out var de) || de == null) return false;
+            var d = de;
+            field = "Data_Engine.FinalThrustValue / maxThrust";
+            read = () =>
+            {
+                var max = d.currentEngineModeData?.maxThrust ?? 0f;
+                return max > 0f ? d.FinalThrustValue / max : 0f;
+            };
+            return true;
+        }
+
         /// <summary>Flight only: <c>PartComponent.Temperature</c> and <c>PartComponent.MaxTemp</c>, in kelvin. The OAB
         /// has no thermal simulation.</summary>
         public static bool TryTemperature(Module_Ksp1Animations m, out Func<(float t, float max)> read, out string field)

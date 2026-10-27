@@ -135,6 +135,10 @@ namespace KSP1PartMod.Tests.Animation.Cfg
         [Test] public void Parse_FxSetter_UnknownName_NoteText() =>
             Assert.AreEqual("MODULE[0] FXModuleThrottleEffects names 'zzz', no colour changer of ours", Plan(Fx("zzz")).Notes.Single());
 
+        [Test] public void Parse_FxSetter_KeepsModuleId() =>
+            CollectionAssert.AreEquivalent(new[] { "a", "b" },
+                Plan(Color(id: "a"), Color(id: "b"), Fx("a, b")).Entries.Select(e => e.ModuleId).ToArray());
+
         [Test] public void Parse_FxSetter_DefaultResponse_0_5() => Assert.AreEqual(0.5f, Plan(Color(id: "a"), Fx("a")).Entries.Single().ScalarResponse);
 
         [Test] public void Parse_FxSetter_OtherThrottleEffectsName_Links() =>

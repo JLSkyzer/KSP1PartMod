@@ -30,7 +30,7 @@ namespace KSP1PartMod.Animation.Cfg
                     foreach (var e in entries)
                     {
                         if (e.Kind != EntryKind.Color || !id.Equals(ModuleIdOf(modules, e), StringComparison.Ordinal)) continue;
-                        Link(e, setter);
+                        Link(e, setter, id);
                         linked = true;
                     }
                     if (!linked) notes.Add($"MODULE[{i}] {name} names '{id}', no colour changer of ours");
@@ -50,8 +50,9 @@ namespace KSP1PartMod.Animation.Cfg
         private static string ModuleIdOf(IReadOnlyList<IKsp1Node> modules, AnimEntryDef e) =>
             e.ModuleIndex >= 0 && e.ModuleIndex < modules.Count ? modules[e.ModuleIndex]?.GetValue("moduleID")?.Trim() : null;
 
-        private static void Link(AnimEntryDef e, IKsp1Node setter)
+        private static void Link(AnimEntryDef e, IKsp1Node setter, string id)
         {
+            e.ModuleId = id;
             e.ScalarLinked = true;
             e.ScalarResponse = Float(setter, "responseSpeed", 0.5f);
             e.DependOnEngineState = Bool(setter, "dependOnEngineState");

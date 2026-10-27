@@ -193,6 +193,48 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             Assert.AreEqual(0, Sink.Begins);
         }
 
+        /// <summary>Turned on later (a ReentryMesh hull became active): every flush rewrites the target.</summary>
+        [Test] public void ChannelTable_SetRewriteEveryFrame_On_RewritesEachFlush()
+        {
+            var c = Reg(t, WriterClass.Track, 0);
+            t.Submit(c, V(1));
+            t.Flush(Sink);
+            t.SetRewriteEveryFrame(Renderer, true);
+            Sink.Clear();
+            t.Flush(Sink);
+            t.Flush(Sink);
+            Assert.AreEqual((2, 2), (Sink.Begins, Sink.Writes));
+        }
+
+        /// <summary>Turned off (the hull went inactive): one more full rewrite, then only on change.</summary>
+        [Test] public void ChannelTable_SetRewriteEveryFrame_Off_OneMoreRewrite()
+        {
+            var r = t.AddTarget(TargetKind.Renderer, rewriteEveryFrame: true, excluded: false);
+            var a = Reg(t, WriterClass.Track, 0, property: 1, target: r);
+            var b = Reg(t, WriterClass.Track, 0, property: 2, target: r);
+            t.Submit(a, V(1));
+            t.Submit(b, V(2));
+            t.Flush(Sink);
+            t.SetRewriteEveryFrame(r, false);
+            Sink.Clear();
+            t.Flush(Sink);
+            Assert.AreEqual((1, 2), (Sink.Begins, Sink.Writes));
+            Sink.Clear();
+            t.Flush(Sink);
+            Assert.AreEqual(0, Sink.Begins);
+        }
+
+        [Test] public void ChannelTable_SetRewriteEveryFrame_Unchanged_NoExtraRewrite()
+        {
+            var c = Reg(t, WriterClass.Track, 0);
+            t.Submit(c, V(1));
+            t.Flush(Sink);
+            t.SetRewriteEveryFrame(Renderer, false);
+            Sink.Clear();
+            t.Flush(Sink);
+            Assert.AreEqual(0, Sink.Begins);
+        }
+
         [Test] public void ChannelTable_ExcludedTarget_NeverWritten()
         {
             var r = t.AddTarget(TargetKind.Renderer, rewriteEveryFrame: true, excluded: true);

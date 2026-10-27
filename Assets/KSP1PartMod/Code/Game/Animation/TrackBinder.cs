@@ -153,7 +153,7 @@ namespace KSP1PartMod.Game.Animation
             var id = Shader.PropertyToID(name);
             var type = MaterialType(track.Kind);
             var rest = MaterialRest(material, id, type);
-            var t = sink.AddRenderer(r, s, out _);
+            var t = sink.AddRenderer(r, s, out _, name);
             var channel = table.Register(t, id, type, WriterClass.Track, moduleIndex, rest);
             renderers.Add(r);
             props.Add(name);

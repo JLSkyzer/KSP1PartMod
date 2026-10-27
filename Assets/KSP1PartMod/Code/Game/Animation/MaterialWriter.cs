@@ -4,22 +4,27 @@ using KSP1PartMod.Animation.Behaviours;
 using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.Settings;
+using KSP1PartMod.Animation.Tracks;
 using UnityEngine;
 
 namespace KSP1PartMod.Game.Animation
 {
-    /// <summary>Writes a Color entry's colour to the part's renderers, as KSP1's ModuleColorChanger does: renderers
-    /// selected by <c>includedRenderer</c> / <c>excludedRenderer</c>, the colour set through a
-    /// <c>MaterialPropertyBlock</c> (read first, so other values in the block stay). The KSP1 property name goes
-    /// through <c>shader_property_map</c>: per renderer, the first candidate its material has. Each shader met is
-    /// logged once with its property names, because the emissive property of Redux's shaders is not known.</summary>
+    /// <summary>A Color entry's writer in the part's <see cref="ChannelTable"/>, as KSP1's ModuleColorChanger: renderers
+    /// selected by <c>includedRenderer</c> / <c>excludedRenderer</c>, the KSP1 property name through
+    /// <c>shader_property_map</c> (per renderer, the first candidate its material has). Its channels are of the Color
+    /// class, which beats clip tracks; <see cref="Write"/> submits, and the table's flush writes the property block after
+    /// the game's writers. Each shader met is logged once with its property names.</summary>
     internal sealed class MaterialWriter
     {
         private static readonly HashSet<string> LoggedShaders = new HashSet<string>();
 
         private readonly List<Renderer> _renderers = new List<Renderer>();
         private readonly List<int> _propertyIds = new List<int>();
-        private readonly MaterialPropertyBlock _block = new MaterialPropertyBlock();
+        private readonly List<string> _propertyNames = new List<string>();
+        private readonly AnimEntryDef _def;
+        private readonly AnimationSettings _settings;
+        private ChannelTable _table;
+        private int[] _channels = new int[0];
 
         /// <summary>Renderers written to.</summary>
         public int RendererCount => _renderers.Count;
@@ -29,6 +34,8 @@ namespace KSP1PartMod.Game.Animation
 
         public MaterialWriter(GameObject partRoot, AnimEntryDef e, AnimationSettings s)
         {
+            _def = e;
+            _settings = s;
             var candidates = MaterialRules.Candidates(e.ShaderProperty, s?.ShaderPropertyMap);
             var used = new SortedSet<string>(System.StringComparer.Ordinal);
             var selected = 0;
@@ -43,6 +50,7 @@ namespace KSP1PartMod.Game.Animation
                 if (name == null) continue;
                 _renderers.Add(r);
                 _propertyIds.Add(Shader.PropertyToID(name));
+                _propertyNames.Add(name);
                 used.Add(name);
             }
             Note = _renderers.Count > 0
@@ -50,18 +58,40 @@ namespace KSP1PartMod.Game.Animation
                 : $"no renderer of {selected} selected has any of [{string.Join(", ", candidates)}] (shader_property_map in animations.json)";
         }
 
-        /// <summary>No allocation.</summary>
-        public void Write(Rgba c)
+        /// <summary>One Color-class channel per selected renderer in <paramref name="table"/> (a new table on each bind
+        /// of the part), ranked by the entry's KSP1 module index. A renderer whose property is already registered with
+        /// another value type is skipped.</summary>
+        public void Register(ChannelTable table, RendererChannels sink)
         {
-            var color = new Color(c.R, c.G, c.B, c.A);
+            _table = table;
+            var channels = new List<int>();
             for (var i = 0; i < _renderers.Count; i++)
             {
                 var r = _renderers[i];
                 if (r == null) continue;
-                r.GetPropertyBlock(_block);
-                _block.SetColor(_propertyIds[i], color);
-                r.SetPropertyBlock(_block);
+                var material = r.sharedMaterial;
+                var rest = material != null ? material.GetColor(_propertyIds[i]) : Color.black;
+                var target = sink.AddRenderer(r, _settings, out _, _propertyNames[i]);
+                try
+                {
+                    channels.Add(table.Register(target, _propertyIds[i], ChannelValueType.Color, WriterClass.Color, _def.ModuleIndex,
+                        new Value4(rest.r, rest.g, rest.b, rest.a)));
+                }
+                catch (System.ArgumentException)
+                {
+                    // the slot holds another value type: not ours to write
+                }
             }
+            _channels = channels.ToArray();
+        }
+
+        /// <summary>Submits the colour on every channel; the flush writes it. No allocation.</summary>
+        public void Write(Rgba c)
+        {
+            var table = _table;
+            if (table == null) return;
+            var v = new Value4(c.R, c.G, c.B, c.A);
+            for (var i = 0; i < _channels.Length; i++) table.Submit(_channels[i], v);
         }
 
         private static void LogShader(Shader shader)

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using KSP.Modules;
+using KSP.VFX.Reentry;
 using KSP1PartMod.Animation.Behaviours;
 using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Runtime;
@@ -17,6 +19,12 @@ namespace KSP1PartMod.Game.Animation
     {
         /// <summary>(part, clip) pairs already logged as having no owner: once per part type and session.</summary>
         private static readonly HashSet<string> LoggedNoOwner = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>(part, scene) pairs whose shader set was logged; parts whose reentry watch was logged.</summary>
+        private static readonly HashSet<string> LoggedShaders = new HashSet<string>(StringComparer.Ordinal);
+        private static readonly HashSet<string> LoggedReentry = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>Main-throttle fields already logged (<c>throttle from …</c>), and the <c>output read as throttle</c> line.</summary>
+        private static readonly HashSet<string> LoggedThrottleFields = new HashSet<string>(StringComparer.Ordinal);
+        private static bool _loggedOutputAsThrottle;
 
         // Tracks (spec 2a.3 / 2a.4). Bound when the TrackCache generation of the current load is ready: at Setup, or on
         // the first Drive after it (one volatile read per frame while pending); rebound when the generation changes.
@@ -42,8 +50,7 @@ namespace KSP1PartMod.Game.Animation
             _tracksWanted = false;
             _tracksPending = false;
             _tracksGeneration = -1;
-            _table = null;
-            _sink = null;
+            ReleaseChannels();
             _transforms = null;
         }
 
@@ -59,12 +66,16 @@ namespace KSP1PartMod.Game.Animation
             _tracksGeneration = generation;
             foreach (var e in _entries) e.Tracks = e.ActiveTracks = NoSamplers;
             _reduxTracks.Clear();
-            _table = new ChannelTable();
-            _sink = new RendererChannels(_table);
+            NewChannels();
             if (tracks != null && tracks.Failed) tracks = null; // logged by the worker; phase 1 for this part
 
             if (late) RetryUnbound(tracks, inEditor);
-            if (tracks == null || tracks.Sets.Count == 0) return;
+            if (tracks != null && tracks.Sets.Count > 0) BindSetsOfPart(tracks);
+            FinishChannels();
+        }
+
+        private void BindSetsOfPart(PartTracks tracks)
+        {
             try
             {
                 if (_transforms == null) _transforms = new PartTransforms(gameObject.transform);
@@ -107,6 +118,7 @@ namespace KSP1PartMod.Game.Animation
                         continue;
                     }
                     _entries.Add(e);
+                    e.Writer?.Register(_table, _sink);
                     if (ControlLabels.HasAction(def.Kind))
                     {
                         int buttons = 0, actions = 0;
@@ -257,6 +269,138 @@ namespace KSP1PartMod.Game.Animation
             foreach (var n in names)
                 if (string.Equals(n, clip, StringComparison.Ordinal)) return true;
             return false;
+        }
+
+        // ---------------------------------------------------------------- channels
+
+        /// <summary>A fresh table and sink for the part (Setup, or a rebind on a new TrackCache generation): the old ones
+        /// leave the flush and release their material copies first, so nothing is flushed twice or leaks. The colour
+        /// entries register their channels again.</summary>
+        private void NewChannels()
+        {
+            ReleaseChannels();
+            _table = new ChannelTable();
+            _sink = new RendererChannels(_table, _name, gameObject.transform);
+            foreach (var e in _entries)
+            {
+                if (e.Disabled || e.Writer == null) continue;
+                try
+                {
+                    e.Writer.Register(_table, _sink);
+                }
+                catch (Exception ex)
+                {
+                    Disable(e, ex);
+                }
+            }
+            ChannelFlush.Register(_table, _sink);
+        }
+
+        /// <summary>Once every writer is registered: the reentry hulls to follow, and the shader set of the part type.</summary>
+        private void FinishChannels()
+        {
+            try
+            {
+                WatchReentry();
+                var key = _name + "|" + PartBackingMode;
+                if (_sink.Shaders.Count > 0 && LoggedShaders.Add(key))
+                    Log($"{_name} shaders: [{string.Join(", ", _sink.Shaders)}]");
+            }
+            catch (Exception ex)
+            {
+                Error($"{_name} channel setup failed: {ex}");
+            }
+        }
+
+        /// <summary>Out of the flush, material copies destroyed (shutdown, or before a new table).</summary>
+        private void ReleaseChannels()
+        {
+            if (_table != null) ChannelFlush.Unregister(_table);
+            try
+            {
+                _sink?.ReleaseAll();
+            }
+            catch (Exception ex)
+            {
+                Error($"{_name} releasing material copies failed: {ex}");
+            }
+            _table = null;
+            _sink = null;
+        }
+
+        /// <summary><see cref="WriterPolicy.ReentryMesh"/>: the source renderers we write of each <c>ReentryMesh</c> hull of
+        /// the part are rewritten every frame while that hull is active (flight reentry only).</summary>
+        private void WatchReentry()
+        {
+            if (WriterPolicy.For(WriterPolicy.ReentryMesh) != WriterDecision.EveryFrame || _sink.RendererCount == 0) return;
+            var watched = 0;
+            foreach (var mesh in GetComponentsInChildren<ReentryMesh>(true))
+            {
+                var group = mesh == null ? null : mesh.ReentryGroupData;
+                if (group == null) continue;
+                if (group.Sources != null)
+                    foreach (var source in group.Sources)
+                        if (source != null && Watch(source.Renderer, mesh.gameObject)) watched++;
+                if (group.SkinnedMeshSources != null)
+                    foreach (var skinned in group.SkinnedMeshSources)
+                        if (Watch(skinned, mesh.gameObject)) watched++;
+            }
+            if (watched > 0 && LoggedReentry.Add(_name))
+                Log($"{_name} {watched} renderer(s) rewritten every frame while their reentry hull is active");
+        }
+
+        private bool Watch(Renderer r, GameObject hull)
+        {
+            if (r == null || !_sink.TryGetTarget(r, out var target)) return false;
+            _sink.WatchActive(target, hull);
+            return true;
+        }
+
+        // ---------------------------------------------------------------- FX throttle links (spec 2a.7)
+
+        /// <summary>A Color entry named by an <c>FXModuleThrottleEffects</c>: its state follows the setter's input, read
+        /// from the engine (<c>dependOnThrottle</c> / <c>dependOnOutput</c> / <c>dependOnEngineState</c>), else from the
+        /// vessel's main throttle.</summary>
+        private void LinkThrottle(Entry e)
+        {
+            var def = e.Def;
+            e.Link = new ScalarLink(def);
+            var input = new List<string>();
+            string engineField = null;
+            if (def.DependOnThrottle || def.DependOnOutput || def.DependOnEngineState)
+                GameInputs.TryEngine(this, def.EngineName, out e.Engine, out engineField);
+            if (def.DependOnOutput)
+            {
+                if (GameInputs.TryEngineOutput(this, def.EngineName, out e.Output, out var outputField)) input.Add("output from " + outputField);
+                else
+                {
+                    input.Add("output read as throttle from " + engineField);
+                    if (!_loggedOutputAsThrottle)
+                    {
+                        _loggedOutputAsThrottle = true;
+                        Log("output read as throttle");
+                    }
+                }
+            }
+            else if (def.DependOnThrottle) input.Add("throttle from " + engineField);
+            else
+            {
+                GameInputs.TryMainThrottle(this, out e.MainThrottle, out var mainField);
+                input.Add("main throttle from " + mainField);
+                if (LoggedThrottleFields.Add(mainField)) Log($"throttle from {mainField}");
+            }
+            if (def.DependOnEngineState) input.Add("engine state from " + engineField);
+            Log($"{_name} color '{def.ModuleId ?? def.ShaderProperty}' follows FXModuleThrottleEffects ({string.Join("; ", input)}, " +
+                $"response {def.ScalarResponse.ToString("0.###", CultureInfo.InvariantCulture)})");
+        }
+
+        /// <summary><see cref="ScalarLink.Target"/> from this frame's inputs. Allocation-free.</summary>
+        private static float LinkTarget(Entry e)
+        {
+            var (throttle, operational) = e.Engine != null ? e.Engine() : (0f, true);
+            var output = e.Output != null ? e.Output() : throttle;
+            var main = e.MainThrottle != null ? e.MainThrottle() : 0f;
+            return ScalarLink.Target(e.Def, throttle, output, main, operational);
         }
 
         /// <summary>Per frame: re-binds when the cache generation changed or became ready (one volatile read of the

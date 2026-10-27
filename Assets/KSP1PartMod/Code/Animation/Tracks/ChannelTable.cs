@@ -57,6 +57,8 @@ namespace KSP1PartMod.Animation.Tracks
         {
             public TargetKind Kind;
             public bool RewriteEveryFrame, Excluded, Dirty;
+            /// <summary>Rewrite all shown slots at the next flush (rewriteEveryFrame was just turned off).</summary>
+            public bool RewriteOnce;
             /// <summary>First slot of the target, then <see cref="Slot.NextInTarget"/>; -1 ends the list.</summary>
             public int FirstSlot, LastSlot;
         }
@@ -145,7 +147,8 @@ namespace KSP1PartMod.Animation.Tracks
             for (var t = 0; t < _targetCount; t++)
             {
                 ref var target = ref _targets[t];
-                var every = target.RewriteEveryFrame;
+                var every = target.RewriteEveryFrame || target.RewriteOnce;
+                target.RewriteOnce = false;
                 if (target.Excluded || (!target.Dirty && !every))
                 {
                     target.Dirty = false;
@@ -170,6 +173,19 @@ namespace KSP1PartMod.Animation.Tracks
                 if (begun) sink.End(t, target.Kind);
             }
             WritesLastFlush = writes;
+        }
+
+        /// <summary>Turns <c>rewriteEveryFrame</c> on or off after <see cref="AddTarget"/> (a renderer whose block another
+        /// writer replaces only while that writer runs, such as a <c>ReentryMesh</c> source while its hull is active).
+        /// Turning it off makes the next <see cref="Flush"/> rewrite the target once more: the other writer's last block
+        /// stays on the renderer.</summary>
+        public void SetRewriteEveryFrame(int target, bool on)
+        {
+            if (target < 0 || target >= _targetCount) throw new System.ArgumentOutOfRangeException(nameof(target));
+            ref var t = ref _targets[target];
+            if (t.RewriteEveryFrame == on) return;
+            t.RewriteEveryFrame = on;
+            if (!on) t.RewriteOnce = true;
         }
 
         public void ResetCounts() => SubmitCount = 0;
