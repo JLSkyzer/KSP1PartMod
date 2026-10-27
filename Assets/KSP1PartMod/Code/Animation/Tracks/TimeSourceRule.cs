@@ -92,3 +92,41 @@ namespace KSP1PartMod.Animation.Tracks
                      : (hasTracks ? BindMode.TracksOnly : BindMode.NotBound);
     }
 }
+
+namespace KSP1PartMod.Animation.Tracks
+{
+    /// <summary>The pose of a clip that Redux's legacy runtime (<c>Ksp1DeployableAnimationRuntime</c>) plays. While a
+    /// state is enabled (moving), its own time and weight. Once disabled, the runtime's <c>NormalizedTime</c> at full
+    /// weight: its <c>Sample</c> (at <c>OnEnable</c>, at the end of a move, and for the instant sets of
+    /// <c>Ksp1Module_Deployable</c>) poses the transforms and then disables the states (decompiled, 26w42c), so the
+    /// tracks must hold that pose too.</summary>
+    public static class ReduxTrackPose
+    {
+        public static Behaviours.ClipPose For(bool stateEnabled, float stateTime, float stateWeight, float runtimeTime) =>
+            stateEnabled
+                ? new Behaviours.ClipPose(stateTime, 0f, stateWeight, true)
+                : new Behaviours.ClipPose(runtimeTime, 0f, 1f, true);
+
+        /// <summary>A clip without a state: the runtime's time, full weight.</summary>
+        public static Behaviours.ClipPose For(float runtimeTime) => new Behaviours.ClipPose(runtimeTime, 0f, 1f, true);
+    }
+
+    public enum TrackBindTime
+    {
+        /// <summary>No load has begun a track generation: there will be no tracks (the phase 1 behaviour, at once).</summary>
+        Never,
+        /// <summary>The current generation is ready: bind now.</summary>
+        Now,
+        /// <summary>A generation is being built: bind on the first frame it is ready.</summary>
+        Pending,
+    }
+
+    /// <summary>When a part instance binds its tracks. Generation 0 means no load step ran (the main menu, or a session
+    /// in which our load step never started): waiting would never end, and entries queued for a tracks-only retry would
+    /// never log their phase 1 line.</summary>
+    public static class TrackBindTiming
+    {
+        public static TrackBindTime For(int generation, bool ready) =>
+            generation <= 0 ? TrackBindTime.Never : ready ? TrackBindTime.Now : TrackBindTime.Pending;
+    }
+}
