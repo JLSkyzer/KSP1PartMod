@@ -587,8 +587,8 @@ namespace KSP1PartMod.Game.Animation
         private void Drive(float dt, bool inEditor)
         {
             if (!_ready) return;
-            var diagnostics = KSP1PartModPlugin.Animations.Diagnostics;
-            var start = diagnostics ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            var perf = KSP1PartModPlugin.Animations.PerfCounter;
+            var start = perf ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             PollTracks(inEditor);
             for (var i = 0; i < _entries.Count; i++)
             {
@@ -605,7 +605,7 @@ namespace KSP1PartMod.Game.Animation
                 Error($"{_name} tracks of Redux's clips stopped for this session: {ex}");
             }
             SaveIfChanged();
-            if (diagnostics) ChannelFlush.NoteDrive(System.Diagnostics.Stopwatch.GetTimestamp() - start, _entries.Count);
+            if (perf) ChannelFlush.NoteDrive(System.Diagnostics.Stopwatch.GetTimestamp() - start, _entries.Count);
         }
 
         private void Step(Entry e, float dt, bool inEditor, bool catchErrors)

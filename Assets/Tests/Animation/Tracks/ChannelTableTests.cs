@@ -235,6 +235,23 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             Assert.AreEqual(0, Sink.Begins);
         }
 
+        [Test] public void ChannelTable_FlushRewriteAll_WritesCleanTargets_NotExcludedOrUnsubmitted()
+        {
+            var c = Reg(t, WriterClass.Track, 0);
+            Reg(t, WriterClass.Track, 0, property: 2);
+            var ex = t.AddTarget(TargetKind.Renderer, false, excluded: true);
+            var e = Reg(t, WriterClass.Track, 0, target: ex);
+            t.Submit(c, V(1));
+            t.Submit(e, V(1));
+            t.Flush(Sink);
+            Sink.Clear();
+            t.Flush(Sink, rewriteAll: true);
+            Assert.AreEqual((1, 1), (Sink.Begins, Sink.Writes));
+            Sink.Clear();
+            t.Flush(Sink);
+            Assert.AreEqual(0, Sink.Begins, "a plain flush after it writes nothing");
+        }
+
         [Test] public void ChannelTable_ExcludedTarget_NeverWritten()
         {
             var r = t.AddTarget(TargetKind.Renderer, rewriteEveryFrame: true, excluded: true);

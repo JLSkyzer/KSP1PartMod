@@ -45,6 +45,9 @@ namespace KSP1PartMod.Animation.Settings
         public bool ThrottleEffects => _switches2a.ThrottleEffects;
         /// <summary>Heat entries and their tracks (<c>heat_glow</c>).</summary>
         public bool HeatGlow => _switches2a.HeatGlow;
+        /// <summary>Opt-in cost counter (<c>perf_counter</c>, default false): times every <c>Drive</c> and the channel flush
+        /// and logs <c>anim: perf: …</c> every 60 s.</summary>
+        public bool PerfCounter => _switches2a.PerfCounter;
         /// <summary>KSP1 module names never taken (<c>skip_modules</c>), trimmed, distinct, ordinal.</summary>
         public IReadOnlyCollection<string> SkipModules => _switches2a.SkipModules;
 
@@ -52,6 +55,7 @@ namespace KSP1PartMod.Animation.Settings
         private sealed class Switches2a
         {
             public bool MaterialCurves = true, LightCurves = true, EmissionSetup = true, ThrottleEffects = true, HeatGlow = true;
+            public bool PerfCounter;
             public IReadOnlyCollection<string> SkipModules = NoModules;
         }
 
@@ -130,6 +134,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "emission_setup": ReadBool(p, ref s2a.EmissionSetup, problems); break;
                         case "throttle_effects": ReadBool(p, ref s2a.ThrottleEffects, problems); break;
                         case "heat_glow": ReadBool(p, ref s2a.HeatGlow, problems); break;
+                        case "perf_counter": ReadBool(p, ref s2a.PerfCounter, problems); break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:

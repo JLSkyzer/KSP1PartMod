@@ -141,13 +141,17 @@ namespace KSP1PartMod.Animation.Tracks
             _targets[s.Target].Dirty = true;
         }
 
-        public void Flush(IChannelSink sink)
+        public void Flush(IChannelSink sink) => Flush(sink, false);
+
+        /// <summary><paramref name="rewriteAll"/>: every target not excluded writes all its shown slots, dirty or not
+        /// (the render-time fallback, when another writer replaced our block after our flush).</summary>
+        public void Flush(IChannelSink sink, bool rewriteAll)
         {
             var writes = 0;
             for (var t = 0; t < _targetCount; t++)
             {
                 ref var target = ref _targets[t];
-                var every = target.RewriteEveryFrame || target.RewriteOnce;
+                var every = rewriteAll || target.RewriteEveryFrame || target.RewriteOnce;
                 target.RewriteOnce = false;
                 if (target.Excluded || (!target.Dirty && !every))
                 {

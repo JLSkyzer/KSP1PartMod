@@ -369,6 +369,7 @@ namespace KSP1PartMod.Game.Animation
             string engineField = null;
             if (def.DependOnThrottle || def.DependOnOutput || def.DependOnEngineState)
                 GameInputs.TryEngine(this, def.EngineName, out e.Engine, out engineField);
+            engineField ??= "none";
             if (def.DependOnOutput)
             {
                 if (GameInputs.TryEngineOutput(this, def.EngineName, out e.Output, out var outputField)) input.Add("output from " + outputField);

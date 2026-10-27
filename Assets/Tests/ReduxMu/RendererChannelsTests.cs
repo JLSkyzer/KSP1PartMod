@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Animation.Tracks;
 using KSP1PartMod.Game.Animation;
@@ -59,11 +60,16 @@ namespace KSP1PartMod.Tests.ReduxMu
             return m;
         }
 
-        /// <summary>Also ignores Unity's edit-mode message on <c>renderer.materials</c> ("Instantiating material due to
-        /// calling renderer.material during edit mode"): it is reset for each test, so it is set in the test body.</summary>
+        /// <summary>Unity's edit-mode error for each material that <c>renderer.materials</c> instances (in play mode there
+        /// is no such message).</summary>
+        private static void ExpectInstancing(int materials)
+        {
+            for (var i = 0; i < materials; i++)
+                LogAssert.Expect(LogType.Error, new Regex(@"^Instantiating material due to calling renderer\.material during edit mode"));
+        }
+
         private MeshRenderer Renderer(bool keywordOn = true, params Material[] materials)
         {
-            LogAssert.ignoreFailingMessages = true;
             var go = new GameObject("r");
             _made.Add(go);
             var r = go.AddComponent<MeshRenderer>();
@@ -115,6 +121,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         {
             var r = Renderer(keywordOn: false);
             var shared = r.sharedMaterial;
+            ExpectInstancing(1);
             Sink.AddRenderer(r, Defaults, out _);
             Assert.AreNotSame(shared, r.sharedMaterial);
             Assert.IsTrue(r.sharedMaterial.IsKeywordEnabled("_EMISSION"));
@@ -142,6 +149,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             var shared = r.sharedMaterial;
             Sink.AddRenderer(r, Defaults, out _, "_BaseColor");
             Assert.AreSame(shared, r.sharedMaterial);
+            ExpectInstancing(1);
             Sink.AddRenderer(r, Defaults, out _, Emission);
             Assert.AreEqual(1, Sink.CopiesOf(r), "an emission channel added later still decides at bind");
         }
@@ -160,6 +168,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         {
             var r = Renderer(keywordOn: false);
             var shared = r.sharedMaterial;
+            ExpectInstancing(1);
             Sink.AddRenderer(r, Defaults, out _);
             var copy = r.sharedMaterial;
             Sink.ReleaseAll();
@@ -171,6 +180,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         [Test] public void Sink_MaterialSwapped_RebindsAndReleasesOldCopy()
         {
             var r = Renderer(keywordOn: false);
+            ExpectInstancing(1);
             var c = Channel(r);
             var oldCopy = r.sharedMaterial;
             var other = Mat(keywordOn: true);
@@ -199,6 +209,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         [Test] public void Sink_TwoMaterials_DecidedPerMaterial()
         {
             var r = Renderer(true, Mat(keywordOn: false), Plain());
+            ExpectInstancing(2);
             Sink.AddRenderer(r, Defaults, out var note);
             Assert.AreEqual(1, Sink.CopiesOf(r));
             StringAssert.Contains("2 material(s)", note);
@@ -287,9 +298,44 @@ namespace KSP1PartMod.Tests.ReduxMu
             }
         }
 
+        /// <summary>After a failed mpb check another writer replaced our block after the LateUpdate flush: the render-time
+        /// flush writes every written target again, not only those rewritten every frame, and the checked one becomes
+        /// an every-frame target.</summary>
+        [Test] public void Flush_FailedCheck_RenderTimeRewritesEveryWrittenTarget()
+        {
+            var checkedR = Renderer();
+            var other = Renderer();
+            var a = Channel(checkedR);
+            var b = Channel(other);
+            Table.Submit(a, V(Color.red));
+            Table.Submit(b, V(Color.green));
+            Flush();
+            Sink.TryGetTarget(checkedR, out var checkedTarget);
+            try
+            {
+                ChannelFlush.EnableRenderTimeFlush("test", Table, checkedTarget);
+                var empty = new MaterialPropertyBlock();
+                checkedR.SetPropertyBlock(empty); // the other writer replaces the blocks after our LateUpdate
+                other.SetPropertyBlock(empty);
+                ChannelFlush.FlushAtRender();
+                var block = new MaterialPropertyBlock();
+                checkedR.GetPropertyBlock(block);
+                Assert.AreEqual(Color.red, block.GetColor(Emission));
+                other.GetPropertyBlock(block);
+                Assert.AreEqual(Color.green, block.GetColor(Emission), "a target not rewritten every frame");
+                ChannelFlush.FlushAll();
+                Assert.AreEqual(1, Table.WritesLastFlush, "the checked target is now rewritten every frame");
+            }
+            finally
+            {
+                ChannelFlush.DisableRenderTimeFlush();
+            }
+        }
+
         [Test] public void Flush_10000Frames_NoGcAlloc()
         {
             var r = Renderer(keywordOn: false);
+            ExpectInstancing(1);
             var c = Channel(r);
             var go = new GameObject("l");
             _made.Add(go);

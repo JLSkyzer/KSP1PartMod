@@ -132,11 +132,23 @@ namespace KSP1PartMod.Tests.Animation.Settings
         [Test] public void Settings_ShippedFile_DocumentsEveryNewKey()
         {
             var text = File.ReadAllText(ShippedPath);
-            foreach (var key in new[] { "material_curves", "light_curves", "emission_setup", "throttle_effects", "heat_glow", "skip_modules" })
+            foreach (var key in new[] { "material_curves", "light_curves", "emission_setup", "throttle_effects", "heat_glow", "skip_modules", "perf_counter" })
             {
                 StringAssert.Contains($"\"{key}\":", text);
                 StringAssert.Contains($"{key}:", text.Substring(0, text.IndexOf("\"enabled\"", System.StringComparison.Ordinal)), key + " in _note");
             }
+        }
+
+        [Test] public void Settings_PerfCounter_DefaultFalseReadWrongTypeKeepsDefault()
+        {
+            Assert.IsFalse(AnimationSettings.Defaults.PerfCounter);
+            Assert.IsFalse(AnimationSettings.Parse(File.ReadAllText(ShippedPath), out _).PerfCounter, "shipped off");
+            var s = AnimationSettings.Parse("{\"perf_counter\": true}", out var e);
+            Assert.IsNull(e);
+            Assert.IsTrue(s.PerfCounter);
+            var bad = AnimationSettings.Parse("{\"perf_counter\": \"yes\"}", out var e2);
+            Assert.IsFalse(bad.PerfCounter);
+            StringAssert.Contains("perf_counter", e2);
         }
 
         [Test] public void Settings_Switches_AreRead()

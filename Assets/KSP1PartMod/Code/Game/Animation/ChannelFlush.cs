@@ -66,14 +66,22 @@ namespace KSP1PartMod.Game.Animation
         /// whose flush throws, is dropped (the throw logged once with its stack).</summary>
         internal static void FlushAll()
         {
-            var diagnostics = KSP1PartModPlugin.Animations?.Diagnostics ?? false;
-            var start = diagnostics ? Stopwatch.GetTimestamp() : 0L;
+            var perf = KSP1PartModPlugin.Animations?.PerfCounter ?? false;
+            var start = perf ? Stopwatch.GetTimestamp() : 0L;
             var writes = 0;
             for (var i = 0; i < _count; i++)
             {
                 var sink = _sinks[i];
                 if (sink.Orphaned)
                 {
+                    try
+                    {
+                        sink.ReleaseAll(); // the part is gone: its material copies go too
+                    }
+                    catch (Exception e)
+                    {
+                        KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: releasing the copies of a removed part failed: {e}");
+                    }
                     RemoveAt(i--);
                     continue;
                 }
@@ -89,7 +97,7 @@ namespace KSP1PartMod.Game.Animation
                     RemoveAt(i--);
                 }
             }
-            if (!diagnostics) return;
+            if (!perf) return;
             var now = Stopwatch.GetTimestamp();
             if (_perf == null)
             {
@@ -102,25 +110,38 @@ namespace KSP1PartMod.Game.Animation
             if (_perf.TryReport(now, out var line)) KSP1PartModPlugin.Log?.LogInfo(line);
         }
 
-        /// <summary>Fallback of the spec's flush order: flush again from <c>RenderPipelineManager.beginContextRendering</c>,
-        /// which runs after every <c>LateUpdate</c>. Turned on, for the session, by an <c>mpb check</c> that read another
-        /// value than ours.</summary>
-        public static void EnableRenderTimeFlush(string part)
+        /// <summary>Fallback of the spec's flush order, after an <c>mpb check</c> read another value than ours (another
+        /// writer replaced the block after our <c>LateUpdate</c>): the checked target is rewritten every frame, and, for
+        /// the session, every table rewrites all its written targets again from
+        /// <c>RenderPipelineManager.beginContextRendering</c>, which runs after every <c>LateUpdate</c>.</summary>
+        public static void EnableRenderTimeFlush(string part, ChannelTable table, int target)
         {
+            table?.SetRewriteEveryFrame(target, true);
             if (_renderTimeFlush) return;
             _renderTimeFlush = true;
             RenderPipelineManager.beginContextRendering += OnRender;
             KSP1PartModPlugin.Log?.LogWarning(
-                $"[KSP1PartMod] anim: {part} mpb check read another value: renderers rewritten every frame are flushed again at render time");
+                $"[KSP1PartMod] anim: {part} mpb check read another value: every written renderer is flushed again at render time");
         }
 
-        private static void OnRender(ScriptableRenderContext context, List<Camera> cameras)
+        /// <summary>Tests only: undoes <see cref="EnableRenderTimeFlush"/>'s subscription.</summary>
+        internal static void DisableRenderTimeFlush()
+        {
+            if (!_renderTimeFlush) return;
+            _renderTimeFlush = false;
+            RenderPipelineManager.beginContextRendering -= OnRender;
+        }
+
+        private static void OnRender(ScriptableRenderContext context, List<Camera> cameras) => FlushAtRender();
+
+        /// <summary>The render-time flush: every written target of every table, all its values.</summary>
+        internal static void FlushAtRender()
         {
             for (var i = 0; i < _count; i++)
             {
                 try
                 {
-                    _tables[i].Flush(_sinks[i]); // dirty targets are clean after LateUpdate: only every-frame targets write
+                    _tables[i].Flush(_sinks[i], rewriteAll: true);
                 }
                 catch (Exception e)
                 {

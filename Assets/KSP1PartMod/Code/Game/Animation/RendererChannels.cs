@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
 using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Animation.Tracks;
 using UnityEngine;
-using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
 namespace KSP1PartMod.Game.Animation
@@ -33,8 +31,6 @@ namespace KSP1PartMod.Game.Animation
         private static readonly int EmissionMapId = Shader.PropertyToID(EmissionMap);
         /// <summary>(shader, material) pairs whose emission line was logged: once per session.</summary>
         private static readonly HashSet<string> LoggedEmission = new HashSet<string>(StringComparer.Ordinal);
-        /// <summary>Part types whose <c>mpb check</c> has started: once per part type and session.</summary>
-        private static readonly HashSet<string> CheckedParts = new HashSet<string>(StringComparer.Ordinal);
         private static Texture2D _white;
 
         private readonly ChannelTable _table;
@@ -59,6 +55,8 @@ namespace KSP1PartMod.Game.Animation
         private int _lastProperty = -1;
         private ChannelValueType _lastType;
         private Value4 _lastValue;
+        /// <summary>This sink no longer looks for a renderer to check (<see cref="MpbCheck"/>).</summary>
+        private bool _checkDone;
 
         /// <param name="partName">For the log lines and the <c>mpb check</c>; null (tests): no check.</param>
         /// <param name="partRoot">The part object, for renderer paths in the log and <see cref="Orphaned"/>.</param>
@@ -232,8 +230,11 @@ namespace KSP1PartMod.Game.Animation
             if (b == null) return;
             if (b.WhiteMap) _block.SetTexture(EmissionMapId, White);
             b.Renderer.SetPropertyBlock(_block);
-            if (_part != null && _lastProperty >= 0 && !_check.Pending && CheckedParts.Add(_part))
-                _check.Start(_part, b.Renderer, _lastProperty, Name(_lastProperty), _lastType, _lastValue);
+            if (!_checkDone && _part != null && _lastProperty >= 0 && !MpbCheck.Pending)
+            {
+                _checkDone = true;
+                MpbCheck.TryStart(_part, _table, target, b.Renderer, _lastProperty, Name(_lastProperty), _lastType, _lastValue);
+            }
         }
 
         // ---------------------------------------------------------------- copies
@@ -449,88 +450,6 @@ namespace KSP1PartMod.Game.Animation
         {
             public int Target;
             public GameObject Hull;
-        }
-
-        // ---------------------------------------------------------------- mpb check
-
-        private static readonly MpbCheck _check = new MpbCheck();
-
-        /// <summary>Spec 2a.5: the block of the first written renderer of a part type, read back when the frame renders
-        /// (after every <c>LateUpdate</c> writer): <c>anim: &lt;part&gt; mpb check '&lt;prop&gt;': wrote &lt;v&gt;, read
-        /// &lt;v'&gt;</c>. One check at a time. A different value turns on <see cref="ChannelFlush.EnableRenderTimeFlush"/>.</summary>
-        private sealed class MpbCheck
-        {
-            private readonly MaterialPropertyBlock _read = new MaterialPropertyBlock();
-            private string _part, _name;
-            private Renderer _renderer;
-            private int _property;
-            private ChannelValueType _type;
-            private Value4 _wrote;
-            public bool Pending { get; private set; }
-
-            public void Start(string part, Renderer r, int property, string name, ChannelValueType type, in Value4 wrote)
-            {
-                _part = part;
-                _renderer = r;
-                _property = property;
-                _name = name;
-                _type = type;
-                _wrote = wrote;
-                Pending = true;
-                RenderPipelineManager.beginContextRendering += OnRender;
-            }
-
-            private void OnRender(ScriptableRenderContext context, List<Camera> cameras)
-            {
-                RenderPipelineManager.beginContextRendering -= OnRender;
-                Pending = false;
-                try
-                {
-                    if (_renderer == null)
-                    {
-                        Log($"{_part} mpb check '{_name}': wrote {Show(_type, _wrote)}, renderer gone before the render");
-                        return;
-                    }
-                    _renderer.GetPropertyBlock(_read);
-                    var read = Read(_read, _property, _type);
-                    Log($"{_part} mpb check '{_name}': wrote {Show(_type, _wrote)}, read {Show(_type, read)}");
-                    if (!read.SameAs(_wrote)) ChannelFlush.EnableRenderTimeFlush(_part);
-                }
-                catch (Exception e)
-                {
-                    KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {_part} mpb check failed: {e}");
-                }
-                finally
-                {
-                    _renderer = null;
-                }
-            }
-
-            private static Value4 Read(MaterialPropertyBlock b, int id, ChannelValueType type)
-            {
-                switch (type)
-                {
-                    case ChannelValueType.Color:
-                    {
-                        var c = b.GetColor(id);
-                        return new Value4(c.r, c.g, c.b, c.a);
-                    }
-                    case ChannelValueType.Vector:
-                    {
-                        var v = b.GetVector(id);
-                        return new Value4(v.x, v.y, v.z, v.w);
-                    }
-                    default:
-                        return new Value4(b.GetFloat(id), 0f, 0f, 0f);
-                }
-            }
-
-            private static string Show(ChannelValueType type, in Value4 v) =>
-                type == ChannelValueType.Float
-                    ? F(v.X)
-                    : "(" + F(v.X) + ", " + F(v.Y) + ", " + F(v.Z) + ", " + F(v.W) + ")";
-
-            private static string F(float x) => x.ToString("0.###", CultureInfo.InvariantCulture);
         }
     }
 }
