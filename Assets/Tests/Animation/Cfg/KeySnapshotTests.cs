@@ -77,6 +77,10 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             return File.ReadAllLines(path).Where(l => l.Length > 0).ToList();
         }
 
+        /// <summary>No entry of a 0.3.2 kind changes key on any real part: saves keep their values.</summary>
+        [Test] public void Plan_EntryKeysOf032Kinds_Unchanged_AllRealParts() =>
+            CollectionAssert.AreEqual(Snapshot(), CurrentKeysOfKinds(Last032Kind));
+
         /// <summary>Run alone, on the 0.3.2 planner only: it (re)writes the snapshot.</summary>
         [Test, Explicit("writes the 0.3.2 key snapshot")]
         public void Write_KeySnapshot()

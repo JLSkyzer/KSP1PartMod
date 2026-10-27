@@ -65,11 +65,18 @@ namespace KSP1PartMod.Animation.Cfg
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux);
 
+        /// <param name="skipModules">Settings <c>skip_modules</c> (the caller builds the set once, with its comparer):
+        /// a module of one of these names gets no entry and the note <c>skipped by skip_modules</c>. Keys are assigned
+        /// before the filter, so every other entry keeps the key it has without the setting.</param>
+        public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
+            ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules) =>
+            Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules);
+
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
         /// table.</summary>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
-            bool followRedux = false)
+            bool followRedux = false, ISet<string> skipModules = null)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -157,6 +164,22 @@ namespace KSP1PartMod.Animation.Cfg
                 }
                 Add(entries, e);
             }
+
+            // skip_modules, after the keys: dropping an entry never renumbers another.
+            if (skipModules != null && skipModules.Count > 0)
+            {
+                var skipped = new HashSet<int>();
+                for (var i = 0; i < modules.Count; i++)
+                {
+                    var name = NameOf(modules[i]);
+                    if (name == null || !skipModules.Contains(name)) continue;
+                    skipped.Add(i);
+                    notes.Add($"MODULE[{i}] {name}: skipped by skip_modules");
+                }
+                entries.RemoveAll(e => skipped.Contains(e.ModuleIndex));
+            }
+            // FXModuleThrottleEffects: links our Color entries; never an entry itself.
+            notes.AddRange(ScalarSourceParser.Apply(modules, entries, skipModules));
             return new PartAnimationPlan(entries, reduxClips, reduxModule, remove, notes);
         }
 

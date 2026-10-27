@@ -50,7 +50,8 @@ namespace KSP1PartMod.Game.Animation
                         $"[KSP1PartMod] anim: ECS types not registered ({EcsTypeRegistration.Status}), no animation module added");
                     return;
                 }
-                var planned = Apply(KSP1PartModPlugin.Animations.OwnFirstDeployable, KSP1PartModPlugin.Animations.FollowReduxDeployables);
+                var planned = Apply(KSP1PartModPlugin.Animations.OwnFirstDeployable, KSP1PartModPlugin.Animations.FollowReduxDeployables,
+                    new HashSet<string>(KSP1PartModPlugin.Animations.SkipModules, StringComparer.Ordinal));
                 // Queues the .mu reads on a worker and returns at once: the load never waits for them.
                 var settings = KSP1PartModPlugin.Animations;
                 if (!settings.MaterialCurves && !settings.LightCurves)
@@ -74,7 +75,8 @@ namespace KSP1PartMod.Game.Animation
         }
 
         /// <summary>The parts planned, with their plan, for the track worker.</summary>
-        private static List<(Ksp1ImportedPartRegistry.Entry entry, PartAnimationPlan plan)> Apply(bool ownFirstDeployable, bool followRedux)
+        private static List<(Ksp1ImportedPartRegistry.Entry entry, PartAnimationPlan plan)> Apply(bool ownFirstDeployable, bool followRedux,
+            ISet<string> skipModules)
         {
             var planned = new List<(Ksp1ImportedPartRegistry.Entry entry, PartAnimationPlan plan)>();
             var log = KSP1PartModPlugin.Log;
@@ -97,7 +99,7 @@ namespace KSP1PartMod.Game.Animation
                 var action = InjectionAction.None;
                 try
                 {
-                    var plan = ApplyToPart(entry, ownFirstDeployable, followRedux, out action);
+                    var plan = ApplyToPart(entry, ownFirstDeployable, followRedux, skipModules, out action);
                     var mod = entry.ModName ?? "?";
                     if (!plansByMod.TryGetValue(mod, out var plans)) plansByMod[mod] = plans = new List<PartAnimationPlan>();
                     plans.Add(plan);
@@ -142,7 +144,7 @@ namespace KSP1PartMod.Game.Animation
         /// <summary>Plans one part and edits its definition (<c>Core.modules</c> and
         /// <c>Core.data.serializedPartModules</c> together).</summary>
         private static PartAnimationPlan ApplyToPart(Ksp1ImportedPartRegistry.Entry entry, bool ownFirstDeployable,
-            bool followRedux, out InjectionAction action)
+            bool followRedux, ISet<string> skipModules, out InjectionAction action)
         {
             action = InjectionAction.None;
             var log = KSP1PartModPlugin.Log;
@@ -153,7 +155,7 @@ namespace KSP1PartMod.Game.Animation
             var behaviours = new HashSet<string>(modules.Where(m => m.BehaviourType != null).Select(m => m.BehaviourType.Name),
                 StringComparer.Ordinal);
             var plan = OwnershipPlanner.Plan(Ksp1NodeAdapter.Modules(entry.PartNode), behaviours.Contains("Module_SolarPanel"),
-                behaviours, ownFirstDeployable, followRedux);
+                behaviours, ownFirstDeployable, followRedux, skipModules);
             action = ModuleInjection.Decide(modules.Select(m => m.Name).ToList(), plan, ModuleName);
             // From here on the caller rewrites PartJson, even if an edit below throws. Notes once per session: on
             // the first load (Add), not on each reload that refreshes the same core.

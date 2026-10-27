@@ -103,12 +103,16 @@ namespace KSP1PartMod.Animation.Tracks
 
         /// <summary>A channel of <paramref name="target"/>'s <paramref name="property"/> (a shader property id, or a
         /// light field); its value is <paramref name="rest"/> until submitted. Channels of the same (target, property)
-        /// share one slot, whose type is the first channel's.</summary>
+        /// share one slot and must give its type.</summary>
+        /// <exception cref="System.ArgumentException">The slot exists with another <paramref name="type"/>.</exception>
         public int Register(int target, int property, ChannelValueType type, WriterClass cls, int moduleIndex, in Value4 rest)
         {
             if (target < 0 || target >= _targetCount) throw new System.ArgumentOutOfRangeException(nameof(target));
             var slot = FindSlot(target, property);
             if (slot < 0) slot = AddSlot(target, property, type);
+            else if (_slots[slot].Type != type)
+                throw new System.ArgumentException(
+                    $"property {property} of target {target} is registered as {_slots[slot].Type}, not {type}", nameof(type));
             if (_count == _channels.Length) System.Array.Resize(ref _channels, _count * 2);
             _channels[_count] = new Channel { Slot = slot, Class = cls, ModuleIndex = moduleIndex, Rest = rest, Value = rest };
             return _count++;

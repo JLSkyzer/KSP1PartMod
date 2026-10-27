@@ -14,6 +14,14 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         [Test] public void WriterPolicy_ModuleEngineEmissive_After() => Assert.AreEqual(WriterDecision.After, WriterPolicy.For("ModuleEngineEmissive"));
         [Test] public void WriterPolicy_ModuleLight_After() => Assert.AreEqual(WriterDecision.After, WriterPolicy.For("ModuleLight"));
 
+        [Test] public void WriterPolicy_ConstantsAreTheTableKeys() =>
+            CollectionAssert.AreEquivalent(new[]
+            {
+                WriterPolicy.ReentryMesh, WriterPolicy.OabPartSelectionShader, WriterPolicy.Outline, WriterPolicy.Ksp1TextureSwitch,
+                WriterPolicy.ModuleColor, WriterPolicy.ModuleEngineEmissive, WriterPolicy.ModuleLight,
+            }, WriterPolicy.Table.Keys);
+        [Test] public void WriterPolicy_ReentryMeshConstant_EveryFrame() => Assert.AreEqual(WriterDecision.EveryFrame, WriterPolicy.For(WriterPolicy.ReentryMesh));
+
         [Test] public void WriterPolicy_NoRowExcludes() => CollectionAssert.DoesNotContain(WriterPolicy.Table.Values, WriterDecision.Exclude);
         [Test] public void WriterPolicy_TableHasTheSevenRows() => Assert.AreEqual(7, WriterPolicy.Table.Count);
         [Test] public void WriterPolicy_UnknownWriter_After() => Assert.AreEqual(WriterDecision.After, WriterPolicy.For("SomethingElse"));

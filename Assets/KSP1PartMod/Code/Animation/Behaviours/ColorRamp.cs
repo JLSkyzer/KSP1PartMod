@@ -13,7 +13,7 @@ namespace KSP1PartMod.Animation.Behaviours
     {
         private readonly string _kOn;
         private readonly float _rate;
-        private readonly bool _useRate;
+        private readonly bool _useRate, _scalarLinked;
         private readonly FloatCurve _r, _g, _b, _a;
 
         public ColorRamp(AnimEntryDef def)
@@ -21,6 +21,7 @@ namespace KSP1PartMod.Animation.Behaviours
             _kOn = def.Key + ".on";
             _rate = Math.Max(1e-4f, def.Rate); // a rate of 0 or less would never reach the target
             _useRate = def.UseRate;
+            _scalarLinked = def.ScalarLinked;
             _r = Channel(def.Curves, 0);
             _g = Channel(def.Curves, 1);
             _b = Channel(def.Curves, 2);
@@ -47,11 +48,21 @@ namespace KSP1PartMod.Animation.Behaviours
 
         public void Tick(float dt)
         {
-            if (!_useRate || !(dt > 0f)) return;
+            if (_scalarLinked || !_useRate || !(dt > 0f)) return;
             var target = On ? 1f : 0f;
             if (Level == target) return;
             var step = _rate * dt;
             SetLevel(On ? Math.Min(1f, Level + step) : Math.Max(0f, Level - step));
+        }
+
+        /// <summary>KSP1 <c>SetScalar(t)</c>, called by an FX setter (<see cref="ScalarLink"/>): t clamped to 0..1 (NaN
+        /// gives 0), <see cref="On"/> = t ≥ 0.5, the colour of the curves at t. A linked entry never ramps in
+        /// <see cref="Tick"/>; the value set here is the one shown.</summary>
+        public void SetScalar(float t)
+        {
+            t = float.IsNaN(t) ? 0f : Machine.Clamp01(t);
+            On = t >= 0.5f;
+            if (t != Level) SetLevel(t);
         }
 
         public void Load(IReadOnlyDictionary<string, float> saved)

@@ -35,19 +35,24 @@ namespace KSP1PartMod.Animation.Runtime
         /// <summary>Set by the OAB on the instanced materials of a grabbed part, and reverted on the same instances.</summary>
         public const string OabSelectionShader = "KSP2/Scenery/Standard_OAB_Selection";
 
+        /// <summary>Writer names, the keys of <see cref="Table"/>.</summary>
+        public const string ReentryMesh = "ReentryMesh", OabPartSelectionShader = "OabPartSelectionShader", Outline = "Outline",
+            Ksp1TextureSwitch = "Ksp1TextureSwitch", ModuleColor = "ModuleColor", ModuleEngineEmissive = "ModuleEngineEmissive",
+            ModuleLight = "ModuleLight";
+
         /// <summary>Ordinal keys. <c>ReentryMesh</c>: <c>UpdatePartGlowData</c> replaces the block of every source
         /// renderer each <c>LateUpdate</c> while the hull is active (flight). The others merge, write materials, or
         /// only draw with their own material. No writer is excluded.</summary>
         public static readonly IReadOnlyDictionary<string, WriterDecision> Table =
             new ReadOnlyDictionary<string, WriterDecision>(new Dictionary<string, WriterDecision>(StringComparer.Ordinal)
             {
-                ["ReentryMesh"] = WriterDecision.EveryFrame,
-                ["OabPartSelectionShader"] = WriterDecision.After,
-                ["Outline"] = WriterDecision.After,
-                ["Ksp1TextureSwitch"] = WriterDecision.After,
-                ["ModuleColor"] = WriterDecision.After,
-                ["ModuleEngineEmissive"] = WriterDecision.After,
-                ["ModuleLight"] = WriterDecision.After,
+                [ReentryMesh] = WriterDecision.EveryFrame,
+                [OabPartSelectionShader] = WriterDecision.After,
+                [Outline] = WriterDecision.After,
+                [Ksp1TextureSwitch] = WriterDecision.After,
+                [ModuleColor] = WriterDecision.After,
+                [ModuleEngineEmissive] = WriterDecision.After,
+                [ModuleLight] = WriterDecision.After,
             });
 
         /// <summary>The decision for <paramref name="writer"/>; a writer not in the table is written after.</summary>

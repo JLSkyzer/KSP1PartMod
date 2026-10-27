@@ -67,5 +67,14 @@ namespace KSP1PartMod.Animation.Cfg
         public int ControllerModuleIndex = -1;
         /// <summary>Color: <c>includedRenderer</c> and <c>excludedRenderer</c> values (exclusion wins).</summary>
         public string[] IncludedRenderers, ExcludedRenderers;
+        /// <summary>Color: an <c>FXModuleThrottleEffects</c> of the part names this colour changer's <c>moduleID</c>
+        /// (<see cref="ScalarSourceParser"/>): the colour follows that setter's scalar, not the toggle. The setter's
+        /// <c>engineName</c> goes to <see cref="EngineName"/>.</summary>
+        public bool ScalarLinked;
+        /// <summary>Color with <see cref="ScalarLinked"/>: the setter's <c>responseSpeed</c>.</summary>
+        public float ScalarResponse = 0.5f;
+        /// <summary>Color with <see cref="ScalarLinked"/>: the setter's <c>dependOnEngineState</c>,
+        /// <c>dependOnOutput</c> and <c>dependOnThrottle</c>.</summary>
+        public bool DependOnEngineState, DependOnOutput, DependOnThrottle;
     }
 }

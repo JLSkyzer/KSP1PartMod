@@ -239,6 +239,18 @@ namespace KSP1PartMod.Tests.Animation.Tracks
         [Test] public void ChannelTable_Register_UnknownTarget_Throws() =>
             Assert.Throws<System.ArgumentOutOfRangeException>(() => t.Register(5, P, ChannelValueType.Float, WriterClass.Track, 0, V(0)));
 
+        [Test] public void ChannelTable_Register_SameSlotOtherType_Throws()
+        {
+            Reg(t, WriterClass.Track, 0);
+            Assert.Throws<System.ArgumentException>(() => t.Register(Renderer, P, ChannelValueType.Float, WriterClass.Color, 1, V(0)));
+        }
+
+        [Test] public void ChannelTable_Register_SameSlotSameType_Shares()
+        {
+            Reg(t, WriterClass.Track, 0);
+            Assert.DoesNotThrow(() => Reg(t, WriterClass.Color, 1));
+        }
+
         [Test] public void ChannelTable_SubmitCount_CountsAndResets()
         {
             var c = Reg(t, WriterClass.Track, 0);
