@@ -118,8 +118,9 @@ namespace KSP1PartMod.Game
         }
 
         /// <summary>Our own hidden, persistent host: the plugin's GameObject can be inactive on a later load
-        /// (seen in game, 2026-10-25), and StartCoroutine on an inactive object returns null. Re-created if destroyed.</summary>
-        private static CoroutineRunner Runner()
+        /// (seen in game, 2026-10-25), and StartCoroutine on an inactive object returns null. Re-created if destroyed.
+        /// Shared with the animation glue.</summary>
+        internal static CoroutineRunner Runner()
         {
             if (_runner && _runner.isActiveAndEnabled) return _runner;
             if (_runner) UnityEngine.Object.Destroy(_runner.gameObject);

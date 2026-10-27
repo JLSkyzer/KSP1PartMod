@@ -64,9 +64,12 @@ namespace KSP1PartMod.Animation.Tracks
                 }
                 var slot = channel < 0 ? 0 : channel;
                 if (slot >= track.Channels.Length) { drops.Unknown++; continue; }
-                track.Channels[slot] = ToFloatCurve(curve.Keys);
+                // A curve with no key leaves its channel null, so the channel keeps its rest value: an empty
+                // curve would evaluate to 0 and blacken an emissive colour.
+                track.Channels[slot] = curve.Keys.Count == 0 ? null : ToFloatCurve(curve.Keys);
             }
 
+            tracks.RemoveAll(t => System.Array.TrueForAll(t.Channels, c => c == null));
             if (tracks.Count == 0) return null;
             return new TrackSet
             {
@@ -83,9 +86,7 @@ namespace KSP1PartMod.Animation.Tracks
                 flat[4 * i] = keys[i].Time; flat[4 * i + 1] = keys[i].Value;
                 flat[4 * i + 2] = keys[i].InTangent; flat[4 * i + 3] = keys[i].OutTangent;
             }
-            // A curve with no key must not become Curve's default linear ramp: give it one NaN key, which
-            // the constructor drops, leaving an empty curve that evaluates to 0.
-            return keys.Count == 0 ? new Curve(new[] { float.NaN, float.NaN, 0f, 0f }) : new Curve(flat);
+            return new Curve(flat);
         }
 
         /// <summary>"_Color.g" gives ("_Color", 1, true); "_BumpMap_ST.z" gives ("_BumpMap_ST", 2, false); a name

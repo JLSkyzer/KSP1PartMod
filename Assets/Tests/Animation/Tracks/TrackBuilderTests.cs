@@ -35,6 +35,19 @@ namespace KSP1PartMod.Tests.Animation.Tracks
         [Test] public void Build_Length_IsClipLength() => Assert.AreEqual(2.5f, Build(Keys(0f, 2.5f)).Length);
         [Test] public void Build_UnknownLightProperty_CountedUnknown() { TrackBuilder.FromClip(Clip(("L", "m_Shadows", 2)), "", 0, out var d); Assert.AreEqual(1, d.Unknown); }
         [Test] public void Build_CarriesHostAndModel() { var s = TrackBuilder.FromClip(Clip(("", "_Opacity", 1)), "root/host", 3, out _); Assert.AreEqual(("clip", "root/host", 3), (s.Clip, s.HostPath, s.ModelIndex)); }
+        [Test]
+        public void FromClip_KeylessCurve_LeavesChannelNull()
+        {
+            var clip = new MuAnimClip("clip", 0, new[]
+            {
+                new MuAnimCurve("", "_EmissiveColor.r", 1, 0, 0, new MuKey[0]),
+                new MuAnimCurve("", "_EmissiveColor.g", 1, 0, 0, new[] { new MuKey(0f, 0.5f, 0f, 0f, 0) }),
+            });
+            var t = Build(clip).Tracks.Single();
+            Assert.IsNull(t.Channels[0]);
+            Assert.IsNotNull(t.Channels[1]);
+        }
+        [Test] public void FromClip_OnlyKeylessCurves_NoSet() => Assert.IsNull(Build(new MuAnimClip("clip", 0, new[] { new MuAnimCurve("", "_Opacity", 1, 0, 0, new MuKey[0]) })));
         [Test] public void FloatCurve_InfiniteOutTangent_HoldsUntilNextKey() { var c = new FloatCurve(new[] { 0f, 0f, 0f, float.PositiveInfinity, 1f, 1f, float.PositiveInfinity, 0f }); Assert.AreEqual(0f, c.Evaluate(0.99f)); Assert.AreEqual(1f, c.Evaluate(1f)); }
         [Test] public void FloatCurve_Looped_Repeats() => Assert.AreEqual(Linear01().Evaluate(0.25f), Linear01().EvaluateLooped(1.25f, 1f), 1e-5f);
     }

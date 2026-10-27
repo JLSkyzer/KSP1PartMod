@@ -12,6 +12,7 @@ using Redux.ExtraModTypes;
 using ILogger = SpaceWarp2.API.Logging.ILogger;
 
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.ReduxMu")]
+[assembly: InternalsVisibleTo("KSP1PartMod.Tests.Animation")]
 
 namespace KSP1PartMod
 {

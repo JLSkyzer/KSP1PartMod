@@ -7,6 +7,7 @@ using KSP.IO;
 using KSP.Sim.Definitions;
 using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Injection;
+using KSP1PartMod.Animation.Tracks;
 using Redux.Ksp1Import.Assets;
 using SpaceWarp2.API.Loading;
 
@@ -37,6 +38,9 @@ namespace KSP1PartMod.Game.Animation
 
         private static void Run(Action resolve, Action<string> reject)
         {
+            // A new generation at each load: tracks of the previous load are never bound to this one's parts.
+            var generation = TrackCache.Begin();
+            var tracksStarted = false;
             try
             {
                 // Without an ECS type index every part carrying our module fails to load: add nothing then.
@@ -46,7 +50,13 @@ namespace KSP1PartMod.Game.Animation
                         $"[KSP1PartMod] anim: ECS types not registered ({EcsTypeRegistration.Status}), no animation module added");
                     return;
                 }
-                Apply(KSP1PartModPlugin.Animations.OwnFirstDeployable, KSP1PartModPlugin.Animations.FollowReduxDeployables);
+                var planned = Apply(KSP1PartModPlugin.Animations.OwnFirstDeployable, KSP1PartModPlugin.Animations.FollowReduxDeployables);
+                // Queues the .mu reads on a worker and returns at once: the load never waits for them.
+                if (planned.Count > 0)
+                {
+                    tracksStarted = true;
+                    TrackLoad.Start(planned);
+                }
             }
             catch (Exception e)
             {
@@ -54,12 +64,16 @@ namespace KSP1PartMod.Game.Animation
             }
             finally
             {
+                // No worker: the generation is ready with no tracks, and every part keeps its phase 1 behaviour.
+                if (!tracksStarted) TrackCache.MarkReady(generation);
                 resolve();
             }
         }
 
-        private static void Apply(bool ownFirstDeployable, bool followRedux)
+        /// <summary>The parts planned, with their plan, for the track worker.</summary>
+        private static List<(Ksp1ImportedPartRegistry.Entry entry, PartAnimationPlan plan)> Apply(bool ownFirstDeployable, bool followRedux)
         {
+            var planned = new List<(Ksp1ImportedPartRegistry.Entry entry, PartAnimationPlan plan)>();
             var log = KSP1PartModPlugin.Log;
             var clock = Stopwatch.StartNew();
             var complete = Ksp1ImportedPartRegistry.IsComplete;
@@ -68,7 +82,7 @@ namespace KSP1PartMod.Game.Animation
             if (!complete)
             {
                 log.LogWarning("[KSP1PartMod] anim: Redux's KSP1 import is not complete, no module added");
-                return;
+                return planned;
             }
 
             var partJson = GameManager.Instance.Game.Parts.PartJson;
@@ -84,6 +98,7 @@ namespace KSP1PartMod.Game.Animation
                     var mod = entry.ModName ?? "?";
                     if (!plansByMod.TryGetValue(mod, out var plans)) plansByMod[mod] = plans = new List<PartAnimationPlan>();
                     plans.Add(plan);
+                    planned.Add((entry, plan));
                     if (action == InjectionAction.None) untouched++;
                     else if (action == InjectionAction.Add) added++;
                     else refreshed++;
@@ -105,6 +120,7 @@ namespace KSP1PartMod.Game.Animation
             }
             if (!followRedux) log.LogInfo("[KSP1PartMod] anim: Redux deployables not followed (follow_redux_deployables false)");
             log.LogInfo($"[KSP1PartMod] anim: added {added}, refreshed {refreshed}, untouched {untouched} in {clock.ElapsedMilliseconds} ms");
+            return planned;
         }
 
         /// <summary>Keeps <c>PartJson</c> equal to the edited core, which the simulation merges from.</summary>
