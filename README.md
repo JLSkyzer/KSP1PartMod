@@ -50,7 +50,7 @@ Located in `mods/KSP1PartMod/`. Both maps are optional and win over `tech_mappin
 
 An id missing from the game's tree is ignored, the part falls through to the next rule, and the log gets a line `[KSP1PartMod] note: <part> (<mod>): …` naming the missing id. Edit the file and restart the game.
 
-## Animations (phase 1)
+## Animations (phases 1 and 2a)
 
 Redux imports KSP1 parts but loses most of their animations. This mod does two things, at each campaign load, without editing your KSP1 files.
 
@@ -82,8 +82,17 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "subcategory_bar": true,
   "editor_animation_speed": 1,
   "diagnostics": true,
+  "material_curves": true,
+  "light_curves": true,
+  "emission_setup": true,
+  "throttle_effects": true,
+  "heat_glow": true,
+  "skip_modules": [],
+  "perf_counter": false,
   "shader_property_map": {
-    "_EmissiveColor": ["_EmissiveColor", "_EmissionColor"],
+    "_EmissiveColor": ["_EmissionColor", "_EmissiveColor"],
+    "_TintColor": ["_TintColor"],
+    "_Color": ["_Color"],
     "_BurnColor": ["_BurnColor"]
   }
 }
@@ -98,17 +107,33 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `editor_animation_speed`: speed of the KSP1 animations in the VAB, as a multiple of the flight speed. `1` (default) plays every clip at its real speed, so legs, doors and panels move smoothly; `1000` makes them instant; `0` restores KSP1's own editor values (KSP1 played doors and panels 10 times faster in the editor, `editorAnimationSpeedMult = 10`, and snapped gear and legs).
 - `subcategory_bar`: the KSP1 sub-category bar of the VAB (see VAB sub-categories). `false` removes it.
 - `diagnostics`: log once, in the VAB, the materials of a few KSP1 parts (`[KSP1PartMod] diag:` lines) for bug reports. `false` disables it.
-- `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order. When present it replaces the built-in map. The shipped values are starting guesses, not verified in game.
+- `material_curves`: play the material colour and value curves of KSP1 clips (engine glow, windows, tints). `false` keeps them still, as in 0.3.2.
+- `light_curves`: play the light curves of KSP1 clips (intensity, colour, range, spot angle) on lights Redux does not drive. Lights owned by Redux's `Module_Light` are left to it (log: `light '<path>' left to Module_Light`).
+- `emission_setup`: when a glow is written to a KSP2 material whose emission is off, give that renderer its own material copy with `_EMISSION` on, and a white `_EmissionMap` when it has none. `false` leaves the materials untouched.
+- `throttle_effects`: `FXModuleThrottleEffects` drives the colour changers of its engine with the throttle (Bluedog_DB engine glow).
+- `heat_glow`: play KSP1's heat glow (Heat entries and their curves). Set `false` if KSP2 already makes hot parts glow and you see it doubled.
+- `skip_modules`: list of KSP1 module names the mod never takes, for example `["FXModuleThrottleEffects"]`, to switch one module off if it misbehaves.
+- `perf_counter`: default `false`. `true` logs every 60 s the time spent by the animations (`[KSP1PartMod] anim: perf:` lines), for bug reports.
+- `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
-### Phase 2 (not planned yet)
+### Phase 2a: material, light and glow curves (0.4.0)
 
-1. Material and light curves of clips (emissive and tint colours, light intensity, engine heat glow).
-2. `FXModuleAnimateRCS` (per-nozzle glow).
-3. Bluedog_DB modules (`ModuleBdbAnimatedEngine`, `ModuleBdbDecouplerAnimation`, `ModuleBdbAccelAnimation`, `ModuleBdbMercuryLandingBag`, `ModuleBDBDeployableMeshHider`), `ModuleDeployableEngine`, `ModuleMultiStateEngine`, DMagic `DMModuleScienceAnimateGeneric`.
-4. B9PartSwitch `SUBTYPE` overrides that pick which clip a module uses.
-5. Links by module index: cargo bay shielding, docking port gating, science experiments, animation groups with converters.
-6. Deploy limit (cargo bays), `restrictedNode`, one-shot inflatables, crew capacity when open.
-7. Radiator and antenna tracking and breakage, wheel physics, robotics, Waterfall effects.
+Not run in game yet: checklist in `docs/testing/2026-10-27-animations-phase2-in-game-checklist.md`.
+
+- **Tracks.** The mod reads the `.mu` clips itself (on a worker thread at campaign load, `anim: tracks: read …`) and plays their material and light curves next to the Transform animation, on the same clock as the visible pose. Colour and value curves go to the KSP2 property chosen by `shader_property_map`; light curves go to the lights Redux does not drive.
+- **One writer per renderer.** All values of a renderer are written once per frame, after the game's own writers, through a property block. A check (`mpb check`) reads the block back before the render; if another writer replaced it, the mod rewrites at render time. Redux's reentry hull rewrites its material every frame, so the mod rewrites those renderers every frame while the hull is active (`rebound` log lines are expected then).
+- **Colour changers.** `ModuleColorChanger` clips follow `FXModuleThrottleEffects` when the engine has one (`follows FXModuleThrottleEffects`), so Bluedog_DB engines glow with the throttle; heat entries drive the heat glow.
+- **Emission.** A glow written to a material whose emission is off gets an own material copy with `_EMISSION` on, plus a white `_EmissionMap` where the shader has none (`emission_setup`).
+- **Not verified in game:** `normalizedOutput` read as thrust over max thrust, `[DefaultExecutionOrder]` on a mod type, the visibility of the emission, a doubled glow with KSP2's own heat (`heat_glow`).
+
+### Phase 2b and later (not done yet)
+
+1. `FXModuleAnimateRCS` (per-nozzle glow).
+2. Bluedog_DB modules (`ModuleBdbAnimatedEngine`, `ModuleBdbDecouplerAnimation`, `ModuleBdbAccelAnimation`, `ModuleBdbMercuryLandingBag`, `ModuleBDBDeployableMeshHider`), `ModuleDeployableEngine`, `ModuleMultiStateEngine`, DMagic `DMModuleScienceAnimateGeneric`.
+3. B9PartSwitch `SUBTYPE` overrides that pick which clip a module uses.
+4. Links by module index: cargo bay shielding, docking port gating, science experiments, animation groups with converters.
+5. Deploy limit (cargo bays), `restrictedNode`, one-shot inflatables, crew capacity when open.
+6. Radiator and antenna tracking and breakage, wheel physics, robotics, Waterfall effects.
 
 ## VAB sub-categories
 
@@ -122,7 +147,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
 ## Known limits
 
 - Robotics parts of KSP1 are spread over several KSP1 nodes, so only those of `actuators` land in the new robotics node.
-- Animations: phase 1 only, see below. Material and light curves of clips, and the modules listed under phase 2, are not played yet.
+- Animations: phases 1 and 2a only. The modules listed under phase 2b and later are not played yet.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
 
 ## KSP1 content

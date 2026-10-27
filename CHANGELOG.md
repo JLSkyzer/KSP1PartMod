@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 - 2026-10-27
+
+Animations phase 2a: material, light and glow curves of KSP1 clips. Not run in game yet; checklist in `docs/testing/2026-10-27-animations-phase2-in-game-checklist.md` (section 2a).
+
+- **Tracks.** A worker thread reads the `.mu` clips at campaign load (`anim: tracks: read <n> model(s) … ; <f> failed`) and the mod plays their material and light curves with the Transform pose, on the same clock. Switches: `material_curves`, `light_curves`.
+- **One writer per renderer.** Every value written to a renderer goes through one property block, once per frame, after the game's writers. `mpb check` reads the block back before the render and, if another writer replaced it, flushes again at render time. While Redux's reentry hull is active its renderers are rewritten every frame (one `rebound` line per watched renderer at each activation is expected).
+- **Glow from the throttle.** `ModuleColorChanger` clips follow `FXModuleThrottleEffects` (`color '<id>' follows FXModuleThrottleEffects`): Bluedog_DB engine glow with the throttle. Heat entries play KSP1's heat glow. Switches: `throttle_effects`, `heat_glow`.
+- **Emission.** A glow written to a material whose emission is off gets an own material copy (through `renderer.materials`) with `_EMISSION` on, and a white `_EmissionMap` when the shader has none. Switch: `emission_setup`.
+- **Lights.** Light curves drive lights Redux does not drive; Redux's `Module_Light` keeps its own.
+- New `animations.json` keys: `material_curves`, `light_curves`, `emission_setup`, `throttle_effects`, `heat_glow`, `skip_modules`, `perf_counter` (default false, logs `anim: perf:` every 60 s). Default `shader_property_map`: `_EmissionColor` before `_EmissiveColor`, plus `_TintColor` and `_Color`. An existing `animations.json` keeps its old map.
+- Entry keys of 0.3.2 are unchanged (saves keep their values; a test compares the keys of every real part with a snapshot).
+- **Not verified in game:** `normalizedOutput` as `FinalThrustValue / maxThrust`; `[DefaultExecutionOrder]` on a mod type (the `mpb check` covers it); the visibility of the emission; a doubled glow with KSP2's own heat (`heat_glow`).
+- 889 EditMode tests (888 passing, 1 explicit and skipped).
+
 ## 0.3.2 - 2026-10-27
 
 Fixes from the third in-game test.
