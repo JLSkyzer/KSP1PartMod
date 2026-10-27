@@ -32,6 +32,9 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>Second vertical bar of KSP1 part types in the VAB when a KSP1 mod category is selected
         /// (<c>subcategory_bar</c>).</summary>
         public bool SubcategoryBar { get; }
+        /// <summary>VAB speed of our animations (<c>editor_animation_speed</c>, see
+        /// <see cref="Behaviours.EditorSpeed"/>): 1 real time (default), 0 KSP1's editor values.</summary>
+        public float EditorAnimationSpeed { get; }
 
         /// <summary>Starting guesses, not verified in game. Each settings object gets its own copy.</summary>
         private static IReadOnlyDictionary<string, string[]> DefaultShaderPropertyMap() =>
@@ -42,12 +45,13 @@ namespace KSP1PartMod.Animation.Settings
             });
 
         public static readonly AnimationSettings Defaults =
-            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true);
+            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime);
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
-            bool hideMaterialLess, bool fixIcons, bool subcategoryBar)
+            bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed)
         {
+            EditorAnimationSpeed = editorAnimationSpeed;
             SubcategoryBar = subcategoryBar;
             FollowReduxDeployables = followRedux;
             HideMaterialLessRenderers = hideMaterialLess;
@@ -78,6 +82,7 @@ namespace KSP1PartMod.Animation.Settings
                     diagnostics = Defaults.Diagnostics, follow = Defaults.FollowReduxDeployables,
                     hide = Defaults.HideMaterialLessRenderers, icons = Defaults.FixPartIcons,
                     subcategories = Defaults.SubcategoryBar;
+                var editorSpeed = Defaults.EditorAnimationSpeed;
                 IReadOnlyDictionary<string, string[]> map = null;
                 foreach (var p in root.Properties())
                 {
@@ -91,6 +96,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "hide_material_less_renderers": ReadBool(p, ref hide, problems); break;
                         case "fix_part_icons": ReadBool(p, ref icons, problems); break;
                         case "subcategory_bar": ReadBool(p, ref subcategories, problems); break;
+                        case "editor_animation_speed": ReadSpeed(p, ref editorSpeed, problems); break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:
                             if (!p.Name.StartsWith("_")) problems.Add($"unknown key \"{p.Name}\" ignored");
@@ -98,7 +104,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed);
             }
             catch (Exception e)
             {
@@ -111,6 +117,21 @@ namespace KSP1PartMod.Animation.Settings
         {
             if (p.Value.Type == JTokenType.Boolean) value = (bool)p.Value;
             else problems.Add($"\"{p.Name}\" is not true or false, default kept");
+        }
+
+        /// <summary>A finite number, 0 or more.</summary>
+        private static void ReadSpeed(JProperty p, ref float value, List<string> problems)
+        {
+            if (p.Value.Type == JTokenType.Integer || p.Value.Type == JTokenType.Float)
+            {
+                var v = (double)p.Value;
+                if (v >= 0 && !double.IsInfinity(v) && !double.IsNaN(v))
+                {
+                    value = (float)v;
+                    return;
+                }
+            }
+            problems.Add($"\"{p.Name}\" is not a number of 0 or more, default kept");
         }
 
         /// <summary>The map, or null (default kept) when the value is not an object.</summary>

@@ -84,10 +84,11 @@ namespace KSP1PartMod.Game
             foreach (var renderer in renderers)
             {
                 var materials = renderer.sharedMaterials;
-                var path = PathOf(renderer.transform, root.transform);
-                if (materials.Length == 0) log.LogInfo(Prefix + $"{part} renderer '{path}' no material");
+                var path = PathOf(renderer.transform, root.transform) +
+                           $"' layer {renderer.gameObject.layer} renderingLayerMask 0x{renderer.renderingLayerMask:X}";
+                if (materials.Length == 0) log.LogInfo(Prefix + $"{part} renderer '{path} no material");
                 for (var i = 0; i < materials.Length; i++)
-                    log.LogInfo(Prefix + $"{part} renderer '{path}'" + (materials.Length > 1 ? $" [{i}]" : "") + " " +
+                    log.LogInfo(Prefix + $"{part} renderer '{path}" + (materials.Length > 1 ? $" [{i}]" : "") + " " +
                                 Describe(materials[i]));
             }
         }

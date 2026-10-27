@@ -32,7 +32,8 @@ namespace KSP1PartMod.Animation.Behaviours
         private float _t, _speed;
 
         /// <param name="clipLength">Seconds, from the bound <c>AnimationState.length</c>.</param>
-        public DeployMachine(AnimEntryDef def, float clipLength)
+        /// <param name="editorSpeed"><see cref="EditorSpeed"/>: positive, it replaces the cfg's editor multiplier.</param>
+        public DeployMachine(AnimEntryDef def, float clipLength, float editorSpeed = EditorSpeed.Ksp1)
         {
             _kt = def.Key + ".t";
             _kState = def.Key + ".state";
@@ -42,7 +43,7 @@ namespace KSP1PartMod.Animation.Behaviours
             // A factor of 0 or less would never end (or run backward): keep it positive.
             _speedIn = _gear ? Math.Max(MinFactor, def.SpeedFactorIn) : 1f;
             _speedOut = _gear ? Math.Max(MinFactor, def.SpeedFactorOut) : 1f;
-            _editorSpeedMult = def.EditorSpeedMult;
+            _editorSpeedMult = EditorSpeed.Multiplier(editorSpeed, def.EditorSpeedMult);
             ClipLength = Machine.Length(clipLength);
             Settle(DeployState.Retracted);
             Changed = false;

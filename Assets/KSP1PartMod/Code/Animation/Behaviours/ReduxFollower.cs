@@ -12,9 +12,11 @@ namespace KSP1PartMod.Animation.Behaviours
     /// <c>legacy = false</c>), but the clip was built at runtime with <c>SetCurve</c>, which Unity documents as working
     /// at runtime for legacy clips only: the copy moves nothing. Redux's state machine still runs (its Animator reaches
     /// OPENED and <c>Module_Deployable.OnAnimStateEnter</c> sets Extended), so we read the state and move the legacy
-    /// clip toward it at KSP1 speed: flight 1 (gear: <see cref="AnimEntryDef.SpeedFactorIn"/> / Out), editor
-    /// <see cref="AnimEntryDef.EditorSpeedMult"/> (≥ 1000 snaps, ≤ 0 means flight speed). The first state seen is
-    /// shown at once (load). Broken holds. Nothing is saved: the state is Redux's.</summary>
+    /// clip toward it at KSP1 speed: flight 1 (gear: <see cref="AnimEntryDef.SpeedFactorIn"/> / Out), editor the
+    /// <see cref="EditorSpeed"/> setting, else <see cref="AnimEntryDef.EditorSpeedMult"/> (≥ 1000 snaps, ≤ 0 means
+    /// flight speed). The follower owns the visual time: Redux's empty Mecanim copy reaches Extended (or Retracted) in
+    /// one frame, and only the direction is taken from it. The first state seen is shown at once (load). Broken holds.
+    /// Nothing is saved: the state is Redux's.</summary>
     public sealed class ReduxFollower : IEntryMachine
     {
         private const float Snap = 1000f;
@@ -24,12 +26,13 @@ namespace KSP1PartMod.Animation.Behaviours
         private bool? _target;
         private float _t, _speed;
 
-        public ReduxFollower(AnimEntryDef def, float clipLength)
+        /// <param name="editorSpeed"><see cref="EditorSpeed"/>: positive, it replaces the cfg's editor multiplier.</param>
+        public ReduxFollower(AnimEntryDef def, float clipLength, float editorSpeed = EditorSpeed.Ksp1)
         {
             _extendedTime = def.DeployForward ? 1f : 0f;
             _speedIn = Math.Max(MinFactor, def.SpeedFactorIn);
             _speedOut = Math.Max(MinFactor, def.SpeedFactorOut);
-            _editorMult = def.EditorSpeedMult > 0f ? def.EditorSpeedMult : 1f;
+            _editorMult = EditorSpeed.Multiplier(editorSpeed, def.EditorSpeedMult > 0f ? def.EditorSpeedMult : 1f);
             ClipLength = Machine.Length(clipLength);
         }
 

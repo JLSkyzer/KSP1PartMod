@@ -206,16 +206,17 @@ namespace KSP1PartMod.Game.Animation
         {
             note = null;
             var e = new Entry(def);
+            var editorSpeed = KSP1PartModPlugin.Animations.EditorAnimationSpeed;
             switch (def.Kind)
             {
                 case EntryKind.Toggle:
                     if ((e.States = Bind(def, def.Clip, out note)).Length == 0) return null;
-                    e.Machine = e.Toggle = new ToggleMachine(def, e.States[0].length);
+                    e.Machine = e.Toggle = new ToggleMachine(def, e.States[0].length, editorSpeed);
                     break;
                 case EntryKind.Deploy:
                 case EntryKind.Gear:
                     if ((e.States = Bind(def, def.Clip, out note)).Length == 0) return null;
-                    e.Machine = e.Deploy = new DeployMachine(def, e.States[0].length);
+                    e.Machine = e.Deploy = new DeployMachine(def, e.States[0].length, editorSpeed);
                     break;
                 case EntryKind.Throttle:
                 {
@@ -249,7 +250,7 @@ namespace KSP1PartMod.Game.Animation
                     if (activeNote != null) note = note == null ? "active: " + activeNote : note + "; active: " + activeNote;
                     if (e.States.Length == 0 && e.ActiveStates.Length == 0) return null;
                     e.Machine = e.Group = new GroupMachine(def,
-                        e.States.Length > 0 ? e.States[0].length : 0f, e.ActiveStates.Length > 0 ? e.ActiveStates[0].length : 0f);
+                        e.States.Length > 0 ? e.States[0].length : 0f, e.ActiveStates.Length > 0 ? e.ActiveStates[0].length : 0f, editorSpeed);
                     break;
                 }
                 case EntryKind.AeroGate:
@@ -272,7 +273,7 @@ namespace KSP1PartMod.Game.Animation
                 {
                     if (!ReduxFollowerBinder.TryDeployable(this, def, out var state, out e.ReadDeploy, out var module, out note)) return null;
                     e.States = new[] { state };
-                    e.Machine = e.Follower = new ReduxFollower(def, state.length);
+                    e.Machine = e.Follower = new ReduxFollower(def, state.length, editorSpeed);
                     Log($"{_name} follows Redux deployable '{def.Clip}' ({module})");
                     break;
                 }

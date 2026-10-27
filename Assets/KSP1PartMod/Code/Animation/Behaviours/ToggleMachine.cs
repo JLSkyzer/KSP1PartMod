@@ -12,17 +12,19 @@ namespace KSP1PartMod.Animation.Behaviours
     {
         private readonly string _kt, _kClosed, _kMoving;
         private readonly bool _oneShot;
-        private readonly float _editorSpeedMult;
+        private readonly float _editorSpeedMult, _editorSpeed;
         private float _t, _speed;
 
         /// <param name="clipLength">Seconds, from the bound <c>AnimationState.length</c>.</param>
-        public ToggleMachine(AnimEntryDef def, float clipLength)
+        /// <param name="editorSpeed"><see cref="EditorSpeed"/>: positive, the flight speed times it; 0, KSP1's rule.</param>
+        public ToggleMachine(AnimEntryDef def, float clipLength, float editorSpeed = EditorSpeed.Ksp1)
         {
             _kt = def.Key + ".t";
             _kClosed = def.Key + ".closed";
             _kMoving = def.Key + ".moving";
             _oneShot = !def.Retractable;
             _editorSpeedMult = def.EditorSpeedMult;
+            _editorSpeed = editorSpeed;
             ClipLength = Machine.Length(clipLength);
             Closed = true;
         }
@@ -47,7 +49,9 @@ namespace KSP1PartMod.Animation.Behaviours
         {
             if (IsMoving || IsFixed) return false;
             Closed = !Closed;
-            var speed = inEditor && _editorSpeedMult > 0f ? _editorSpeedMult * ClipLength : 1f;
+            var speed = !inEditor ? 1f
+                : !EditorSpeed.UsesKsp1(_editorSpeed) ? _editorSpeed
+                : _editorSpeedMult > 0f ? _editorSpeedMult * ClipLength : 1f;
             Start(Closed ? -speed : speed);
             return true;
         }

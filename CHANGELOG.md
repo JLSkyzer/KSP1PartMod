@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.2 - 2026-10-27
+
+Fixes from the third in-game test.
+
+- **Smooth animations in the VAB.** Landing legs and other Redux-followed parts snapped to their end in the VAB, because KSP1 snaps gear there. Every animation of the mod now plays in the VAB at its real flight speed (gear: times its KSP1 speed factor), and the Redux follower keeps its own clock: Redux's state reaching Extended in one frame no longer shortens the clip. A saved state still shows at once on load. New setting `"editor_animation_speed"` (default 1; 1000 = instant; 0 = KSP1's editor values). Log: `anim: VAB animation speed: …` at startup.
+- **Black KSP1 icons, real cause.** Redux renders on URP and maps legacy light culling masks to rendering layers (`Redux.Rendering.LegacyLightCullingMask`). The icon studio (`PartIconRenderer.RenderTexture2D`) moves its subject to layer 31 and its lights cull to that layer (rendering layer `0x1`), but leaves the subject's `renderingLayerMask` as the prefab had it; KSP1 prefabs are scene objects that Redux maps to the VAB's layer (`0x800000`), so no studio light reached them. The mod now gives every KSP1 subject renderer the studio lights' rendering layers (`fix_part_icons`). The 0.2.2 shader swap did nothing: the prefabs are already in `KSP2/Scenery/Standard (Opaque)`. One-shot diagnostic for the first KSP1 and the first KSP2 icon: `icons: diag …` lines (renderer layer and rendering layers before and after, shader, textures, colours, keywords, then the studio lights' masks and the ambient light); the VAB `diag:` lines now show each renderer's layer and rendering layers.
+- 598 EditMode tests.
+
 ## 0.3.1 - 2026-10-25
 
 Fixes from the review of 0.3.0 (not run in game yet).

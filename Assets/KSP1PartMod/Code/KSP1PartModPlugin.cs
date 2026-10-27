@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using HarmonyLib;
+using KSP1PartMod.Animation.Behaviours;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Game;
 using KSP1PartMod.Game.Animation;
@@ -18,7 +19,7 @@ namespace KSP1PartMod
     public class KSP1PartModPlugin : KerbalMod
     {
         public const string ModId = "KSP1PartMod";
-        public const string Version = "0.3.1";
+        public const string Version = "0.3.2";
         public const string AnimationSettingsFile = "animations.json";
 
         private static string _modFolder;
@@ -42,6 +43,8 @@ namespace KSP1PartMod
             // First: nothing about animations may cost the tech-tree placement.
             TechTreeLoadStep.Register();
             Animations = ReadAnimationSettings();
+            Log.LogInfo("[KSP1PartMod] anim: VAB animation speed: " + EditorSpeed.Describe(Animations.EditorAnimationSpeed) +
+                $" (editor_animation_speed {Animations.EditorAnimationSpeed.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
             ApplyMuReaderFix(Animations);
             try
             {

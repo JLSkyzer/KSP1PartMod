@@ -149,6 +149,31 @@ Au démarrage, le log doit contenir `[KSP1PartMod] loaded 0.2.2`, `[KSP1PartMod]
 
 - [ ] Une seule ligne `[System] Place KSP1 parts in the tech tree completed` par chargement, aucune ligne `could not start the placement coroutine`.
 
+## 9. Correctifs 0.3.2 (troisième test en jeu)
+
+### A. Animations fluides dans le VAB
+
+- [ ] Au démarrage : `[KSP1PartMod] anim: VAB animation speed: ×1 of the flight speed (editor_animation_speed 1)`.
+- [ ] VAB, une jambe KRE (`KRE-FalconLeg-S`) : le bouton de déploiement la fait sortir en environ 4 s (la longueur du clip, `length=4.125 s` dans la ligne `ReduxFollower 'XDeploy' bound`), sans saut, et rentrer de même. Un second clic en cours de mouvement la fait repartir depuis sa position.
+- [ ] Ligne `follower 'XDeploy' -> extend (Redux Extending)` à chaque clic, comme avant : la jambe continue de bouger après que Redux est passé à Extended.
+- [ ] Portes, panneaux et trains de nos propres entrées (`ModuleAnimateGeneric`, `ModuleDeployableSolarPanel`, gear) : mouvement fluide à vitesse réelle dans le VAB aussi.
+- [ ] Sauvegarder une fusée avec une jambe sortie, la recharger : la jambe est déjà sortie, sans animation.
+- [ ] En vol : vitesse inchangée par rapport à 0.3.1.
+- [ ] Facultatif : `"editor_animation_speed": 0` redonne le comportement KSP1 (jambes instantanées dans le VAB).
+
+### B. Icônes KSP1
+
+- [ ] Ligne `icons: KSP1 icon fix armed on PartIconRenderer.RenderTexture2D (subject rendering layers set to the studio lights' 0x1)`.
+- [ ] Lignes `icons: diag KSP1 subject '<pièce>': studio layer 31, lights' rendering layers 0x1 …, <n> renderer(s) remapped`, puis des lignes `icons: diag   '<chemin>' layer 31 renderingLayerMask 0x… -> 0x1 …`. **Recopier ces lignes** : la valeur avant `->` (attendue `0x800000`) prouve la cause.
+- [ ] Ligne `icons: diag lights for '<pièce>': 21 light(s) (le compte peut être plus grand si d'autres studios de la même image existent encore): … cullingMask 0x80000000 renderingLayerMask 0x1 …`. Si le `renderingLayerMask` des lumières n'est pas `0x1`, recopier la ligne.
+- [ ] Si une icône KSP2 est rendue par Redux (pièce KSP2 sans icône), lignes `icons: diag KSP2 subject …` : recopier aussi.
+- [ ] Les icônes des pièces KSP1 sont éclairées et texturées dans le sélecteur (plus de silhouettes noires).
+- [ ] Lignes `diag:` du VAB : elles portent maintenant `layer … renderingLayerMask 0x…` par rendu.
+
+### C. Rectangle gris vide à droite de la barre des catégories
+
+- [ ] Ce rectangle (bord gauche cyan) est l'infobulle de série du VAB (`ObjectAssemblyTooltip`) du bouton de catégorie survolé : elle s'affiche à droite du bouton et écrit son texte lettre par lettre. Vérifier qu'elle se remplit (nom de la catégorie) et disparaît quand la souris quitte le bouton. Si elle reste vide ou affichée, noter quel bouton était survolé (barre de série ou barre KSP1).
+
 ## En cas de régression
 
 - Un module qui se comporte mal : `"enabled": false` dans `animations.json` coupe toutes les animations du mod (le placement reste actif).
@@ -160,4 +185,4 @@ Au démarrage, le log doit contenir `[KSP1PartMod] loaded 0.2.2`, `[KSP1PartMod]
 
 ## À rapporter
 
-Les lignes `registered ECS type`, `new node`, `diag:`, `mu:`, la ligne `step start`, toutes les lignes `mod <nom>`, toutes les lignes `not bound`, les lignes `data #`, `throttle from`, `heat from`, `shader '…'`, `action labels`, `aero gate`, `gear bridge`, `restricted Redux runtime`, `Redux runtime left untouched`, `follows Redux`, `follower`, `render:`, `icons:`, `placed after`, et toute ligne d'erreur ou d'avertissement du mod. Dire aussi, par pièce testée : bouge / ne bouge pas.
+Les lignes `registered ECS type`, `new node`, `diag:`, `mu:`, la ligne `step start`, toutes les lignes `mod <nom>`, toutes les lignes `not bound`, les lignes `data #`, `throttle from`, `heat from`, `shader '…'`, `action labels`, `aero gate`, `gear bridge`, `restricted Redux runtime`, `Redux runtime left untouched`, `follows Redux`, `follower`, `render:`, `icons:`, `placed after`, `VAB animation speed`, `icons: diag`, et toute ligne d'erreur ou d'avertissement du mod. Dire aussi, par pièce testée : bouge / ne bouge pas.

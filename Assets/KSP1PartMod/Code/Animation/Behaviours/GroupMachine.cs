@@ -29,13 +29,14 @@ namespace KSP1PartMod.Animation.Behaviours
 
         /// <param name="deployClipLength">Seconds, from the deploy clip's <c>AnimationState.length</c>.</param>
         /// <param name="activeClipLength">Seconds, from the active clip's <c>AnimationState.length</c>.</param>
-        public GroupMachine(AnimEntryDef def, float deployClipLength, float activeClipLength)
+        /// <param name="editorSpeed"><see cref="EditorSpeed"/>: positive, it replaces the cfg's editor multiplier.</param>
+        public GroupMachine(AnimEntryDef def, float deployClipLength, float activeClipLength, float editorSpeed = EditorSpeed.Ksp1)
         {
             _kDeployed = def.Key + ".deployed";
             _hasDeploy = !string.IsNullOrEmpty(def.Clip);
             _hasActive = !string.IsNullOrEmpty(def.SecondClip);
             _alwaysActive = def.AlwaysActive;
-            _editorSpeedMult = def.EditorSpeedMult;
+            _editorSpeedMult = EditorSpeed.Multiplier(editorSpeed, def.EditorSpeedMult);
             _deployLength = Machine.Length(deployClipLength);
             _activeLength = Machine.Length(activeClipLength);
         }

@@ -61,9 +61,9 @@ Redux imports KSP1 parts but loses most of their animations. This mod does two t
 - `ModuleAnimateGeneric` (several per part, each independent), `ModuleAnimateHeat`, `FXModuleAnimateThrottle`, `ModuleColorChanger`, `ModuleAnimationGroup`, the gear animations (`ModuleWheelDeployment`, `ModuleLandingLeg`, driven from the Gear action group) and the aero gates of KerbalReusabilityExpansion (`ModuleDeployableAero`), plus the deploy animation of parts Redux leaves alone.
 - State survives saving and loading, symmetry counterparts follow.
 - Clips of the Transform kind only. Redux's own deployable, solar and parachute modules are kept and restricted to the clips they own; the mod never plays a clip twice.
-- **Redux followers.** When a part has a single deployable source (`ModuleAnimateGeneric`, `ModuleDeployableSolarPanel`, `ModuleWheelDeployment`, `ModuleLandingLeg`), and for every `ModuleParachute`, Redux 26w42c plays the clip through a Mecanim copy that does not move. Redux keeps the state, its PAM toggle and its action groups; the mod only draws the original clip from that state, at KSP1 speed. Parts with several sources use Redux's legacy runtime, which moves, and are left alone.
+- **Redux followers.** When a part has a single deployable source (`ModuleAnimateGeneric`, `ModuleDeployableSolarPanel`, `ModuleWheelDeployment`, `ModuleLandingLeg`), and for every `ModuleParachute`, Redux 26w42c plays the clip through a Mecanim copy that does not move. Redux keeps the state, its PAM toggle and its action groups; the mod only draws the original clip from that state, at KSP1 speed. The mod keeps its own clock: Redux's copy reaches Extended in one frame, the clip still takes its full length. Parts with several sources use Redux's legacy runtime, which moves, and are left alone.
 
-**3. Visual fixes on every KSP1 part.** Renderers whose materials are all missing (drawn with Unity's error colour) are hidden; Redux's reentry hull is left to the reentry effect. KSP1 part icons are rendered with the same shader swap as Redux's KSP2 parts, so they are no longer black.
+**3. Visual fixes on every KSP1 part.** Renderers whose materials are all missing (drawn with Unity's error colour) are hidden; Redux's reentry hull is left to the reentry effect. KSP1 part icons are lit: Redux's icon studio lights only renderers that share their rendering layers, and KSP1 prefabs carry the VAB's layer; the mod gives the icon subject the studio's layers.
 
 Written against: stock `Squad` and `SquadExpansion`, `KerbalReusabilityExpansion`, `Bluedog_DB` (the counts per folder are in the log, one `anim: mod <name>` line each). `CommunityResourcePack` is present but has no animation.
 
@@ -80,6 +80,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "hide_material_less_renderers": true,
   "fix_part_icons": true,
   "subcategory_bar": true,
+  "editor_animation_speed": 1,
   "diagnostics": true,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissiveColor", "_EmissionColor"],
@@ -93,7 +94,8 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `own_first_deployable`: remove Redux's deployable module from parts that have one and let this mod play that clip too. Since 0.2.2 such parts move through `follow_redux_deployables`; keep this for a part that still does not.
 - `follow_redux_deployables`: draw the clip of Redux's single deployables and parachutes from Redux's state (see above). `false` leaves those clips still. Ignored for a part where `own_first_deployable` already gives the clip to this mod.
 - `hide_material_less_renderers`: hide the renderers of KSP1 parts whose materials are all missing (`[KSP1PartMod] render:` lines).
-- `fix_part_icons`: render KSP1 part icons with the KSP2 shader swap (`[KSP1PartMod] icons:` lines). `false` keeps Redux's icons.
+- `fix_part_icons`: light KSP1 part icons by giving the icon subject the rendering layers of the studio lights (`[KSP1PartMod] icons:` lines). `false` keeps Redux's black icons.
+- `editor_animation_speed`: speed of the KSP1 animations in the VAB, as a multiple of the flight speed. `1` (default) plays every clip at its real speed, so legs, doors and panels move smoothly; `1000` makes them instant; `0` restores KSP1's own editor values (KSP1 played doors and panels 10 times faster in the editor, `editorAnimationSpeedMult = 10`, and snapped gear and legs).
 - `subcategory_bar`: the KSP1 sub-category bar of the VAB (see VAB sub-categories). `false` removes it.
 - `diagnostics`: log once, in the VAB, the materials of a few KSP1 parts (`[KSP1PartMod] diag:` lines) for bug reports. `false` disables it.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order. When present it replaces the built-in map. The shipped values are starting guesses, not verified in game.
