@@ -4,7 +4,6 @@ using KSP1PartMod.Animation.Tracks;
 using NUnit.Framework;
 using UnityEngine.TestTools.Constraints;
 using Curve = KSP1PartMod.Animation.Behaviours.FloatCurve;
-using ValueType = KSP1PartMod.Animation.Tracks.ValueType;
 using Is = UnityEngine.TestTools.Constraints.Is;
 
 namespace KSP1PartMod.Tests.Animation.Tracks
@@ -33,7 +32,7 @@ namespace KSP1PartMod.Tests.Animation.Tracks
         private int Channel(float x, float y = 0f, float z = 0f, float w = 0f)
         {
             var target = Table.AddTarget(TargetKind.Renderer, false, false);
-            return Table.Register(target, 0, ValueType.Color, WriterClass.Track, 0, new Value4(x, y, z, w));
+            return Table.Register(target, 0, ChannelValueType.Color, WriterClass.Track, 0, new Value4(x, y, z, w));
         }
 
         private TrackSampler Sampler(float rest = 0f, Curve curve = null, int[] channelOfTrack = null, int wrapMode = 0) =>

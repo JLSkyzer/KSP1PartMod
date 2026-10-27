@@ -12,8 +12,8 @@ namespace KSP1PartMod.Tests.Animation.Tracks
 {
     /// <summary>The binding and time-source rules on every clip that a plan of a real part names (our entries, Redux's
     /// sources, the parachute clips), as found in its resolved <c>.mu</c> files under the game's <c>mods/KSP1</c>.
-    /// Redux keeps the Transform curves of a clip only, so a clip "has a state" on the instance iff its <c>.mu</c> clip
-    /// has a Transform curve. Plans use the default settings (<c>follow_redux_deployables</c> on,
+    /// Whether a clip has a state on the instance is <see cref="TrackBindingRule.HasState"/> (Redux keeps only the clips
+    /// that keep a Transform curve). Plans use the default settings (<c>follow_redux_deployables</c> on,
     /// <c>own_first_deployable</c> off). The cfgs are read before ModuleManager patches.</summary>
     public class RealTrackBindingTests
     {
@@ -22,7 +22,9 @@ namespace KSP1PartMod.Tests.Animation.Tracks
         {
             public string Part, Clip, Host;
             public int Model, WrapMode;
-            public bool HasTransformCurve, HasTracks;
+            /// <summary>A curve of type 0 (Transform) with keys, whatever its property.</summary>
+            public bool HasTransformCurve;
+            public bool HasState, HasTracks;
             public PartAnimationPlan Plan;
             public override string ToString() => $"{Part} '{Clip}' on model {Model} '{Host}'";
         }
@@ -62,7 +64,8 @@ namespace KSP1PartMod.Tests.Animation.Tracks
                             list.Add(new PlannedClip
                             {
                                 Part = s.Part, Clip = clip.Name, Host = node.Path(), Model = i, WrapMode = clip.WrapMode, Plan = plan,
-                                HasTransformCurve = clip.Curves.Any(c => c.Type == 0),
+                                HasTransformCurve = clip.Curves.Any(c => c.Type == 0 && c.Keys.Count > 0),
+                                HasState = TrackBindingRule.HasState(clip),
                                 HasTracks = TrackBuilder.FromClip(clip, node.Path(), i, out _) != null,
                             });
                         }
@@ -87,16 +90,16 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             {
                 if (e.Kind == EntryKind.GearBridge || e.Kind == EntryKind.AeroGate) continue;
                 if (!ClipsOf(e).Contains(c.Clip, StringComparer.Ordinal)) continue;
-                yield return e.Kind == EntryKind.ReduxFollower && !c.HasTransformCurve
+                yield return e.Kind == EntryKind.ReduxFollower && !c.HasState
                     ? ClipOwner.ReduxSingleSourceNoState : ClipOwner.OurEntry;
             }
             if (c.Plan.ReduxClips.Contains(c.Clip, StringComparer.Ordinal) && c.Plan.ReduxDeployableModule == "Ksp1Module_Deployable")
-                yield return c.HasTransformCurve ? ClipOwner.ReduxRuntimeWithState : ClipOwner.ReduxRuntimeNoState;
+                yield return c.HasState ? ClipOwner.ReduxRuntimeWithState : ClipOwner.ReduxRuntimeNoState;
         }
 
         [Test]
         public void TrackBinding_ClipWithTransformCurve_NeverTracksOnly_AllRealParts() =>
-            CollectionAssert.IsEmpty(AllPlannedClips().Where(c => c.HasTransformCurve && TrackBindingRule.Mode(true, c.HasTracks) == BindMode.TracksOnly)
+            CollectionAssert.IsEmpty(AllPlannedClips().Where(c => c.HasTransformCurve && TrackBindingRule.Mode(c.HasState, c.HasTracks) == BindMode.TracksOnly)
                 .Select(c => c.ToString()));
 
         [Test]
@@ -115,7 +118,8 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             var all = AllPlannedClips();
             var text = new StringBuilder();
             text.AppendLine($"planned clip occurrences: {all.Count}, with tracks: {all.Count(c => c.HasTracks)}");
-            foreach (var g in all.GroupBy(c => TrackBindingRule.Mode(c.HasTransformCurve, c.HasTracks)).OrderBy(g => g.Key))
+            text.AppendLine($"  with a state: {all.Count(c => c.HasState)}, Transform curve but no state: {all.Count(c => c.HasTransformCurve && !c.HasState)}");
+            foreach (var g in all.GroupBy(c => TrackBindingRule.Mode(c.HasState, c.HasTracks)).OrderBy(g => g.Key))
                 text.AppendLine($"  mode {g.Key}: {g.Count()}");
             foreach (var g in ClipsWithTracks().SelectMany(OwnersOf).GroupBy(o => o).OrderBy(g => g.Key))
                 text.AppendLine($"  owner {g.Key} ({TimeSourceRule.For(g.Key)}): {g.Count()}");

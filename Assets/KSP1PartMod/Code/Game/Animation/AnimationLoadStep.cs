@@ -52,7 +52,10 @@ namespace KSP1PartMod.Game.Animation
                 }
                 var planned = Apply(KSP1PartModPlugin.Animations.OwnFirstDeployable, KSP1PartModPlugin.Animations.FollowReduxDeployables);
                 // Queues the .mu reads on a worker and returns at once: the load never waits for them.
-                if (planned.Count > 0)
+                var settings = KSP1PartModPlugin.Animations;
+                if (!settings.MaterialCurves && !settings.LightCurves)
+                    KSP1PartModPlugin.Log.LogInfo("[KSP1PartMod] anim: tracks: off (material_curves and light_curves false)");
+                else if (planned.Count > 0)
                 {
                     tracksStarted = true;
                     TrackLoad.Start(planned);

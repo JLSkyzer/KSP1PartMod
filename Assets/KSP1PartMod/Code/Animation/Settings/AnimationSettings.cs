@@ -35,22 +35,49 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>VAB speed of our animations (<c>editor_animation_speed</c>, see
         /// <see cref="Behaviours.EditorSpeed"/>): 1 real time (default), 0 KSP1's editor values.</summary>
         public float EditorAnimationSpeed { get; }
+        /// <summary>Material tracks of clips (<c>material_curves</c>); off: phase 1 behaviour.</summary>
+        public bool MaterialCurves => _switches2a.MaterialCurves;
+        /// <summary>Light tracks of clips (<c>light_curves</c>).</summary>
+        public bool LightCurves => _switches2a.LightCurves;
+        /// <summary>Keyword <c>_EMISSION</c> and white <c>_EmissionMap</c> when missing (<c>emission_setup</c>).</summary>
+        public bool EmissionSetup => _switches2a.EmissionSetup;
+        /// <summary><c>FXModuleThrottleEffects</c> drives its colour changers (<c>throttle_effects</c>).</summary>
+        public bool ThrottleEffects => _switches2a.ThrottleEffects;
+        /// <summary>Heat entries and their tracks (<c>heat_glow</c>).</summary>
+        public bool HeatGlow => _switches2a.HeatGlow;
+        /// <summary>KSP1 module names never taken (<c>skip_modules</c>), trimmed, distinct, ordinal.</summary>
+        public IReadOnlyCollection<string> SkipModules => _switches2a.SkipModules;
 
-        /// <summary>Starting guesses, not verified in game. Each settings object gets its own copy.</summary>
+        /// <summary>The phase 2a keys, read together.</summary>
+        private sealed class Switches2a
+        {
+            public bool MaterialCurves = true, LightCurves = true, EmissionSetup = true, ThrottleEffects = true, HeatGlow = true;
+            public IReadOnlyCollection<string> SkipModules = NoModules;
+        }
+
+        private static readonly IReadOnlyCollection<string> NoModules = new ReadOnlyCollection<string>(new string[0]);
+        private readonly Switches2a _switches2a;
+
+        /// <summary><c>_EmissionColor</c> first: the property KSP1 parts' KSP2 shaders were seen with in game (spec 2a.6).
+        /// Each settings object gets its own copy.</summary>
         private static IReadOnlyDictionary<string, string[]> DefaultShaderPropertyMap() =>
             ReadOnly(new Dictionary<string, string[]>(StringComparer.Ordinal)
             {
-                ["_EmissiveColor"] = new[] { "_EmissiveColor", "_EmissionColor" },
+                ["_EmissiveColor"] = new[] { "_EmissionColor", "_EmissiveColor" },
+                ["_TintColor"] = new[] { "_TintColor" },
+                ["_Color"] = new[] { "_Color" },
                 ["_BurnColor"] = new[] { "_BurnColor" },
             });
 
         public static readonly AnimationSettings Defaults =
-            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime);
+            new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
+                new Switches2a());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
-            bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed)
+            bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a)
         {
+            _switches2a = switches2a;
             EditorAnimationSpeed = editorAnimationSpeed;
             SubcategoryBar = subcategoryBar;
             FollowReduxDeployables = followRedux;
@@ -84,6 +111,7 @@ namespace KSP1PartMod.Animation.Settings
                     subcategories = Defaults.SubcategoryBar;
                 var editorSpeed = Defaults.EditorAnimationSpeed;
                 IReadOnlyDictionary<string, string[]> map = null;
+                var s2a = new Switches2a();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -97,6 +125,12 @@ namespace KSP1PartMod.Animation.Settings
                         case "fix_part_icons": ReadBool(p, ref icons, problems); break;
                         case "subcategory_bar": ReadBool(p, ref subcategories, problems); break;
                         case "editor_animation_speed": ReadSpeed(p, ref editorSpeed, problems); break;
+                        case "material_curves": ReadBool(p, ref s2a.MaterialCurves, problems); break;
+                        case "light_curves": ReadBool(p, ref s2a.LightCurves, problems); break;
+                        case "emission_setup": ReadBool(p, ref s2a.EmissionSetup, problems); break;
+                        case "throttle_effects": ReadBool(p, ref s2a.ThrottleEffects, problems); break;
+                        case "heat_glow": ReadBool(p, ref s2a.HeatGlow, problems); break;
+                        case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:
                             if (!p.Name.StartsWith("_")) problems.Add($"unknown key \"{p.Name}\" ignored");
@@ -104,7 +138,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a);
             }
             catch (Exception e)
             {
@@ -132,6 +166,30 @@ namespace KSP1PartMod.Animation.Settings
                 }
             }
             problems.Add($"\"{p.Name}\" is not a number of 0 or more, default kept");
+        }
+
+        /// <summary>Trimmed, distinct names (ordinal); null (default kept) when the value is not a list. Items that are not
+        /// non-empty strings are skipped and reported.</summary>
+        private static IReadOnlyCollection<string> ReadNames(JProperty p, List<string> problems)
+        {
+            if (!(p.Value is JArray array))
+            {
+                problems.Add($"\"{p.Name}\" is not a list of names, default kept");
+                return null;
+            }
+            var names = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var item in array)
+            {
+                if (!IsName(item))
+                {
+                    problems.Add($"{p.Name}: item {item.ToString(Newtonsoft.Json.Formatting.None)} is not a name, ignored");
+                    continue;
+                }
+                var name = ((string)item).Trim();
+                if (seen.Add(name)) names.Add(name);
+            }
+            return new ReadOnlyCollection<string>(names);
         }
 
         /// <summary>The map, or null (default kept) when the value is not an object.</summary>
