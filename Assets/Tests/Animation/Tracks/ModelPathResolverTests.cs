@@ -49,6 +49,36 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             Assert.AreEqual(1, builds);
         }
         [Test] public void Index_ByFileName_IgnoresCase() { Touch("x/A.mu"); Touch("y/a.MU"); Assert.AreEqual(2, DirectoryIndex.Build(_root).ByFileName("a.mu").Count); }
+        [Test]
+        public void Index_UnreadableFolder_SkippedOthersKept()
+        {
+            Touch("x/a.mu"); Touch("y/b.mu");
+            var index = DirectoryIndex.Build(_root,
+                d => d.EndsWith("x") ? throw new UnauthorizedAccessException("denied") : Directory.GetFiles(d),
+                Directory.GetDirectories);
+            Assert.AreEqual(0, index.ByFileName("a.mu").Count);
+            Assert.AreEqual(1, index.ByFileName("b.mu").Count);
+        }
+
+        [Test]
+        public void Index_SubfolderListFails_KeepsWhatWasFound()
+        {
+            Touch("top.mu"); Touch("x/a.mu");
+            var index = DirectoryIndex.Build(_root, Directory.GetFiles, d => throw new IOException("gone"));
+            Assert.AreEqual(1, index.ByFileName("top.mu").Count);
+            Assert.AreEqual(0, index.ByFileName("a.mu").Count);
+        }
+
+        [Test]
+        public void Resolve_Rule5_IndexErrorDoesNotFailLaterParts()
+        {
+            Touch("c/u.mu"); Touch("bad/v.mu");
+            var r = new ModelPathResolver(_root, () => DirectoryIndex.Build(_root,
+                d => d.EndsWith("bad") ? throw new IOException("gone") : Directory.GetFiles(d), Directory.GetDirectories));
+            Assert.IsNull(r.Resolve(Cfg("b/part.cfg"), "v", false, out _));
+            Assert.AreEqual(P("c/u.mu"), r.Resolve(Cfg("b/part.cfg"), "u", false, out _));
+        }
+
         [Test] public void Index_UnknownName_Empty() => Assert.AreEqual(0, DirectoryIndex.Build(_root).ByFileName("none.mu").Count);
     }
 }

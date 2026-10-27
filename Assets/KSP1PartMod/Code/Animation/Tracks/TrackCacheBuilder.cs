@@ -80,6 +80,7 @@ namespace KSP1PartMod.Animation.Tracks
             var sets = new List<TrackSet>();
             var missing = new List<string>();
             var notes = new List<string>();
+            var details = new List<string>();
             var drops = default(TrackDrops);
             var wanted = new HashSet<string>(s.Clips ?? new string[0], StringComparer.Ordinal);
             var refs = s.ModelRefs ?? new string[0];
@@ -101,6 +102,7 @@ namespace KSP1PartMod.Animation.Tracks
                 {
                     result.Failed = true;
                     notes.Add($"{e.GetType().Name}: {e.Message} in '{refs[i]}'");
+                    if (!(e is MuFormatException)) details.Add(e.ToString());
                     continue;
                 }
                 Collect(file.Root, i, wanted, sets, ref drops);
@@ -111,6 +113,7 @@ namespace KSP1PartMod.Animation.Tracks
             result.Missing = missing;
             result.Drops = drops;
             result.Note = notes.Count == 0 ? null : string.Join("; ", notes);
+            result.Detail = details.Count == 0 ? null : string.Join("\n", details);
             return result;
         }
 
@@ -161,6 +164,10 @@ namespace KSP1PartMod.Animation.Tracks
     {
         private const string Prefix = "[KSP1PartMod] anim: tracks: ";
 
+        /// <summary>A line telling of a failure, to be logged as a warning. The summary line ends with
+        /// "<c>; n failed</c>" and is not one.</summary>
+        internal static bool IsFailureLine(string line) => line != null && line.Contains(" failed: ");
+
         /// <summary>Test seam, called before each part is built; never set in game.</summary>
         internal static Action<PartSnapshot> BeforeBuild;
 
@@ -205,12 +212,20 @@ namespace KSP1PartMod.Animation.Tracks
                     }
                     catch (Exception e)
                     {
-                        t = new PartTracks { Failed = true, Note = $"{e.GetType().Name}: {e.Message}" };
+                        t = new PartTracks
+                        {
+                            Failed = true, Note = $"{e.GetType().Name}: {e.Message}",
+                            Detail = e is MuFormatException ? null : e.ToString(),
+                        };
                     }
                     TrackCache.Put(generation, s.Part, t);
 
                     foreach (var m in t.Missing) log(Prefix + s.Part + " " + m);
-                    if (t.Failed) { failed++; log(Prefix + s.Part + " failed: " + t.Note); }
+                    if (t.Failed)
+                    {
+                        failed++;
+                        log(Prefix + s.Part + " failed: " + t.Note + (t.Detail == null ? "" : "\n" + t.Detail));
+                    }
                     var d = t.Drops;
                     if (d.DrawHalo + d.Audio + d.Particle > 0)
                         log($"{Prefix}{s.Part} dropped {d.DrawHalo} m_DrawHalo, {d.Audio} audio, {d.Particle} particle curve(s)");

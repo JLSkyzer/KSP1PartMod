@@ -12,18 +12,48 @@ namespace KSP1PartMod.Animation.Tracks
 
         private DirectoryIndex(Dictionary<string, List<string>> byName) => _byName = byName;
 
-        /// <summary>An empty index when <paramref name="root"/> does not exist.</summary>
-        public static DirectoryIndex Build(string root)
+        /// <summary>An empty index when <paramref name="root"/> does not exist. Never throws: a folder that cannot be
+        /// listed (access denied, removed meanwhile, path too long) is left out, with what lies under it, so rule 5
+        /// works with the rest.</summary>
+        public static DirectoryIndex Build(string root) => Build(root, Directory.GetFiles, Directory.GetDirectories);
+
+        /// <summary><see cref="Build(string)"/> with the listing calls given (test seam).</summary>
+        internal static DirectoryIndex Build(string root, Func<string, IEnumerable<string>> filesOf, Func<string, IEnumerable<string>> dirsOf)
         {
             var byName = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-            if (!string.IsNullOrWhiteSpace(root) && Directory.Exists(root))
-                foreach (var path in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
+            try
+            {
+                if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) return new DirectoryIndex(byName);
+            }
+            catch (Exception) { return new DirectoryIndex(byName); }
+
+            var pending = new Stack<string>();
+            pending.Push(root);
+            while (pending.Count > 0)
+            {
+                var dir = pending.Pop();
+                foreach (var path in List(filesOf, dir))
                 {
                     var name = Path.GetFileName(path);
                     if (!byName.TryGetValue(name, out var list)) byName[name] = list = new List<string>(1);
                     list.Add(path);
                 }
+                foreach (var sub in List(dirsOf, dir)) pending.Push(sub);
+            }
             return new DirectoryIndex(byName);
+        }
+
+        /// <summary>The listing, read in full here so that a lazy enumeration fails inside the catch; empty on a
+        /// file-system error.</summary>
+        private static List<string> List(Func<string, IEnumerable<string>> listing, string dir)
+        {
+            try { return new List<string>(listing(dir) ?? new string[0]); }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException
+                                      || e is System.Security.SecurityException || e is ArgumentException
+                                      || e is NotSupportedException)
+            {
+                return new List<string>(0);
+            }
         }
 
         public IReadOnlyList<string> ByFileName(string name) =>

@@ -127,6 +127,25 @@ namespace KSP1PartMod.Tests.Animation.Tracks
         }
 
         [Test]
+        public void TrackCacheBuilder_FormatError_NoDetail()
+        {
+            Write("m/bad.mu", new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 });
+            Assert.IsNull(Build(Snapshot("a", new[] { "m/bad" }, "glow")).Detail);
+        }
+
+        [Test]
+        public void TrackCacheBuilder_UnexpectedReadError_ShortNoteAndStackInDetail()
+        {
+            ThreeClipModel("m/a.mu");
+            var t = Build(Snapshot("a", new[] { "m/a" }, "glow"), _ => throw new IOException("disk gone"));
+            Assert.IsTrue(t.Failed);
+            StringAssert.Contains("IOException: disk gone in 'm/a'", t.Note);
+            StringAssert.DoesNotContain("\n", t.Note);
+            StringAssert.Contains("System.IO.IOException: disk gone", t.Detail);
+            StringAssert.Contains(" at ", t.Detail);
+        }
+
+        [Test]
         public void TrackCacheBuilder_MissingModel_NotesRulesTried()
         {
             var t = Build(Snapshot("a", new[] { "nope" }, "glow"));
@@ -224,12 +243,19 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             var parts = Parts();
             using (var gate = new ManualResetEventSlim())
             {
-                TrackCacheWorker.BeforeBuild = _ => gate.Wait(5000);
-                var g = TrackCache.Begin();
-                TrackCacheWorker.Start(g, parts, _ => { });
-                Assert.IsFalse(TrackCache.Ready);
-                gate.Set();
-                Assert.IsTrue(SpinWait.SpinUntil(() => TrackCache.Ready, 5000));
+                try
+                {
+                    TrackCacheWorker.BeforeBuild = _ => gate.Wait(5000);
+                    var g = TrackCache.Begin();
+                    TrackCacheWorker.Start(g, parts, _ => { });
+                    Assert.IsFalse(TrackCache.Ready);
+                    gate.Set();
+                    Assert.IsTrue(SpinWait.SpinUntil(() => TrackCache.Ready, 5000));
+                }
+                finally
+                {
+                    gate.Set(); // a failed assertion must not leave the worker waiting on a disposed gate
+                }
             }
         }
 
@@ -244,7 +270,19 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             StringAssert.Contains("InvalidOperationException: boom", a.Note);
             Assert.IsTrue(TrackCache.TryGet("b", out var b));
             Assert.AreEqual(1, b.Sets.Count);
-            Assert.That(lines, Has.Some.EqualTo("[KSP1PartMod] anim: tracks: a failed: " + a.Note));
+            StringAssert.DoesNotContain("\n", a.Note);
+            StringAssert.Contains(" at ", a.Detail);
+            Assert.That(lines, Has.Some.EqualTo("[KSP1PartMod] anim: tracks: a failed: " + a.Note + "\n" + a.Detail));
+        }
+
+        [Test]
+        public void Worker_FailureLinesAreFailures_SummaryIsNot()
+        {
+            var lines = Run(Parts());
+            Assert.IsFalse(TrackCacheWorker.IsFailureLine(lines.Single(l => l.Contains(" anim: tracks: read "))));
+            Assert.IsTrue(TrackCacheWorker.IsFailureLine(lines.Single(l => l.Contains(" c failed: "))));
+            Assert.IsTrue(TrackCacheWorker.IsFailureLine("[KSP1PartMod] anim: tracks: worker failed: System.Exception: x"));
+            Assert.IsFalse(TrackCacheWorker.IsFailureLine(null));
         }
 
         [Test]

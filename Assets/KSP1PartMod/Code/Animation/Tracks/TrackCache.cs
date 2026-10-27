@@ -13,6 +13,9 @@ namespace KSP1PartMod.Animation.Tracks
         public bool Failed;
         /// <summary>Why it failed and which references were not found, joined by "; "; null when all went well.</summary>
         public string Note;
+        /// <summary>The full text, stack included, of an exception the reader does not throw on purpose (anything but
+        /// a <see cref="Mu.MuFormatException"/>); null otherwise. Logged, never shown in <see cref="Note"/>.</summary>
+        public string Detail;
         public IReadOnlyList<TrackSet> Sets = NoSets;
         /// <summary>One <c>model '&lt;ref&gt;' not found (&lt;tried&gt;)</c> per reference no rule resolved.</summary>
         public IReadOnlyList<string> Missing = NoMissing;

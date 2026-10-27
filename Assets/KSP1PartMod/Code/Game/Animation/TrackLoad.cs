@@ -88,7 +88,7 @@ namespace KSP1PartMod.Game.Animation
             var log = KSP1PartModPlugin.Log;
             while (Lines.TryDequeue(out var line))
             {
-                if (line.Contains(" failed")) log.LogWarning(line);
+                if (TrackCacheWorker.IsFailureLine(line)) log.LogWarning(line);
                 else log.LogInfo(line);
             }
         }
