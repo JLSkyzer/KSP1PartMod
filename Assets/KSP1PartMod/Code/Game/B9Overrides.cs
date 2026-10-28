@@ -28,8 +28,10 @@ namespace KSP1PartMod.Game
 {
     /// <summary>B9PartSwitch overrides through V-SwiFT (plan 2026-10-28, roadmap 3.5): a subtype's mass, tank resources and
     /// part values become <b>Redux's own</b> transformers (<c>MassModifier</c>, <c>ResourceContainerRemover</c> then
-    /// <c>ResourceContainerAdder</c>, <c>PartScalarTransformer</c>), so V-SwiFT applies them in the VAB, saves them and
-    /// rebuilds them in flight. No type of ours ever reaches a part definition or a save.
+    /// <c>ResourceContainerAdder</c>, <c>PartScalarTransformer</c>), and its module DATA and <c>moduleActive = false</c>
+    /// become <c>ModuleDefinitionTransformer</c>s (<see cref="B9ModuleDiff"/>: the edited KSP1 module re-imported by
+    /// Redux's importers and diffed), so V-SwiFT applies them in the VAB, saves them and rebuilds them in flight. No type
+    /// of ours ever reaches a part definition or a save.
     /// <list type="bullet">
     /// <item>A postfix on <c>Ksp1B9TankCatalog.FromConfigFiles</c> reads the <c>B9_TANK_TYPE</c> roots of the files Redux
     /// imports (first definition wins), with Redux's built-in names as resource-only types.</item>
@@ -76,6 +78,34 @@ namespace KSP1PartMod.Game
             public List<AppendedSet> Appended = new List<AppendedSet>();
         }
 
+        /// <summary>What became of one KSP1 module that a part's subtypes edit (module data, Task 3).</summary>
+        internal sealed class ModuleOutcome
+        {
+            public string Ksp1Module;
+            public int TargetIndex;
+            /// <summary>The native behaviour Redux imports it as, or null.</summary>
+            public string Behaviour;
+            /// <summary>The DATA keys (and <c>moduleActive</c> for an off form) written by any subtype.</summary>
+            public List<string> Keys = new List<string>();
+            /// <summary>The native fields at least one variant edits (empty: no native effect, or skipped).</summary>
+            public List<string> Fields = new List<string>();
+            /// <summary>Skipped: the behaviour appears more than once on the part.</summary>
+            public bool Repeated;
+            /// <summary>Skipped: the re-import threw.</summary>
+            public bool Failed;
+            /// <summary>No native effect (counted at the end of the part).</summary>
+            public bool NoEffect;
+        }
+
+        /// <summary>The module data of one part (replaced when the part is imported again).</summary>
+        internal sealed class ModuleTally
+        {
+            public int Transformers, OffForms, NoOffForm;
+            public readonly Dictionary<string, int> ByField = new Dictionary<string, int>(StringComparer.Ordinal);
+            public readonly List<string> NoOffFormModules = new List<string>();
+            public readonly List<ModuleOutcome> Modules = new List<ModuleOutcome>();
+        }
+
         /// <summary>Tests: receives every line instead of the game log.</summary>
         internal static Action<string> Sink;
         /// <summary>Tests: runs on the plan before anything is built (a throw must leave Redux's result as it was).</summary>
@@ -88,18 +118,26 @@ namespace KSP1PartMod.Game
         private static int _failures;
         private static readonly Dictionary<string, PartTally> Tallies = new Dictionary<string, PartTally>(StringComparer.Ordinal);
         private static readonly HashSet<string> NotesLogged = new HashSet<string>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, ModuleTally> ModuleTallies = new Dictionary<string, ModuleTally>(StringComparer.Ordinal);
+        private static readonly HashSet<string> ModuleTypesLogged = new HashSet<string>(StringComparer.Ordinal);
+        private static readonly object RegistryLock = new object();
+        private static Ksp1PartModuleImporterRegistry _registry;
 
         internal static bool IsArmed => _armed && !_stopped;
 
-        /// <summary>The switches the planner uses in this task: module data and module off are applied by the next step
-        /// of the plan (Task 3), so they are off here and the set ids stay those of the overrides actually built.</summary>
-        internal static B9Switches Effective(AnimationSettings settings)
+        /// <summary>The module data of <paramref name="part"/> at its last import, or null (tests, audit).</summary>
+        internal static ModuleTally ModuleTallyOf(string part) => part != null && ModuleTallies.TryGetValue(part, out var t) ? t : null;
+
+        /// <summary>A scratch registry for the re-imports of module data, built once per import: Redux's constructor, so
+        /// 0.8.0's postfix adds our own importers to it as to Redux's.</summary>
+        private static Ksp1PartModuleImporterRegistry Registry()
         {
-            var s = B9Switches.From(settings);
-            s.ModuleData = false;
-            s.ModuleActive = false;
-            return s;
+            lock (RegistryLock) return _registry ?? (_registry = new Ksp1PartModuleImporterRegistry());
         }
+
+        /// <summary>The switches the planner uses: the settings' own (<see cref="B9Switches.From"/>), so the appended set
+        /// ids are those the gates plan with.</summary>
+        internal static B9Switches Effective(AnimationSettings settings) => B9Switches.From(settings);
 
         internal static Targets Resolve()
         {
@@ -145,7 +183,18 @@ namespace KSP1PartMod.Game
         public static bool TryApply(Harmony harmony, AnimationSettings settings)
         {
             var s = Effective(settings);
-            if (!(s.Mass || s.Resources || s.PartScalars))
+            if (s.ModuleData)
+            {
+                // Module data needs a few more of Redux's members; without them only module data (and off) is off.
+                var members = B9ModuleDiff.Resolve();
+                if (!B9ModuleDiff.Bind(members))
+                {
+                    foreach (var m in members.Missing) Warn(B9Lines.ModuleDataMemberNotFound(m));
+                    s.ModuleData = false;
+                    s.ModuleActive = false;
+                }
+            }
+            if (!(s.Mass || s.Resources || s.ModuleData || s.PartScalars))
             {
                 Info(B9Lines.AllOff);
                 return false;
@@ -186,8 +235,12 @@ namespace KSP1PartMod.Game
             _armed = _stopped = _summaryLogged = _tankTypesLineLogged = false;
             _failures = 0;
             Tallies.Clear();
+            ModuleTallies.Clear();
             NotesLogged.Clear();
+            ModuleTypesLogged.Clear();
             AfterPlanForTests = null;
+            B9ModuleDiff.Reset();
+            lock (RegistryLock) _registry = null;
         }
 
         /// <summary>The tank types read at the last <c>FromConfigFiles</c> (tests).</summary>
@@ -283,11 +336,13 @@ namespace KSP1PartMod.Game
             {
                 // Deterministic for this part (its cfg against Redux's result): not a failure of the feature.
                 Tallies.Remove(part);
+                ModuleTallies.Remove(part);
                 Warn(B9Lines.PlanMismatch(part, e.Message));
             }
             catch (Exception e)
             {
                 Tallies.Remove(part);
+                ModuleTallies.Remove(part);
                 Error(B9Lines.PartFailed(part, e.ToString()));
                 if (++_failures >= MaxFailures && !_stopped)
                 {
@@ -321,6 +376,7 @@ namespace KSP1PartMod.Game
             Data_PartSwitch data)
         {
             var switches = _switches ?? B9Switches.AllOn;
+            ModuleTallies.Remove(part);
             var modules = Ksp1NodeAdapter.Modules(partNode);
             var plan = B9OverridePlan.For(modules, _tankTypes, switches);
             AfterPlanForTests?.Invoke(plan);
@@ -335,6 +391,10 @@ namespace KSP1PartMod.Game
             var ownResources = partNode.GetNodes("RESOURCE").ToList();
             var database = ResourceDatabase();
             var anyAdder = false;
+            // Module data (d.5, d.7): what became of each edited KSP1 module, and which set owns each native field.
+            var moduleTally = new ModuleTally();
+            var moduleStates = new Dictionary<int, ModuleOutcome>();
+            var claims = new Dictionary<string, string>(StringComparer.Ordinal);
 
             // Tank resources are applied only when they can be exact: tank types read, one tank switch on the part.
             var applyResources = true;
@@ -426,6 +486,8 @@ namespace KSP1PartMod.Game
                         if (list.Contains(t) && !scalarKeys.Contains(sc.Key)) scalarKeys.Add(sc.Key);
                     }
                     if (list.Count > scalarsBefore) built.Tally.ScalarVariants++;
+                    if (st.ModuleEdits.Count > 0)
+                        AddModuleEdits(part, partNode, context, sw.SetId, st, list, built, moduleTally, moduleStates, claims);
                     if (st.Cost != 0) built.Tally.CostVariants++;
                     if (list.Count > 0) anyTransformer = true;
 
@@ -460,6 +522,7 @@ namespace KSP1PartMod.Game
                     sw.Subtypes.Count, sw.DefaultVariant ?? set.Variants[0].VariantId));
             }
 
+            FinishModules(part, moduleTally);
             if (built.ToRedux.Count == 0 && built.NewSets.Count == 0) return null;
             // Redux adds Module_ResourceCapacities after TryBuild only when the base definition has resources.
             if (anyAdder && baseNames.Count == 0 && context.PartData != null &&
@@ -495,6 +558,130 @@ namespace KSP1PartMod.Game
                 LogNoteOnce(context.PartName, B9Lines.Notes.ResourceCapacitiesAdded);
             }
             foreach (var line in built.Lines) Info(line);
+        }
+
+        // ------------------------------------------------------------------ module data and moduleActive
+
+        /// <summary>The module edits of one subtype (d.2 to d.7): each edited KSP1 module re-imported by Redux and diffed;
+        /// each native field that differs becomes a validated <c>ModuleDefinitionTransformer</c> in <paramref name="list"/>,
+        /// unless its behaviour appears more than once on the part or another set already owns that field.</summary>
+        private static void AddModuleEdits(string part, Ksp1ConfigNode partNode, Ksp1PartImportContext context, string setId,
+            B9SubtypePlan st, List<ITransformer> list, Built built, ModuleTally tally, Dictionary<int, ModuleOutcome> states,
+            Dictionary<string, string> claims)
+        {
+            foreach (var edit in st.ModuleEdits)
+            {
+                if (!states.TryGetValue(edit.TargetIndex, out var o))
+                {
+                    o = new ModuleOutcome { Ksp1Module = edit.TargetModule ?? "?", TargetIndex = edit.TargetIndex };
+                    states[edit.TargetIndex] = o;
+                    tally.Modules.Add(o);
+                }
+                foreach (var k in edit.DataKeys)
+                    if (!o.Keys.Contains(k)) o.Keys.Add(k);
+                var offForm = edit.Off && !edit.NoOffForm;
+                if (offForm && !o.Keys.Contains("moduleActive")) o.Keys.Add("moduleActive");
+                if (edit.Off && edit.NoOffForm)
+                {
+                    tally.NoOffForm++;
+                    if (!tally.NoOffFormModules.Contains(o.Ksp1Module)) tally.NoOffFormModules.Add(o.Ksp1Module);
+                    LogOnce(part + "\noff-none\n" + o.Ksp1Module + "\n" + st.VariantId, B9Lines.ModuleOffNone(part, o.Ksp1Module, st.VariantId));
+                }
+                if (edit.Edited == null || o.Repeated) continue;
+
+                B9ModuleDiff.Result r;
+                try
+                {
+                    r = B9ModuleDiff.Diff(Registry(), partNode, context, edit.TargetIndex, edit.Edited);
+                }
+                catch (Exception e)
+                {
+                    o.Failed = true;
+                    Warn(B9Lines.TransformerDropped(part, nameof(ModuleDefinitionTransformer),
+                        o.Ksp1Module + " in " + st.VariantId + ": " + (e.InnerException?.Message ?? e.Message)));
+                    continue;
+                }
+                if (r.Behaviour != null)
+                {
+                    o.Behaviour = r.Behaviour.Name;
+                    ModuleTypeOnce(r.Behaviour);
+                }
+                if (r.Outcome == B9ModuleDiff.Outcome.Repeated)
+                {
+                    o.Repeated = true;
+                    LogOnce(part + "\nrepeated\n" + o.Behaviour, B9Lines.BehaviourRepeated(part, o.Behaviour, r.Count));
+                    continue;
+                }
+                if (r.Outcome != B9ModuleDiff.Outcome.Compared) continue; // no native effect, decided for the whole part
+
+                var fields = new List<string>();
+                foreach (var t in r.Transformers)
+                {
+                    // V-SwiFT replaces a whole field: a later set would overwrite (and its reverter revert) the first's.
+                    var claim = t.BehaviourType + "." + t.DataType + "." + t.Key;
+                    if (claims.TryGetValue(claim, out var owner) && !string.Equals(owner, setId, StringComparison.Ordinal))
+                    {
+                        var conflict = B9Lines.FieldConflict(part, t.BehaviourType, t.Key, owner);
+                        if (!built.Lines.Contains(conflict)) built.Lines.Add(conflict);
+                        continue;
+                    }
+                    Add(part, list, t, null);
+                    if (!list.Contains(t)) continue;
+                    claims[claim] = setId;
+                    fields.Add(t.Key);
+                    tally.Transformers++;
+                    var byField = t.BehaviourType + "." + t.Key;
+                    tally.ByField[byField] = tally.ByField.TryGetValue(byField, out var n) ? n + 1 : 1;
+                }
+                if (fields.Count == 0) continue;
+                var firstEdit = o.Fields.Count == 0;
+                foreach (var f in fields)
+                    if (!o.Fields.Contains(f)) o.Fields.Add(f);
+                if (offForm)
+                {
+                    tally.OffForms++;
+                    built.Lines.Add(B9Lines.ModuleOff(part, o.Ksp1Module, st.VariantId, o.Behaviour, fields));
+                }
+                else if (firstEdit) // once per part and module
+                    built.Lines.Add(B9Lines.ModuleEdit(part, setId, st.VariantId, o.Ksp1Module, o.Behaviour, fields));
+            }
+        }
+
+        /// <summary>End of a part's module data: an edited module no variant could change natively gets its
+        /// <c>no native effect</c> line; the tally is kept even when the part gets no set.</summary>
+        private static void FinishModules(string part, ModuleTally tally)
+        {
+            if (tally.Modules.Count == 0) return;
+            foreach (var o in tally.Modules)
+            {
+                if (o.Fields.Count > 0 || o.Repeated || o.Failed || o.Keys.Count == 0) continue;
+                o.NoEffect = true;
+                LogOnce(part + "\nno-effect\n" + o.Ksp1Module + "\n" + o.TargetIndex, B9Lines.NoNativeEffect(part, o.Ksp1Module, o.Keys));
+            }
+            ModuleTallies[part] = tally;
+        }
+
+        /// <summary>Once per behaviour type: whether V-SwiFT finds it by its short name (<c>PartModuleTypes</c>), as
+        /// <c>ModuleDefinitionTransformer</c> will.</summary>
+        private static void ModuleTypeOnce(Type behaviour)
+        {
+            if (behaviour == null || !ModuleTypesLogged.Add(behaviour.Name)) return;
+            bool resolves;
+            try
+            {
+                resolves = SpaceWarp2.API.Parts.PartModuleTypes.ComponentModules.TryGetValue(behaviour.Name, out var found) &&
+                           found.behaviour == behaviour;
+            }
+            catch
+            {
+                resolves = false;
+            }
+            Info(B9Lines.ModuleTypeResolves(behaviour.Name, resolves));
+        }
+
+        private static void LogOnce(string key, string line)
+        {
+            if (NotesLogged.Add(key)) Info(line);
         }
 
         // ------------------------------------------------------------------ transformers
@@ -567,6 +754,15 @@ namespace KSP1PartMod.Game
                         if (db != null && !db.IsValidResourceID(db.GetResourceIDFromName(c.name)))
                             throw new InvalidOperationException($"resource '{c.name}' is not in the game's resource database");
                     }
+                    break;
+                case ModuleDefinitionTransformer md:
+                    // Reverter read above: the behaviour and data types resolve and the field exists.
+                    var dataField = md.ActualDataType.GetField(md.Key ?? "", BindingFlags.Public | BindingFlags.Instance)
+                                    ?? throw new InvalidOperationException($"{md.DataType} has no public field '{md.Key}'");
+                    if (md.Value == null) throw new InvalidOperationException("no value");
+                    var read = IOProvider.FromJson(md.Value.ToString(Formatting.None), dataField.FieldType);
+                    if (!JToken.DeepEquals(JToken.Parse(IOProvider.ToJson(read)), md.Value))
+                        throw new InvalidOperationException($"{md.DataType}.{md.Key} does not survive Redux's JSON");
                     break;
                 case PartScalarTransformer p:
                     var field = typeof(PartData).GetField(p.Key ?? "", BindingFlags.Public | BindingFlags.Instance)
@@ -687,6 +883,23 @@ namespace KSP1PartMod.Game
             var ts = Tallies.Values.ToList();
             Info(B9Lines.ImportSummary(ts.Count, ts.Sum(t => t.Sets), ts.Sum(t => t.NewSets), ts.Sum(t => t.NewSetsWithModule),
                 ts.Sum(t => t.MassVariants), ts.Sum(t => t.ResourceVariants), ts.Sum(t => t.ScalarVariants), ts.Sum(t => t.CostVariants)));
+            if (_switches?.ModuleData == true) Info(ModuleDataSummary());
+            lock (RegistryLock) _registry = null;
+        }
+
+        /// <summary>The end-of-import module data line, from every part's <see cref="ModuleTally"/>.</summary>
+        internal static string ModuleDataSummary()
+        {
+            var ms = ModuleTallies.Values.ToList();
+            var byField = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var m in ms)
+            foreach (var kv in m.ByField)
+                byField[kv.Key] = byField.TryGetValue(kv.Key, out var n) ? n + kv.Value : kv.Value;
+            var noEffect = ms.SelectMany(m => m.Modules).Where(o => o.NoEffect).ToList();
+            return B9Lines.ModuleDataSummary(ms.Sum(m => m.Transformers), ms.Count(m => m.Transformers > 0),
+                byField.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => (kv.Key, kv.Value)),
+                ms.Sum(m => m.OffForms), ms.Sum(m => m.NoOffForm), ms.SelectMany(m => m.NoOffFormModules).Distinct().OrderBy(n => n, StringComparer.Ordinal),
+                noEffect.Count, noEffect.Select(o => o.Ksp1Module).Distinct().OrderBy(n => n, StringComparer.Ordinal));
         }
 
         internal static void Info(string line)

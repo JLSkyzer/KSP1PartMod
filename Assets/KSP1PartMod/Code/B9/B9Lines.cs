@@ -27,8 +27,13 @@ namespace KSP1PartMod.B9
         public static string MemberNotFound(string member) =>
             Prefix + member + " not found, B9 overrides off (Redux's variants left as is)";
 
-        /// <summary>Every switch that Task 2 applies (mass, resources, part scalars) is off: nothing is armed.</summary>
-        public const string AllOff = Prefix + "mass, resources and part scalars off, nothing armed (Redux's variants left as is)";
+        /// <summary>Every switch that applies something (mass, resources, module data, part scalars) is off: nothing is
+        /// armed.</summary>
+        public const string AllOff = Prefix + "mass, resources, module data and part scalars off, nothing armed (Redux's variants left as is)";
+
+        /// <summary>A member only module data needs is missing: module data and module off are off, the rest applies.</summary>
+        public static string ModuleDataMemberNotFound(string member) =>
+            Prefix + member + " not found, module data and module off off (mass, resources and part scalars still apply)";
 
         public static string BuiltInTankTypesNotFound(string member) =>
             Prefix + member + " not found, Redux's built-in tank types unknown (their subtypes get no tank resources)";

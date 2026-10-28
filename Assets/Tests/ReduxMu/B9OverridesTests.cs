@@ -342,16 +342,16 @@ PART
 
         // ------------------------------------------------------------------ arming
 
-        [Test] public void Arm_LogsTheArmedLine_ModuleDataOffUntilTask3()
+        [Test] public void Arm_LogsTheArmedLine()
         {
             Assert.IsTrue(Arm());
-            CollectionAssert.Contains(_lines, B9Lines.Armed(true, true, false, false, true, true));
+            CollectionAssert.Contains(_lines, B9Lines.Armed(true, true, true, true, true, true));
             Assert.IsTrue(B9Overrides.IsArmed);
         }
 
         [Test] public void Arm_EveryAppliedSwitchOff_NothingArmed()
         {
-            Assert.IsFalse(Arm("{\"b9_mass\": false, \"b9_resources\": false, \"b9_part_scalars\": false}"));
+            Assert.IsFalse(Arm("{\"b9_mass\": false, \"b9_resources\": false, \"b9_module_data\": false, \"b9_part_scalars\": false}"));
             CollectionAssert.AreEqual(new[] { B9Lines.AllOff }, _lines);
             var plain = Import(MassOnlyPart);
             Assert.IsFalse(plain.Result, "Redux as in 0.8.0");
