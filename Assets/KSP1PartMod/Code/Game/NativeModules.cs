@@ -280,6 +280,8 @@ namespace KSP1PartMod.Game
             HarvesterImporter.ResetSession();
             ScannerImporters.ResetSession();
             IsruReference.Reset();
+            RadiatorImporter.ResetSession();
+            RadiatorAccess.Reset();
             RejectedNames.Clear();
             Record.Clear();
             Isru.Clear();

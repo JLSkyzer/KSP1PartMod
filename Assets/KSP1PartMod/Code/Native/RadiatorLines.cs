@@ -65,7 +65,19 @@ namespace KSP1PartMod.Native
 
         public static string TurnedOnWhenExtended(string part) => ThermalPrefix + $"{part}: radiator turned on when extended";
 
-        public static string StateRepaired(string part) => ThermalPrefix + $"{part}: cooler state repaired: on, OFF -> IDLE";
+        public static string StateRepaired(string part) => StateRepaired(part, true, "OFF", "IDLE");
+
+        /// <summary>The repair line for any mismatch between <c>coolerEnabled</c> and the cooler's state (only <c>coolerEnabled</c> is
+        /// saved: the state comes back from the definition): on with <c>OFF</c> or <c>RETRACTED</c>, off with <c>IDLE</c>.</summary>
+        public static string StateRepaired(string part, bool on, string from, string to) =>
+            ThermalPrefix + $"{part}: cooler state repaired: {OnOff(on)}, {from} -> {to}";
+
+        /// <summary>How auto-on starts for one part: a new part (an extended start turns it on), or the saved cooler (only a later
+        /// extension turns it on, a cooler the player switched off stays off).</summary>
+        public static string AutoOnSeed(string part, bool newPart, bool savedOn) =>
+            ThermalPrefix + $"{part}: auto on: " + (newPart
+                ? "new part, an extended start turns it on"
+                : $"saved cooler {OnOff(savedOn)}, only a later extension turns it on");
 
         public static string Cooling(string part, double kw, IEnumerable<(string Name, double Rate)> resources) =>
             ThermalPrefix + $"{part}: cooling {Inv(kw)} kW, {Flows(resources)} (vessel pool)";

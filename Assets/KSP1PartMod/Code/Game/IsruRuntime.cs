@@ -330,12 +330,14 @@ namespace KSP1PartMod.Game
             : s == BridgeDeploy.Retracting ? Data_Deployable.DeployState.Retracting
             : Data_Deployable.DeployState.Retracted;
 
-        /// <summary>Writes <paramref name="s"/> into the bridge when it differs from <paramref name="last"/>. No allocation.</summary>
-        internal static void Write(Data_Deployable bridge, ref BridgeDeploy? last, BridgeDeploy s)
+        /// <summary>Writes <paramref name="s"/> into the bridge when it differs from <paramref name="last"/>. No allocation.
+        /// True when it wrote (the radiator bridge acts on that change).</summary>
+        internal static bool Write(Data_Deployable bridge, ref BridgeDeploy? last, BridgeDeploy s)
         {
-            if (bridge == null || last == s) return;
+            if (bridge == null || last == s) return false;
             last = s;
             bridge.CurrentDeployState.SetValue(ToDeployState(s));
+            return true;
         }
 
         private static void LogDrilling(Module_Mine mine, string part, Data_Mine data)

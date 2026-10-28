@@ -95,5 +95,15 @@ namespace KSP1PartMod.Tests.Animation.Native
             Assert.AreEqual("[KSP1PartMod] thermal: p: cooling 50 kW, none (vessel pool)", RadiatorLines.Cooling("p", 50, null));
             Assert.AreEqual("[KSP1PartMod] thermal: patch failed, stopped for this session: boom", RadiatorLines.PatchFailed("boom"));
         }
+
+        /// <summary>Task 3: the repair line in both directions, and the auto-on seed.</summary>
+        [Test] public void Thermal_Repaired_BothWays_AutoOnSeed()
+        {
+            Assert.AreEqual("[KSP1PartMod] thermal: p: cooler state repaired: off, IDLE -> OFF", RadiatorLines.StateRepaired("p", false, "IDLE", "OFF"));
+            Assert.AreEqual("[KSP1PartMod] thermal: p: cooler state repaired: on, RETRACTED -> IDLE", RadiatorLines.StateRepaired("p", true, "RETRACTED", "IDLE"));
+            Assert.AreEqual("[KSP1PartMod] thermal: p: auto on: new part, an extended start turns it on", RadiatorLines.AutoOnSeed("p", true, false));
+            Assert.AreEqual("[KSP1PartMod] thermal: p: auto on: saved cooler off, only a later extension turns it on", RadiatorLines.AutoOnSeed("p", false, false));
+            Assert.AreEqual("[KSP1PartMod] thermal: p: auto on: saved cooler on, only a later extension turns it on", RadiatorLines.AutoOnSeed("p", false, true));
+        }
     }
 }

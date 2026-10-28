@@ -122,6 +122,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // The runtime of converted radiators: deploy bridge, auto-on, start-state repair (whatever enabled is).
+                RadiatorRuntime.TryApply(new Harmony(RadiatorRuntime.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.RadiatorLines.PatchFailed(e.ToString()));
+            }
+            try
+            {
                 // After NativeModules, before Redux's import (which builds the tank catalog and the variant sets).
                 B9Overrides.TryApply(new Harmony(B9Overrides.HarmonyId), Animations);
             }

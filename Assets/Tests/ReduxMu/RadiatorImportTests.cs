@@ -196,6 +196,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             }
 
             CollectionAssert.AreEqual(new[] { RadiatorMapping.NativeCooler }, NativeModules.Record.ConvertedModules("radPanelLg"));
+            Assert.AreEqual(-1, RadiatorImporter.DeployIndexOf("radPanelLg"), "a fixed radiator has no bridge");
             CollectionAssert.Contains(_lines, RadiatorLines.CoolerReference(NativeCoolerRef.Fallback));
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: cooler reference: no KSP2 cooler found, fallback 100 kW per EC/s");
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: radPanelLg: radiator -> Module_Cooler: 200 kW (maxEnergyTransfer 10000 / 50 x 1), " +
@@ -231,10 +232,39 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual("OFF", RadiatorAccess.StateOf(cooler));
 
             CollectionAssert.AreEqual(new[] { RadiatorMapping.NativeActiveRadiator }, NativeModules.Record.ConvertedModules("foldingRadLarge"));
+            Assert.AreEqual(0, RadiatorImporter.DeployIndexOf("foldingRadLarge"), "the Deploy entry's ModuleIndex, for the runtime's bridge");
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: foldingRadLarge: radiator -> Module_ActiveRadiator: 1000 kW " +
                                               "(maxEnergyTransfer 50000 / 50 x 1), ElectricCharge 10 (KSP1 ElectricCharge 0.5), off at start");
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: foldingRadLarge: " +
                                               RadiatorImporter.DeployableNote(new[] { "pivotName", "windResistance", "trackingSpeed" }));
+        }
+
+        /// <summary>Task 2 review: the built <c>Data_Cooler</c> through the game's own JSON (IOProvider), as Redux writes the part
+        /// definition. Every member comes back, its state too (<c>currentCoolerState</c> is in the JSON). A save holds only
+        /// <c>coolerEnabled</c> (and the status text): a reloaded cooler gets the definition's state with the saved switch, which is
+        /// why the runtime repairs on with <c>OFF</c> and off with <c>IDLE</c>.</summary>
+        [Test] public void BuiltCooler_RoundTripsThroughIOProvider()
+        {
+            var previous = Newtonsoft.Json.JsonConvert.DefaultSettings;
+            try
+            {
+                try { KSP.IO.IOProvider.Init(); }
+                catch (Exception e) { Assert.Ignore("IOProvider cannot initialise in EditMode: " + e.Message); }
+                var cooler = RadiatorAccess.NewCooler(200, new[] { ("ElectricCharge", 2.0) }, true);
+                var json = KSP.IO.IOProvider.ToJson(cooler);
+                var back = (ModuleData)KSP.IO.IOProvider.FromJson(json, RadiatorAccess.Get().DataCooler);
+                Assert.IsTrue(RadiatorAccess.IsCooler(back), json);
+                Assert.AreEqual(200, RadiatorAccess.FluxOf(back), 1e-9, json);
+                CollectionAssert.AreEqual(new[] { ("ElectricCharge", 2f, 0.01) }, Resources(back), json);
+                Assert.IsTrue(RadiatorAccess.EnabledOf(back), "coolerEnabled is saved: " + json);
+                StringAssert.Contains("\"fluxRemoved\"", json, "the JSON name of defaultFluxRemoved");
+                Assert.AreEqual("IDLE", RadiatorAccess.StateOf(back), "the definition's state is in the JSON: " + json);
+                var off = (ModuleData)KSP.IO.IOProvider.FromJson(KSP.IO.IOProvider.ToJson(RadiatorAccess.NewCooler(1000, new[] { ("ElectricCharge", 10.0) }, false)),
+                    RadiatorAccess.Get().DataCooler);
+                Assert.IsFalse(RadiatorAccess.EnabledOf(off));
+                Assert.AreEqual("OFF", RadiatorAccess.StateOf(off), "a deployable radiator's definition");
+            }
+            finally { Newtonsoft.Json.JsonConvert.DefaultSettings = previous; }
         }
 
         [Test] public void SecondRadiatorNode_ReturnsFalse_Merged()

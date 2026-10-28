@@ -57,6 +57,9 @@ namespace KSP1PartMod.Game
         private static readonly ConditionalWeakTable<Ksp1PartImportContext, object> Seen = new ConditionalWeakTable<Ksp1PartImportContext, object>();
         private static readonly object SeenMark = new object();
         private static readonly Dictionary<string, PartStats> Stats = new Dictionary<string, PartStats>(StringComparer.Ordinal);
+        /// <summary>By part name, for the runtime's deploy bridge: the KSP1 MODULE index of the part's first
+        /// <c>ModuleDeployableRadiator</c> (the <c>ModuleIndex</c> of its Deploy entry), for parts that got <c>Module_ActiveRadiator</c>.</summary>
+        private static readonly Dictionary<string, int> DeployIndex = new Dictionary<string, int>(StringComparer.Ordinal);
         private static NativeCoolerRef _reference;
         private static bool _activeMissingLogged;
 
@@ -72,6 +75,25 @@ namespace KSP1PartMod.Game
 
         /// <summary>The members without which no radiator is converted; empty when all are found.</summary>
         internal static List<string> MissingMembers() => new List<string>(RadiatorAccess.Get().MissingCooler);
+
+        /// <summary>The MODULE index of the first <c>ModuleDeployableRadiator</c> of <paramref name="partNode"/>, in the order the
+        /// animation planner numbers modules (<c>Ksp1NodeAdapter.Modules</c>); -1 when there is none.</summary>
+        internal static int DeployModuleIndex(Ksp1ConfigNode partNode)
+        {
+            var modules = partNode?.GetNodes("MODULE")?.Where(n => n != null).ToList(); // nulls skipped, as the adapter does
+            if (modules == null) return -1;
+            for (var i = 0; i < modules.Count; i++)
+                if (string.Equals(modules[i].GetValue("name")?.Trim(), RadiatorMapping.DeployableModule, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            return -1;
+        }
+
+        /// <summary>The deploy module index recorded for <paramref name="part"/> (a <c>Module_ActiveRadiator</c> of ours), else -1.</summary>
+        internal static int DeployIndexOf(string part)
+        {
+            if (part == null) return -1;
+            lock (Lock) return DeployIndex.TryGetValue(part, out var i) ? i : -1;
+        }
 
         private static List<Ksp1ConfigNode> Nodes(Ksp1ConfigNode partNode, string module) =>
             (partNode?.GetNodes("MODULE") ?? Enumerable.Empty<Ksp1ConfigNode>())
@@ -116,6 +138,8 @@ namespace KSP1PartMod.Game
                 lock (Lock)
                 {
                     if (Seen.TryGetValue(context, out _)) return false; // merged into the cooler built at the part's first call
+                    // Marked before the work, on purpose: if this first call fails, the part's other radiator nodes are
+                    // dropped too (Redux's 0.10.0 result for every one of them), never half converted.
                     Seen.Add(context, SeenMark);
                 }
                 if (context.ModuleData.Any(RadiatorAccess.IsCooler))
@@ -159,9 +183,14 @@ namespace KSP1PartMod.Game
                 FaultForTests?.Invoke(part);
                 // The conversion is complete: counted, then logged (a failed part leaves no line and no count).
                 var record = NativeModules.Record;
-                record.AddConversion(part, map.NativeModule);
                 foreach (var field in map.NotReproduced.Concat(deployFields)) record.Flag(part, FlagNotReproduced + field);
-                lock (Lock) Stats[part] = stats;
+                record.AddConversion(part, map.NativeModule);
+                lock (Lock)
+                {
+                    Stats[part] = stats;
+                    if (map.Kind == RadiatorKind.ActiveRadiator) DeployIndex[part] = DeployModuleIndex(context.PartNode);
+                    else DeployIndex.Remove(part);
+                }
                 added = -1;
                 try
                 {
@@ -300,6 +329,7 @@ namespace KSP1PartMod.Game
             lock (Lock)
             {
                 Stats.Clear();
+                DeployIndex.Clear();
                 _reference = null;
                 _activeMissingLogged = false;
             }
