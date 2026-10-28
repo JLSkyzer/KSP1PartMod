@@ -95,6 +95,14 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "share_ksp1_textures": true,
   "ksp1_textures_follow_quality": true,
   "raise_streaming_budget": false,
+  "ksp1_converters": true,
+  "ksp1_drills": true,
+  "ksp1_survey_scanners": true,
+  "ksp1_resource_scanners": true,
+  "ksp1_ore_resource": "CarbonRegolith",
+  "harvest_multiplier": 1,
+  "isru_heat_scale": 1,
+  "isru_active_animation": true,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissionColor", "_EmissiveColor"],
     "_TintColor": ["_TintColor"],
@@ -137,6 +145,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `ksp1_heatshields` (0.8.0, default `true`): KSP1's `ModuleAblator` becomes KSP2's `Module_Heatshield`. It burns the part's Ablator above `ablationTempThresh` and shields the part when its bottom faces the airflow, at KSP2's own shield rate (the same for every size). `lossExp`, `lossConst` and `reentryConductivity` are not reproduced; `Module_Heatshield` takes its Ablator from the whole vessel. A part without the resource gets no shield. `false`: Redux drops the module. Lines `[KSP1PartMod] native: heat shield`.
 - `ablator_rate_scale` (0.8.0, default `1`, 0.01 to 100): multiplies the burn rate of those shields. `ablator_char` (default `true`): the shield's `shieldChar` colour follows the part's Ablator, white when full, black when empty. It is not used where another colour changer of the part writes the same shader property (the KV pods keep their lights); on the stock and KRE shields (`_BurnColor`) it probably shows nothing, since the KSP2 shader of KSP1 parts is not documented with that property.
 - B9 overrides (0.9.0, all default `true`, see "B9PartSwitch overrides"): `b9_mass`, `b9_resources`, `b9_module_data`, `b9_module_active` (needs `b9_module_data`), `b9_part_scalars`, `b9_new_part_switches`.
+- Converters, drills and scanners (0.10.0, see that section): `ksp1_converters`, `ksp1_drills`, `ksp1_survey_scanners`, `ksp1_resource_scanners`, `ksp1_ore_resource`, `harvest_multiplier`, `isru_heat_scale`, `isru_active_animation`.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
 ### Phase 2a: material, light and glow curves (0.4.0)
@@ -173,6 +182,31 @@ Redux turns a B9PartSwitch subtype into a KSP2 part variant, but only for its vi
 - **Audit.** `b9_overrides` CSV column, `audit: B9 overrides:` line.
 - **Switch off.** Each of the six `b9_*` keys, set to `false` in `animations.json`, restores the 0.8.0 behaviour for its point, for new crafts. A vessel already in flight keeps what it saved: its saved overrides (tank, module data, part values) apply until its next save rewrites them, and its saved mass delta (`MassModifier`, kept in the vessel's state) stays until the craft is rebuilt in the VAB. They work whatever `enabled` is. An existing `animations.json` without them gets the defaults (all `true`).
 
+## Converters, drills and scanners (0.10.0)
+
+Redux drops the KSP1 ISRU modules. Since 0.10.0 the mod imports them as KSP2's own modules, at Redux's import (whatever `enabled` is): no new resource, map, economy or heat model. Built, not verified in game. Checklist (French): `docs/testing/2026-10-28-converters-drills-in-game-checklist.md`. Lines `[KSP1PartMod] native:` (import) and `[KSP1PartMod] isru:` (flight).
+
+| Key | Default | Effect | `false` (or the 0.9.0 value) |
+|---|---|---|---|
+| `ksp1_converters` | `true` | The KSP1 `ModuleResourceConverter`s of a part (fuel cells, ISRU) become one `Module_ResourceConverter`, one mode per KSP1 converter, chosen in its Mode menu with readable names. One mode runs at a time, at full rate, and stops when an output is full. | Redux drops the converters. |
+| `ksp1_drills` | `true` | A KSP1 ground drill (`ModuleResourceHarvester`, type 0) becomes Redux's `Module_Mine`: deployed with the KSP1PartMod button and touching the ground, it mines from Redux's resource map where the vessel stands. | Redux drops the drills. |
+| `ksp1_survey_scanners` | `true` | `ModuleOrbitalSurveyor` (SurveyScanner) becomes `Module_ResourceScanner`, with the KSP2 scanner's resources, power and polar-orbit window, and KSP1's scan time. | Not converted. |
+| `ksp1_resource_scanners` | `true` | A `ModuleResourceScanner` with `RequiresUnlock = false` (SurfaceScanner) becomes `Module_ResourceScanner` for its resource, below its maximum altitude. | Not converted. |
+| `ksp1_ore_resource` | `"CarbonRegolith"` | The KSP2 resource KSP1's Ore becomes in tanks, converters and drills. CarbonRegolith is what KSP2's own ISRU turns into Methane and Oxidizer. | `"TestRocks"` or `""`: Redux's mapping (no map anywhere, so drills are skipped). An unknown name also keeps TestRocks. |
+| `harvest_multiplier` | `1` (0.01 to 100) | Multiplies the yield of KSP1 drills (see the yield rule below). | — |
+| `isru_heat_scale` | `1` (0 to 10) | Multiplies the heat converters and drills put into their part (KSP2's own heat per EC/s; KSP2's thermal shutdown at 90 %). `0`: no heat. | — |
+| `isru_active_animation` | `true` | The running clip of a KSP1 `ModuleAnimationGroup` (ISRU, drills) plays while the part's KSP2 converter, drill or scanner runs. Needs `enabled`. | The clip plays only for parts KSP1 marks as always active. |
+
+- **Rates and units.** Every rate goes through Redux's own `ConvertAmount`, as the tanks do, so a converter or drill moves exactly what the containers hold. EC is never converted.
+- **Ore remap is global.** It is an in-memory entry of Redux's resource table, set at startup, whatever the campaign feature says: a campaign without the mod, in the same session, also imports its KSP1 Ore tanks as CarbonRegolith.
+- **Ore mass.** Redux weighs Ore 0.05 t per unit, KSP1 0.01 t. The units follow KSP1, but the Ore converter modes make about 5 times less fuel mass per tonne of Ore than in KSP1 (`Ore mass x5` on each mode line).
+- **Old saves.** A vessel saved in 0.9.0 with TestRocks in a KSP1 tank gets it back as CarbonRegolith on load, mass kept, capped at the capacity (lines `ore: old save:`). VAB workspaces saved before 0.10.0 are not migrated: their Ore is lost.
+- **Drill yield.** A KSP1 drill yields what KSP2's own drill mines per EC/s, times its EC/s, times its KSP1 `Efficiency` against the stock drills' 0.1 per EC/s, times `harvest_multiplier`, times the local map value. With `1`, the stock KSP1 drills yield what KSP2's drill yields for the same power. `harvest_multiplier` replaces `harvest_abundance_at_full_density`, which is now reported as an unknown key.
+- **Ground probe.** The drill's probe is the KSP1 `ImpactTransform`, `ImpactRange` metres along its +Z (supposed, line `drill probe '…' found, … m along +Z`). If the transform is not found, the drill stays "not deployed" (line `… the drill stays not deployed (no deploy bridge)`).
+- **Where to drill.** Redux's own density maps: CarbonRegolith on Bop, Dres, Duna, Eeloo, Eve, Gilly, Kerbin, Laythe, Moho, Pol, Tylo and Vall, not on the Mun, Ike, Drast or Minmus. The minable set is read from KSP2's drills at import (Redux fills its maps later), so the `minable resources:` line says `from the KSP2 drill`.
+- **Skipped.** Asteroid and comet drills, ocean, atmospheric and exospheric harvesters (no such systems in KSP2); `ModuleCoreHeat` and its thermal efficiency (no core temperature in KSP2); crew bonuses, `FillAmount`, `DumpExcess`, `HarvestThreshold`; scanners with `RequiresUnlock` (BDB magnetometers, OrbitalScanner: KSP2 has no local readout).
+- **Audit.** The `native_modules` column and the `audit: native modules:` line count converters, drills and scanners.
+
 ## Audit mode (0.6.0)
 
 Off by default. With `"audit_on_vab_entry": true` in `animations.json`, the first time you enter the VAB in a game session (mod enabled in the campaign), the mod loads every KSP1 part once, off screen and one at a time, and writes a report of the parts that fail, throw, stay unfinished or log errors. It changes nothing in your craft, the part list or the undo history, and the shared KSP1 textures are not destroyed. Do not build while it runs; leaving the VAB cancels it, and the next entry resumes. Not run in game yet: checklist in `docs/testing/2026-10-28-audit-in-game-checklist.md`.
@@ -204,6 +238,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
   - **Parts gaining a selector** (28 installed) have no `Module_PartSwitch` in a vessel saved in 0.8.0: such a vessel in flight keeps its 0.8.0 values until it is saved and reloaded; after that the tank and part values apply, but the mass only after the craft is rebuilt in the VAB.
   - **Gates:** a gate may name a set that was never appended (a switch whose only override has no native form); this is benign, the part keeps its default subtype.
   - The volume formula and the dry-mass product are inferred from B9's public wiki.
+- Converters, drills and scanners (0.10.0): built, not verified in game. The +Z probe direction and the drill yield are to calibrate in game; a full output tank stops a converter (no `DumpExcess`); a B9 subtype that turns a converter off has no native off form; KSP1 parts with core heat get no radiator behaviour.
 - Engine shrouds (0.7.0): built, not verified in game. `ignoreNodes` shrouds keep their reentry geometry after a jettison.
 - Animations: phases 1, 2a and 2b (all built; none verified in game yet beyond what the checklists record). The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.

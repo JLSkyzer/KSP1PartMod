@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 using KSP1PartMod.Audit;
+using KSP1PartMod.Native;
 using NUnit.Framework;
 
 namespace KSP1PartMod.Tests.Audit
@@ -535,14 +536,35 @@ namespace KSP1PartMod.Tests.Audit
             var gone = Rec("gone"); gone.NativeModules = new[] { "Module_Heatshield:missing", "Module_ToggleCrossfeed:missing" };
             var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Heatshield" };
             var s = AuditSummary.From(new[] { shield, both, bad, gone, control, Rec("plain") }, 1);
-            Assert.AreEqual("audit: native modules: 2 heat shield(s), 1 crossfeed toggle(s), 2 part(s) where one failed to initialize", s.NativeLine());
+            Assert.AreEqual("audit: native modules: 2 heat shield(s), 1 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), " +
+                            "2 part(s) where one failed to initialize", s.NativeLine());
             StringAssert.Contains("## Native modules\n\n" + s.NativeLine() + "\n", s.Markdown("x"));
         }
 
         [Test] public void Summary_NativeLine_Empty()
         {
-            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 part(s) where one failed to initialize",
+            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), " +
+                            "0 part(s) where one failed to initialize",
                 AuditSummary.From(new AuditRecord[0], 0).NativeLine());
+        }
+
+        /// <summary>0.10.0: converters, drills and scanners are counted when they run; a failed one counts as a failed part.</summary>
+        [Test] public void Summary_NativeLine_ConvertersDrillsScanners()
+        {
+            var isru = Rec("isru"); isru.NativeModules = new[] { "Module_ResourceConverter" };
+            var drill = Rec("drill"); drill.NativeModules = new[] { "Module_Mine", "Module_ResourceConverter" };
+            var scanner = Rec("scanner"); scanner.NativeModules = new[] { "Module_ResourceScanner" };
+            var bad = Rec("bad"); bad.NativeModules = new[] { "Module_Mine:uninitialized", "Module_ResourceScanner:missing" };
+            var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Mine" };
+            var s = AuditSummary.From(new[] { isru, drill, scanner, bad, control }, 1);
+            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 2 converter(s), 1 drill(s), 1 scanner(s), " +
+                            "1 part(s) where one failed to initialize", s.NativeLine());
+            Assert.AreEqual(AuditNative.Converter, ConverterMapping.NativeModule);
+            Assert.AreEqual(AuditNative.Drill, HarvesterMapping.NativeModule);
+            Assert.AreEqual(AuditNative.Scanner, ScannerMapping.NativeModule);
+
+            var rows = ReadCsv(AuditCsv.Document(new[] { drill }));
+            Assert.AreEqual("Module_Mine;Module_ResourceConverter", rows[1][AuditCsv.Columns.ToList().IndexOf("native_modules")]);
         }
 
         [Test] public void Markdown_ModuleManagerLines_AreInTheHeader_OnlyWhenGiven()

@@ -58,6 +58,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         {
             var armed = IsruRuntime.TryApply(new Harmony(IsruRuntime.HarmonyId), AnimationSettings.Parse(json, out _));
             IsruRuntime.PartNameForTests = m => m.gameObject.name;
+            IsruRuntime.IsImportedForTests = _ => false;
             return armed;
         }
 
@@ -204,6 +205,53 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsTrue(IsruRuntime.BeforeCheckCollisions(mine, ref result), "Redux's own code runs");
         }
 
+        /// <summary>Task 4 review: on a mirrored part (negative z scale) the probe keeps KSP1's direction, the transform's
+        /// <c>forward</c>, which ignores scale.</summary>
+        [Test] public void Drill_ProbeOnAMirroredPart_StaysAlongForward()
+        {
+            Assert.AreEqual(-2.5f, IsruRuntime.ImpactEnd(5, -2f).z, 1e-6f, "signed scale");
+            Assert.AreEqual(2.5f, IsruRuntime.ImpactEnd(5, 2f).z, 1e-6f);
+            Assert.AreEqual(5f, IsruRuntime.ImpactEnd(5, 0f).z, 1e-6f, "no scale: the range as is");
+
+            Assert.IsTrue(Arm());
+            NativeModules.Isru.SetDrill("RadialDrill", new DrillImpact("ImpactTransform", 5.42, new[] { "CarbonRegolith" }));
+            var mine = Part<Module_Mine>("RadialDrill", out var impact);
+            impact.localRotation = Quaternion.identity;
+            impact.parent.localScale = new Vector3(2f, 2f, -2f);
+            Assert.Less(impact.lossyScale.z, 0f, "mirrored");
+            IsruRuntime.BeforeMineInit(mine);
+            var end = Arm(mine, "vfxArmBottomTransform");
+            Assert.AreEqual(5.42f, Vector3.Distance(impact.position, end.position), 1e-4f);
+            Assert.AreEqual(0f, Vector3.Angle(impact.forward, end.position - impact.position), 1e-3f, "along forward, not reversed");
+        }
+
+        /// <summary>Task 4 review: a KSP1-imported part with a native drill or scanner that our record does not hold logs one
+        /// line per session; a native part logs nothing.</summary>
+        [Test] public void ImportedPart_NotInOurRecord_OneLine()
+        {
+            Assert.IsTrue(Arm());
+            IsruRuntime.IsImportedForTests = p => p == "Ksp1Odd";
+            var mine = Part<Module_Mine>("Ksp1Odd", out _);
+            var scanner = Part<Module_ResourceScanner>("Ksp1Odd", out _);
+            var native = Part<Module_Mine>("drill_2v_radial", out _);
+            _lines.Clear();
+            for (var i = 0; i < 2; i++)
+            {
+                IsruRuntime.BeforeMineInit(mine);
+                IsruRuntime.AfterMineInit(mine);
+                IsruRuntime.AfterScannerInit(scanner);
+                IsruRuntime.BeforeMineInit(native);
+            }
+            CollectionAssert.AreEqual(new[]
+            {
+                "[KSP1PartMod] isru: Ksp1Odd: Module_Mine not in our record, runtime left as is",
+                "[KSP1PartMod] isru: Ksp1Odd: Module_ResourceScanner not in our record, runtime left as is",
+            }, _lines);
+            Assert.IsNull(Deployable(mine));
+            Assert.IsNull(Deployable(scanner));
+            Assert.IsFalse(IsruRuntime.Broken);
+        }
+
         [Test] public void Drill_ReduxDeployableKept()
         {
             Assert.IsTrue(Arm());
@@ -332,6 +380,28 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.That(Steps, Is.Not.AllocatingGCMemory());
             IsruRuntime.Write(bridge, ref last, BridgeDeploy.Extended);
             Assert.IsTrue(bridge.IsExtended);
+        }
+
+        /// <summary>Task 4 review: until the native module adds its data, the reader looks it up in <c>DataModules</c> on every
+        /// frame. The lookup is a <c>Dictionary&lt;Type, ModuleData&gt;</c> read (decompiled <c>ModuleDataList.TryGetByType</c>):
+        /// no allocation, so no retry cap.</summary>
+        [Test] public void ActiveInput_DataNotYetAdded_LookupDoesNotAllocate()
+        {
+            var mine = Part<Module_Mine>("RadialDrill", out _);
+            Assert.IsNotNull(mine.DataModules);
+            var activity = NativeActivity.Find(mine);
+            Assert.IsNotNull(activity);
+            var running = activity.Running;
+            var any = 0;
+            void Steps()
+            {
+                for (var k = 0; k < 10000; k++)
+                    if (running()) any++;
+            }
+
+            Steps(); // warm up (JIT)
+            Assert.That(Steps, Is.Not.AllocatingGCMemory());
+            Assert.AreEqual(0, any, "no data: not running");
         }
 
         [Test] public void ActiveInputs_ReadTheNativeStates()

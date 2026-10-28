@@ -149,7 +149,11 @@ namespace KSP1PartMod.Game
             try
             {
                 var part = PartNameOf(__instance);
-                if (!NativeModules.Isru.TryGetDrill(part, out var impact)) return;
+                if (!NativeModules.Isru.TryGetDrill(part, out var impact))
+                {
+                    NotInRecord(part, nameof(Module_Mine));
+                    return;
+                }
                 var state = new DrillState { Part = part };
                 Drills.Remove(__instance);
                 Drills.Add(__instance, state);
@@ -185,7 +189,12 @@ namespace KSP1PartMod.Game
             try
             {
                 var part = PartNameOf(__instance);
-                if (!NativeModules.Isru.IsScanner(part) || _scannerDeployable(__instance) != null) return;
+                if (!NativeModules.Isru.IsScanner(part))
+                {
+                    NotInRecord(part, nameof(Module_ResourceScanner));
+                    return;
+                }
+                if (_scannerDeployable(__instance) != null) return;
                 var bridge = new Data_Deployable();
                 _scannerDeployable(__instance) = bridge;
                 Attach(__instance, bridge, nameof(Module_ResourceScanner), part);
@@ -258,12 +267,33 @@ namespace KSP1PartMod.Game
             return true;
         }
 
-        /// <summary>The local position of the probe's end: <paramref name="range"/> metres in the world along +Z, whatever the
-        /// transform's scale.</summary>
+        /// <summary>The local position of the probe's end: <paramref name="range"/> metres in the world along the transform's
+        /// <c>forward</c>, whatever its scale. The scale is signed: on a mirrored part (negative z scale) the local end is negative,
+        /// so the world end stays along <c>forward</c>, as KSP1's ray (which ignores scale) does.</summary>
         internal static Vector3 ImpactEnd(double range, float lossyScaleZ)
         {
-            var scale = Math.Abs(lossyScaleZ);
-            return new Vector3(0f, 0f, (float)(scale > 1e-6f ? range / scale : range));
+            return new Vector3(0f, 0f, (float)(Math.Abs(lossyScaleZ) > 1e-6f ? range / lossyScaleZ : range));
+        }
+
+        /// <summary>One line per session and part when a KSP1-imported part carries a native drill or scanner that our
+        /// record does not hold (a key miss, or a module Redux or another mod added): the runtime leaves it as is.</summary>
+        private static void NotInRecord(string part, string nativeModule)
+        {
+            if (string.IsNullOrEmpty(part) || !IsImported(part)) return;
+            LogOnce("record|" + part + "|" + nativeModule, IsruLines.NotInRecord(part, nativeModule));
+        }
+
+        private static bool IsImported(string part)
+        {
+            if (IsImportedForTests != null) return IsImportedForTests(part);
+            try
+            {
+                return Redux.Ksp1Import.Assets.Ksp1ImportedPartRegistry.IsImportedPart(part);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         /// <summary>The first transform named <paramref name="name"/> under <paramref name="root"/> (itself included), depth first.</summary>
@@ -387,6 +417,9 @@ namespace KSP1PartMod.Game
         /// <summary>Tests: the part name of a module built outside a part.</summary>
         internal static Func<PartBehaviourModule, string> PartNameForTests;
 
+        /// <summary>Tests: whether a part name is a KSP1-imported part (else Redux's registry).</summary>
+        internal static Func<string, bool> IsImportedForTests;
+
         /// <summary>Tests: whether a drill was registered and had its arms set.</summary>
         internal static bool TryGetDrillState(Module_Mine mine, out bool armsSet)
         {
@@ -403,6 +436,7 @@ namespace KSP1PartMod.Game
             _impactOn = _mineBridgeOn = _scannerBridgeOn = _broken = false;
             _animationsEnabled = true;
             PartNameForTests = null;
+            IsImportedForTests = null;
             _top = _bottom = null;
             _mineDeployable = null;
             _mineData = null;

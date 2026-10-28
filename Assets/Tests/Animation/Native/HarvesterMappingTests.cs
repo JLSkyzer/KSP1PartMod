@@ -185,6 +185,12 @@ PART
             Assert.AreEqual(0, noEc.Outputs.Single().PerEc);
             Assert.That(noEc.Notes, Has.Some.EqualTo(
                 "ModuleResourceHarvester: Ore: no ElectricCharge input, yield from Efficiency alone (the KSP2 drill's per EC/s x Efficiency / 0.1)"));
+
+            var neither = HarvesterMapping.From(new[] { One("ResourceName = Ore") }, IsruFakes.Table(), Native, 1, HeatPerEc, 1);
+            Assert.AreEqual(1, neither.Outputs.Single().EfficiencyFactor);
+            Assert.AreEqual(CrPerEc, neither.Outputs.Single().Rate, 1e-15, "factor 1, not the 10x of Efficiency 1 / 0.1");
+            Assert.That(neither.Notes, Has.Some.EqualTo(
+                "ModuleResourceHarvester: Ore: no ElectricCharge input and no Efficiency, yield of the KSP2 drill for 1 EC/s (factor 1)"));
         }
 
         [Test] public void YieldPerEc_AnotherNativeDrill_ThenTheMedian()

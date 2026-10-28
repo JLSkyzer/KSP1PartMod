@@ -209,6 +209,9 @@ namespace KSP1PartMod.Native
         public static string DrillProbeNotFound(string part, string transform) =>
             RuntimePrefix + $"{part}: drill probe '{transform}' not found on the part, the drill stays not deployed (no deploy bridge)";
 
+        public static string NotInRecord(string part, string nativeModule) =>
+            RuntimePrefix + $"{part}: {nativeModule} not in our record, runtime left as is";
+
         public static string DeployFollows(string part, string nativeModule, string entryKey) =>
             RuntimePrefix + $"{part}: {nativeModule} deploy follows {entryKey}";
 

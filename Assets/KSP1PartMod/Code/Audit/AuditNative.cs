@@ -10,6 +10,10 @@ namespace KSP1PartMod.Audit
     {
         public const string Heatshield = "Module_Heatshield";
         public const string Crossfeed = "Module_ToggleCrossfeed";
+        /// <summary>Converters, drills and scanners (0.10.0).</summary>
+        public const string Converter = "Module_ResourceConverter";
+        public const string Drill = "Module_Mine";
+        public const string Scanner = "Module_ResourceScanner";
         public const string UninitializedTag = ":uninitialized";
         public const string MissingTag = ":missing";
 

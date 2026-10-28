@@ -56,6 +56,10 @@ namespace KSP1PartMod.Audit
         /// <summary>Native modules (0.8.0): parts whose converted module runs, and parts where one did not.</summary>
         public int NativeHeatshields { get; private set; }
         public int NativeCrossfeeds { get; private set; }
+        /// <summary>Converters, drills and scanners (0.10.0): parts whose converted module runs.</summary>
+        public int NativeConverters { get; private set; }
+        public int NativeDrills { get; private set; }
+        public int NativeScanners { get; private set; }
         public int NativeFailedParts { get; private set; }
         /// <summary>B9 overrides (0.9.0): parts with an override set, and parts where the default variant did not apply.</summary>
         public int B9Parts { get; private set; }
@@ -103,6 +107,9 @@ namespace KSP1PartMod.Audit
             s.ReduxFairings = parts.Count(r => r.ReduxFairing);
             s.NativeHeatshields = parts.Count(r => HasNative(r, AuditNative.Heatshield));
             s.NativeCrossfeeds = parts.Count(r => HasNative(r, AuditNative.Crossfeed));
+            s.NativeConverters = parts.Count(r => HasNative(r, AuditNative.Converter));
+            s.NativeDrills = parts.Count(r => HasNative(r, AuditNative.Drill));
+            s.NativeScanners = parts.Count(r => HasNative(r, AuditNative.Scanner));
             s.NativeFailedParts = parts.Count(r => r.NativeModules != null && r.NativeModules.Any(AuditNative.IsFailed));
             s.B9Parts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides));
             s.B9FailedParts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides) && AuditB9.IsFailed(r.B9Overrides));
@@ -141,7 +148,9 @@ namespace KSP1PartMod.Audit
         public string ShroudsLine() => ShroudLines.AuditSummary(ShroudsKept, ShroudsMissing, ShroudsNoNode, ReduxFairings);
 
         public string NativeLine() =>
-            $"audit: native modules: {NativeHeatshields} heat shield(s), {NativeCrossfeeds} crossfeed toggle(s), {NativeFailedParts} part(s) where one failed to initialize";
+            $"audit: native modules: {NativeHeatshields} heat shield(s), {NativeCrossfeeds} crossfeed toggle(s), " +
+            $"{NativeConverters} converter(s), {NativeDrills} drill(s), {NativeScanners} scanner(s), " +
+            $"{NativeFailedParts} part(s) where one failed to initialize";
 
         public string B9Line() => B9.B9Lines.AuditSummary(B9Parts, B9FailedParts);
 

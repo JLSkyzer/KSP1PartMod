@@ -227,6 +227,13 @@ namespace KSP1PartMod.Native
                     if (efficiencyText != null) factor = efficiency / (Ksp1EfficiencyPerEc * ec);
                     rate = perEc * ec * factor * m.Multiplier;
                 }
+                else if (efficiencyText == null)
+                {
+                    // Neither EC nor Efficiency: the default Efficiency 1 would give 10x the native drill; a factor of 1 instead.
+                    rate = perEc * m.Multiplier;
+                    m._notes.Add($"{Ksp1Module}: {resource}: no ElectricCharge input and no Efficiency, " +
+                                 "yield of the KSP2 drill for 1 EC/s (factor 1)");
+                }
                 else
                 {
                     rate = perEc * efficiency / Ksp1EfficiencyPerEc * m.Multiplier;
