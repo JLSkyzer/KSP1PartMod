@@ -102,6 +102,39 @@ namespace KSP1PartMod.Tests.ReduxMu
             }, Is.Not.AllocatingGCMemory());
         }
 
+        private MeshRenderer MeshUnder(Transform parent, string name)
+        {
+            var go = new GameObject(name);
+            _made.Add(go);
+            go.transform.SetParent(parent, false);
+            return go.AddComponent<MeshRenderer>();
+        }
+
+        [Test] public void FirstMeshRenderer_NeverRedux_RcsPlume()
+        {
+            var thruster = Node("RCSthruster", Vector3.zero);
+            var plume = Node("[KSP1 RCS Plume] RCSthruster", Vector3.zero);
+            plume.SetParent(thruster, false);
+            var smoke = new GameObject("smoke");
+            _made.Add(smoke);
+            smoke.transform.SetParent(plume, false);
+            smoke.AddComponent<SkinnedMeshRenderer>();
+            MeshUnder(plume, "core");
+            Assert.IsNull(Module_Ksp1Animations.FirstMeshRenderer(thruster), "only the plume's renderers: none taken");
+
+            var glow = MeshUnder(thruster, "nozzleGlow"); // after the plume in hierarchy order
+            Assert.AreSame(glow, Module_Ksp1Animations.FirstMeshRenderer(thruster));
+        }
+
+        [Test] public void FirstMeshRenderer_ThrusterInsideAPlume_None()
+        {
+            var plume = Node("[ksp1 rcs plume] x", Vector3.zero);
+            var thruster = Node("rcs", Vector3.zero);
+            thruster.SetParent(plume, false);
+            MeshUnder(thruster, "m");
+            Assert.IsNull(Module_Ksp1Animations.FirstMeshRenderer(thruster), "Redux's test walks every ancestor");
+        }
+
         [Test] public void MaterialWriter_PerSlot_WritesOnlyItsSlot()
         {
             var lit = Shader.Find("Universal Render Pipeline/Lit");

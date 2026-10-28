@@ -227,8 +227,17 @@ namespace KSP1PartMod.Game.Animation
                 ? new List<int>()
                 : e.Thrusters.Select(t => t == null ? -1 : _transforms.Transforms.IndexOf(t)).ToList();
             e.RcsThrusterOf = RcsThrusterMatch.Pair(hostOfSampler, thrusters);
+            var samplers = bound.Select(b => b.sampler).ToArray();
+            // Editor without an RCS module: the glow rests there anyway (flight only), no line.
+            if (e.Thrusters == null && PartBackingMode == PartBackingModes.OAB) return samplers;
             LogPluginLine(e.Def, PluginRules.RcsGlowLine(_name, thrusters.Count, hostOfSampler.Distinct().Count()));
-            return bound.Select(b => b.sampler).ToArray();
+            if (e.RcsThrusterOf == null)
+            {
+                // Count mismatch (spec 2b.6): the entry is disabled, its tracks left at rest.
+                TrackSampler.SampleAll(samplers, in RestTrackPose);
+                e.Disabled = true;
+            }
+            return samplers;
         }
 
         /// <summary>A clip Redux's legacy runtime plays (<c>Ksp1DeployableAnimationRuntime</c>, which drives every

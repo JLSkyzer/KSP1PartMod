@@ -489,7 +489,8 @@ namespace KSP1PartMod.Game.Animation
                 }
                 case EntryKind.MeshHider:
                     e.HiddenObjects = ObjectsNamed(def.TransformNames);
-                    e.Hider = new MeshHiderState();
+                    e.HiderObjects = new HiderObjects(e.HiddenObjects);
+                    e.Hider = new MeshHiderState(e.HiddenObjects.Length);
                     break; // its source (our Deploy entry or Redux's) is resolved once every entry is built
                 case EntryKind.LookAt:
                     BuildLookAt(e);
@@ -892,7 +893,7 @@ namespace KSP1PartMod.Game.Animation
                         StepRcsEmissive(e, inEditor);
                         break;
                     case EntryKind.MeshHider:
-                        if (e.Retracted != null && e.Hider.Step(!inEditor, e.Retracted())) SetActive(e.HiddenObjects, !e.Hider.Hiding);
+                        if (e.Retracted != null) e.Hider.Step(!inEditor, e.Retracted(), e.HiderObjects);
                         break;
                     case EntryKind.LookAt:
                         if (e.LookAt != null && !e.LookAt.enabled) e.LookAt.enabled = true; // a B9 gate opened again
@@ -1270,6 +1271,7 @@ namespace KSP1PartMod.Game.Animation
             public GameObject[] HiddenObjects;
             public Func<bool> Retracted;
             public MeshHiderState Hider;
+            public IHiderObjects HiderObjects;
             /// <summary>LookAt: our component on the part, null when no constraint was found.</summary>
             public AdvancedLookAt LookAt;
             /// <summary>An engine machine took its flight-start pose (<see cref="PluginRules.StartsNow"/>).</summary>

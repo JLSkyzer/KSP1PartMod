@@ -112,6 +112,15 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         public void RcsReference_MaxThrustOrOneWithoutFuel(float max, bool requiresFuel, float expected) =>
             Assert.AreEqual(expected, PluginRules.RcsReference(max, requiresFuel));
 
+        [Test] public void InsideRcsPlume_ItselfOrAnAncestor_IgnoringCase()
+        {
+            Assert.IsTrue(PluginRules.InsideRcsPlume(new[] { "smoke", "[KSP1 RCS Plume] RCSthruster", "RCSthruster", "model" }));
+            Assert.IsTrue(PluginRules.InsideRcsPlume(new[] { "[ksp1 rcs plume] x" }));
+            Assert.IsFalse(PluginRules.InsideRcsPlume(new[] { "nozzleGlow", "RCSthruster", "model" }), "the KSP1 mesh");
+            Assert.IsFalse(PluginRules.InsideRcsPlume(new[] { "[KSP1 Plume] engine" }), "an engine plume is not an RCS plume");
+            Assert.IsFalse(PluginRules.InsideRcsPlume(null));
+        }
+
         [Test] public void LeftToRedux_IgnoresCase_NullSafe()
         {
             var redux = new[] { "gimbal1_Upper", "strutLower1" };
@@ -142,7 +151,7 @@ namespace KSP1PartMod.Tests.Animation.Runtime
             Assert.AreEqual("p MeshHider 'meshhider::0' disabled: x not found",
                 PluginRules.MissingLine("p", new AnimEntryDef { Kind = EntryKind.MeshHider, Key = "meshhider::0" }, "x"));
             Assert.AreEqual("p rcs glow: 4 thruster(s), 4 host(s) matched", PluginRules.RcsGlowLine("p", 4, 4));
-            Assert.AreEqual("p rcs glow: 4 thruster(s), 1 host(s) count mismatch", PluginRules.RcsGlowLine("p", 4, 1));
+            Assert.AreEqual("p rcs glow: 4 thruster(s), 1 host(s) count mismatch, disabled", PluginRules.RcsGlowLine("p", 4, 1));
             Assert.AreEqual("p rcs glow first values: force 0.000125, maxThrust 1, scalar 0.5",
                 PluginRules.RcsFirstValuesLine("p", 0.000125f, 1f, 0.5f));
             Assert.AreEqual("p mesh hider: 2 object(s) follow our entry 'deploy:panel:0'", PluginRules.MeshHiderLine("p", 2, "deploy:panel:0"));

@@ -107,8 +107,24 @@ namespace KSP1PartMod.Animation.Runtime
 
         public static string RcsEmissiveLine(string part, string writerNote) => $"{part} rcs emissive {writerNote}";
 
+        /// <summary>A count mismatch disables the entry (spec 2b.6).</summary>
         public static string RcsGlowLine(string part, int thrusters, int hosts) =>
-            $"{part} rcs glow: {thrusters} thruster(s), {hosts} host(s) {(thrusters == hosts ? "matched" : "count mismatch")}";
+            $"{part} rcs glow: {thrusters} thruster(s), {hosts} host(s) {(thrusters == hosts ? "matched" : "count mismatch, disabled")}";
+
+        /// <summary>The name prefix of Redux's RCS plume objects (<c>Ksp1RcsPlumeBuilder</c>).</summary>
+        public const string RcsPlumePrefix = "[KSP1 RCS Plume]";
+
+        /// <summary>An object inside Redux's RCS plume: it or an ancestor is named <see cref="RcsPlumePrefix"/>…, ignoring
+        /// case, the test of Redux's <c>Ksp1PartModuleRuntimeSetup.IsInsideKsp1RcsPlume</c>. Our emission never goes
+        /// there.</summary>
+        /// <param name="namesUpward">The object's name, then each ancestor's.</param>
+        public static bool InsideRcsPlume(System.Collections.Generic.IEnumerable<string> namesUpward)
+        {
+            if (namesUpward == null) return false;
+            foreach (var n in namesUpward)
+                if (n != null && n.StartsWith(RcsPlumePrefix, System.StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
 
         public static string RcsFirstValuesLine(string part, float force, float maxThrust, float scalar) =>
             $"{part} rcs glow first values: force {G(force)}, maxThrust {G(maxThrust)}, scalar {G(scalar)}";

@@ -135,7 +135,7 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         }
 
         [TestCase(5f, 10f, 1f, 0.5f)] [TestCase(5f, 0f, 1f, 0f)] [TestCase(-1f, 10f, 1f, 0f)]
-        [TestCase(5f, 10f, 3f, 1.5f)] [TestCase(5f, -2f, 1f, 0f)]
+        [TestCase(5f, 10f, 3f, 1f)] [TestCase(5f, -2f, 1f, 0f)] [TestCase(9.9f, 10f, 1f, 0.99f)]
         public void Rcs_Scalar(float f, float max, float mult, float expected) =>
             Assert.AreEqual(expected, RcsScalar.Of(f, max, mult), 1e-5f);
 

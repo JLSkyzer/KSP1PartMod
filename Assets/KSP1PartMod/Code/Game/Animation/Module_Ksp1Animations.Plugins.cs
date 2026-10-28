@@ -31,13 +31,20 @@ namespace KSP1PartMod.Game.Animation
         }
 
         /// <summary><c>ModuleBdbRCSEmissive</c>: the first mesh renderer under the thruster (itself included), in hierarchy
-        /// order. Particle, trail and line renderers (Redux's plumes) are passed over.</summary>
-        private static Renderer FirstMeshRenderer(Transform thruster)
+        /// order. A renderer inside Redux's RCS plume (<see cref="PluginRules.InsideRcsPlume"/>, the plume being built as a
+        /// child of the thruster) is never taken, nor particle, trail or line renderers.</summary>
+        internal static Renderer FirstMeshRenderer(Transform thruster)
         {
             if (thruster == null) return null;
             foreach (var r in thruster.GetComponentsInChildren<Renderer>(true))
-                if (r is MeshRenderer || r is SkinnedMeshRenderer) return r;
+                if ((r is MeshRenderer || r is SkinnedMeshRenderer) && !PluginRules.InsideRcsPlume(NamesUpward(r.transform))) return r;
             return null;
+        }
+
+        /// <summary>The object's name, then each ancestor's (bind time only).</summary>
+        private static IEnumerable<string> NamesUpward(Transform t)
+        {
+            for (; t != null; t = t.parent) yield return t.name;
         }
 
         /// <summary>Every object of the part whose name is one of <paramref name="names"/> (KSP1 <c>FindModelTransforms</c>:
@@ -117,25 +124,39 @@ namespace KSP1PartMod.Game.Animation
             }
         }
 
+        /// <summary>Each frame the hider follows the first of our Deploy entries that is active under its B9 gates, else
+        /// Redux's <c>Data_Deployable</c>; with neither, nothing is hidden. The line names the first of ours found at bind.
+        /// No object found: the transforms are reported missing and nothing is driven.</summary>
         private void ResolveMeshHider(Entry e)
         {
-            Entry ours = null;
+            if (e.HiddenObjects.Length == 0)
+            {
+                e.Retracted = null;
+                LogPluginLine(e.Def, PluginRules.MissingLine(_name, e.Def,
+                    "transform(s) '" + string.Join("', '", e.Def.TransformNames ?? new string[0]) + "'"), "missing");
+                return;
+            }
+            var ours = new List<Entry>();
             foreach (var o in _entries)
-                if (!o.Disabled && o.Def.Kind == EntryKind.Deploy && o.Deploy != null) { ours = o; break; }
-            if (ours != null)
+                if (!o.Disabled && o.Def.Kind == EntryKind.Deploy && o.Deploy != null) ours.Add(o);
+            Func<ReduxDeployState> redux = null;
+            if (ReduxFollowerBinder.TryDeployableClock(this, e.Def, out var read, out _, out _)) redux = read;
+            if (ours.Count == 0 && redux == null)
             {
-                var deploy = ours.Deploy;
-                e.Retracted = () => deploy.State == DeployState.Retracted;
-                LogPluginLine(e.Def, PluginRules.MeshHiderLine(_name, e.HiddenObjects.Length, ours.Def.Key));
+                LogPluginLine(e.Def, PluginRules.MissingLine(_name, e.Def, "our Deploy entry or Module_Deployable with Data_Deployable"), "missing");
                 return;
             }
-            if (ReduxFollowerBinder.TryDeployableClock(this, e.Def, out var read, out _, out var note))
+            var candidates = ours.ToArray();
+            e.Retracted = () =>
             {
-                e.Retracted = () => read() == ReduxDeployState.Retracted;
-                LogPluginLine(e.Def, PluginRules.MeshHiderLine(_name, e.HiddenObjects.Length, null));
-                return;
-            }
-            LogPluginLine(e.Def, PluginRules.MissingLine(_name, e.Def, "our Deploy entry or Module_Deployable with Data_Deployable"), "missing");
+                for (var i = 0; i < candidates.Length; i++)
+                {
+                    var o = candidates[i];
+                    if (!o.Disabled && !Inactive(o)) return o.Deploy.State == DeployState.Retracted;
+                }
+                return redux != null && redux() == ReduxDeployState.Retracted;
+            };
+            LogPluginLine(e.Def, PluginRules.MeshHiderLine(_name, e.HiddenObjects.Length, candidates.Length > 0 ? candidates[0].Def.Key : null));
         }
 
         // ---------------------------------------------------------------- per frame
@@ -178,11 +199,22 @@ namespace KSP1PartMod.Game.Animation
             }
         }
 
-        private static void SetActive(GameObject[] objects, bool active)
+        /// <summary>The mesh hider's GameObjects for <see cref="MeshHiderState"/>: a destroyed object reads inactive and is
+        /// never set. No allocation.</summary>
+        private sealed class HiderObjects : IHiderObjects
         {
-            if (objects == null) return;
-            for (var i = 0; i < objects.Length; i++)
-                if (objects[i] != null) objects[i].SetActive(active);
+            private readonly GameObject[] _objects;
+
+            public HiderObjects(GameObject[] objects) => _objects = objects ?? new GameObject[0];
+
+            public int Count => _objects.Length;
+
+            public bool ActiveSelf(int i) => _objects[i] != null && _objects[i].activeSelf;
+
+            public void SetActive(int i, bool active)
+            {
+                if (_objects[i] != null) _objects[i].SetActive(active);
+            }
         }
 
         /// <summary>A plugin entry gives back what it changed on the part: the mesh hider shows again the objects it hid;
@@ -191,7 +223,7 @@ namespace KSP1PartMod.Game.Animation
         {
             try
             {
-                if (e.Hider != null && e.Hider.Restore()) SetActive(e.HiddenObjects, true);
+                e.Hider?.Restore(e.HiderObjects);
                 if (e.LookAt != null)
                 {
                     if (destroy)
