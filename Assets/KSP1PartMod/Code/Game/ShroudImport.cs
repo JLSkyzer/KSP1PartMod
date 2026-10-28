@@ -233,9 +233,12 @@ namespace KSP1PartMod.Game
                 if (ownedRenderers == null) continue;
                 foreach (var r in root.GetComponentsInChildren<Renderer>(true))
                 {
-                    if (!Owns(r)) continue;
-                    r.enabled = false;
-                    ownedRenderers.Add(RendererPath(root, r.transform));
+                    if (Owns(r))
+                    {
+                        r.enabled = false;
+                        ownedRenderers.Add(RendererPath(root, r.transform));
+                    }
+                    else if (DisablesUnowned(r)) r.enabled = false; // never recorded: the runtime never re-enables it
                 }
             }
             return roots.Count;
@@ -263,6 +266,17 @@ namespace KSP1PartMod.Game
             for (var i = 0; i < slots.Length; i++)
                 if (slots[i] == null) nulls++;
             return ShroudRule.OwnsRenderer(r is ParticleSystemRenderer, r.enabled, slots.Length, nulls);
+        }
+
+        /// <summary><see cref="ShroudRule.DisableUnowned"/> on a live renderer.</summary>
+        internal static bool DisablesUnowned(Renderer r)
+        {
+            if (r == null) return false;
+            var slots = r.sharedMaterials;
+            var nulls = 0;
+            for (var i = 0; i < slots.Length; i++)
+                if (slots[i] == null) nulls++;
+            return ShroudRule.DisableUnowned(r is ParticleSystemRenderer, r.enabled, slots.Length, nulls);
         }
 
         /// <summary>The shroud root's name, then the names down to <paramref name="t"/>, joined by <c>/</c>: the same on the

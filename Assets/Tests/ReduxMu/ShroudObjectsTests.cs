@@ -66,8 +66,9 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual(0, missing.Count);
             CollectionAssert.AreEquivalent(new[] { "Shroud2x3/mesh", "Shroud1p5x3" }, owned);
             Assert.IsFalse(prefab.transform.Find("model/Shroud2x3/mesh").GetComponent<Renderer>().enabled);
-            Assert.IsTrue(prefab.transform.Find("model/Shroud1p5x3/broken").GetComponent<Renderer>().enabled,
-                "no material: left to RenderFixes");
+            Assert.IsFalse(prefab.transform.Find("model/Shroud1p5x3/broken").GetComponent<Renderer>().enabled,
+                "no material: off in the prefab so the reentry hull skips it, but not recorded");
+            CollectionAssert.DoesNotContain(owned, "Shroud1p5x3/broken");
             Assert.IsTrue(prefab.transform.Find("model/engine").GetComponent<Renderer>().enabled);
         }
 
@@ -101,7 +102,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsFalse(bigMesh.enabled, "hidden: out of Redux's reentry hull");
             Assert.IsTrue(small.activeSelf);
             Assert.IsTrue(smallMesh.enabled);
-            Assert.IsTrue(broken.enabled, "never ours");
+            Assert.IsFalse(broken.enabled, "off from the prefab, never ours: never shown");
 
             Assert.IsTrue(o.Apply(-1));
             Assert.IsFalse(big.activeSelf);

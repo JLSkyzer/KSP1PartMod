@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 - 2026-10-28
+
+KSP1 engine shrouds (`ModuleJettison`). Not run in game yet; checklist (French) in `docs/testing/2026-10-28-engine-shrouds-in-game-checklist.md`.
+
+- **Switch** (`animations.json`): `ksp1_engine_shrouds` (default true). `false` gives the behaviour of 0.6.0, Redux's `Module_Fairing` included.
+- **Reproduced from KSP1.** The KSP1 shroud mesh is kept and shown while a part is attached to the bottom node (always for `ignoreNodes`), in the VAB and in flight. It follows the B9 variant (first enabled `jettisonName`), has a VAB "Hide shroud" button, and its colliders are disabled in flight. It goes away on decoupling (`isFairing` or `decoupleEnabled`), or on staging for an engine that is not a fairing (`!isFairing`, not `manualJettison`). The jettison is saved.
+- **Not reproduced.** No mass, drag or debris; `ignoreNodes` shrouds go on staging only, as in KSP1; an `isFairing` shroud with `decoupleEnabled = false` is hidden after a decouple, where KSP1 keeps it (a plan choice); `ignoreNodes` shrouds keep their reentry geometry after a jettison.
+- **Import patch (session-wide).** A Harmony patch on Redux's import stops `Module_Fairing` being added to KSP1 parts with a `ModuleJettison` shroud, hides the shroud transforms and disables their renderers on the prefab, so Redux's reentry hull never includes a hidden shroud. A shroud renderer with only null materials is also disabled on the prefab, but not recorded, so it is never shown. The patches are armed together or not at all.
+- **Legacy saves.** A vessel saved with 0.6.0 loads: at most one shroud, no `Module_Fairing`.
+- **Debounce.** In flight the shroud's visibility follows the same 3-step attached state as the jettison latch: a clear shorter than 3 frames neither flickers it nor logs a line.
+- **Audit.** New `redux_fairing` CSV column and `audit: shrouds:` line.
+- No material or texture is written; the shared KSP1 textures are untouched.
+- 1507 EditMode tests (1505 passing, 2 explicit and skipped).
+
 ## 0.6.0 - 2026-10-28
 
 Audit mode: load every KSP1 part once, off screen, and report the ones that fail. Off by default. Not run in game yet; checklist (French) in `docs/testing/2026-10-28-audit-in-game-checklist.md`.

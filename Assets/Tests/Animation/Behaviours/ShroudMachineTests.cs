@@ -50,7 +50,8 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         {
             var m = M();
             Assert.AreEqual(0, m.Step(false, true, true, 0));
-            for (var i = 0; i < ShroudMachine.DetachDebounce; i++) Assert.AreEqual(-1, m.Step(false, false, true, 0));
+            for (var i = 0; i < ShroudMachine.DetachDebounce - 1; i++) Assert.AreEqual(0, m.Step(false, false, true, 0), "debounced: still shown");
+            Assert.AreEqual(-1, m.Step(false, false, true, 0));
             Assert.IsTrue(m.Latch.Jettisoned);
             Assert.AreEqual(ShroudReason.BottomDetached, m.Latch.Reason);
             Assert.IsTrue(m.TakeJettisonEvent());
@@ -114,6 +115,31 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         [TestCase(false, true, 0, 0, true)]
         public void OwnsRenderer(bool particle, bool enabled, int slots, int nulls, bool expected) =>
             Assert.AreEqual(expected, ShroudRule.OwnsRenderer(particle, enabled, slots, nulls));
+
+        [TestCase(false, true, 2, 2, true)]   // every slot null: disabled in the prefab, not owned
+        [TestCase(false, true, 2, 1, false)]
+        [TestCase(true, true, 1, 1, false)]
+        [TestCase(false, false, 1, 1, false)]
+        [TestCase(false, true, 0, 0, false)]
+        public void DisableUnowned(bool particle, bool enabled, int slots, int nulls, bool expected) =>
+            Assert.AreEqual(expected, ShroudRule.DisableUnowned(particle, enabled, slots, nulls));
+
+        [Test] public void Flight_ShortClear_NeitherFlickersNorJettisons()
+        {
+            var m = M();
+            Assert.AreEqual(0, m.Step(false, true, true, 0));
+            for (var i = 0; i < ShroudMachine.DetachDebounce - 1; i++) Assert.AreEqual(0, m.Step(false, false, true, 0));
+            Assert.AreEqual(0, m.Step(false, true, true, 0), "attached again");
+            Assert.AreEqual(0, m.Step(false, false, true, 0), "the count restarts");
+            Assert.IsFalse(m.Latch.Jettisoned);
+            Assert.IsFalse(m.TakeJettisonEvent());
+        }
+
+        [Test] public void Flight_StartsDetached_StaysHidden()
+        {
+            var m = M();
+            for (var i = 0; i < 5; i++) Assert.AreEqual(-1, m.Step(false, false, true, 0));
+        }
 
         [TestCase(2, 2, true, false, true, false, false)]
         [TestCase(1, 2, true, false, true, true, false)]

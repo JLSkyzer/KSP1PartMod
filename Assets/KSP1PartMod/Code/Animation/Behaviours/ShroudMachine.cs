@@ -71,7 +71,8 @@ namespace KSP1PartMod.Animation.Behaviours
         {
             if (entryActive && !inEditor) Latch.Step(true, attached, DetachDebounce);
             NoteLatch();
-            var visible = ShroudRule.Visible(inEditor, attached, _ignoreNodes, Latch.Jettisoned, HideOverride, entryActive && selected >= 0);
+            var shownAttached = inEditor ? attached : entryActive && Latch.Debounced;
+            var visible = ShroudRule.Visible(inEditor, shownAttached, _ignoreNodes, Latch.Jettisoned, HideOverride, entryActive && selected >= 0);
             return visible ? selected : -1;
         }
 

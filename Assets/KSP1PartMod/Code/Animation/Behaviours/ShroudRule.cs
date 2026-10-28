@@ -38,6 +38,11 @@ namespace KSP1PartMod.Animation.Behaviours
         public static bool OwnsRenderer(bool isParticle, bool enabled, int materialSlots, int nullMaterials) =>
             !isParticle && enabled && !(materialSlots > 0 && nullMaterials == materialSlots);
 
+        /// <summary>A renderer under a shroud root with no usable material (every slot null) that is still enabled in the
+        /// prefab: disabled there so Redux's reentry hull never takes it, but not owned, so the runtime never re-enables it.</summary>
+        public static bool DisableUnowned(bool isParticle, bool enabled, int materialSlots, int nullMaterials) =>
+            !isParticle && enabled && materialSlots > 0 && nullMaterials == materialSlots;
+
         /// <summary>The audit notes of a resolved shroud entry (<c>AuditProbe</c>): <c>shroud_kept</c> when a transform was
         /// found, <c>shroud_missing</c> when one is missing, <c>shroud_no_node</c> when the node is missing and the shroud
         /// needs it.</summary>
@@ -72,6 +77,10 @@ namespace KSP1PartMod.Animation.Behaviours
             _ignoreNodes = ignoreNodes;
         }
 
+        /// <summary>The attached state to show in flight: true while attached, and for fewer than the threshold consecutive
+        /// detached steps after an attached one, so a short clear neither flickers the shroud nor looks like a jettison.</summary>
+        public bool Debounced { get; private set; }
+
         /// <summary>The shroud is jettisoned.</summary>
         public bool Jettisoned { get; private set; }
 
@@ -90,15 +99,21 @@ namespace KSP1PartMod.Animation.Behaviours
         /// <param name="framesDetachedThreshold">Consecutive detached steps, after an attached one, that latch (3).</param>
         public bool Step(bool inFlight, bool attached, int framesDetachedThreshold)
         {
-            if (Jettisoned || !inFlight) return Jettisoned;
+            if (!inFlight) return Jettisoned;
             if (attached)
             {
                 _seenAttached = true;
                 _detachedSteps = 0;
-                return false;
+                Debounced = true;
+                return Jettisoned;
             }
-            if (!_seenAttached) return false;
-            if (++_detachedSteps >= framesDetachedThreshold && LatchesOnDetach()) Latch(ShroudReason.BottomDetached);
+            if (!_seenAttached) return Jettisoned;
+            if (_detachedSteps < framesDetachedThreshold) _detachedSteps++;
+            if (_detachedSteps >= framesDetachedThreshold)
+            {
+                Debounced = false;
+                if (!Jettisoned && LatchesOnDetach()) Latch(ShroudReason.BottomDetached);
+            }
             return Jettisoned;
         }
 

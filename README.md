@@ -126,6 +126,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `share_ksp1_textures` (0.4.1): load each KSP1 texture file once and share it between the KSP1 parts Redux rebuilds after the import, instead of one copy per rebuilt part. Less video memory: an estimate from reading Redux's code, not measured yet. `false` keeps one copy per part.
 - `ksp1_textures_follow_quality` (0.4.1): the KSP1 textures Redux keeps readable follow the game's Texture Quality setting. Most KSP1 textures are not readable and stay at full size either way.
 - `raise_streaming_budget` (0.4.1): default `false`. `true` raises the game's texture streaming budget by the KSP1 texture memory, capped at the video card's memory less a quarter (at least 1 GB); it can cause stutter on cards with little memory. The `[KSP1PartMod] textures:` lines give the texture memory at the end of the import and at each VAB or flight entry.
+- `ksp1_engine_shrouds` (0.7.0, default `true`): keep the KSP1 mesh of engine shrouds (`ModuleJettison`) and show it the way KSP1 does instead of Redux's `Module_Fairing`: visible while a part is attached below the engine (VAB and flight), follows the B9 variant, "Hide shroud" in the VAB part menu, gone on decoupling (or on staging for an engine that is not a fairing). No mass, drag or debris. `false` gives the behaviour of 0.6.0. Not run in game yet: `docs/testing/2026-10-28-engine-shrouds-in-game-checklist.md`; log lines `[KSP1PartMod] shroud:` and `anim: ... shroud`.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
 ### Phase 2a: material, light and glow curves (0.4.0)
@@ -172,6 +173,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
 ## Known limits
 
 - Robotics parts of KSP1 are spread over several KSP1 nodes, so only those of `actuators` land in the new robotics node.
+- Engine shrouds (0.7.0): built, not verified in game. `ignoreNodes` shrouds keep their reentry geometry after a jettison.
 - Animations: phases 1, 2a and 2b (all built; none verified in game yet beyond what the checklists record). The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
 - Stock KSP1 parts titled `#autoLOC_…`: Redux reads every `Localization` node under `mods/KSP1`, but a copy of the stock part folders alone carries no dictionary. Copy `GameData/Squad/Localization` and `GameData/SquadExpansion/Serenity/Localization` from your KSP1 install to the same paths under `mods/KSP1` (Making History's keys are in the Squad dictionary). Redux keeps one text per key, English when present, else the first language it reads: a KSP1 installed in French gives French titles in every game language.
