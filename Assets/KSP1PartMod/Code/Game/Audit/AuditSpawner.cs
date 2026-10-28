@@ -47,6 +47,8 @@ namespace KSP1PartMod.Game.Audit
         private const int OabPartLayer = 9;
 
         private static readonly Action<IObjectAssemblyPart> NoOp = _ => { };
+        /// <summary>The B9 column failed once this session (logged once).</summary>
+        private static bool _b9FailureLogged;
 
         private readonly AuditTargets _targets;
         private readonly ObjectAssemblyBuilder _builder;
@@ -239,9 +241,14 @@ namespace KSP1PartMod.Game.Audit
                 {
                     rec.B9Overrides = B9Items(core, rec, present);
                 }
-                catch (Exception)
+                catch (Exception e)
                 {
-                    // read-only bookkeeping: never fails the audit of a part
+                    // read-only bookkeeping: never fails the audit of a part; one line per session
+                    if (!_b9FailureLogged)
+                    {
+                        _b9FailureLogged = true;
+                        KSP1PartModPlugin.Log?.LogWarning(KSP1PartMod.B9.B9Lines.AuditB9Failed(name, e.ToString()));
+                    }
                 }
             }
             obs.ImportWarnings = capture.ImportWarnings;

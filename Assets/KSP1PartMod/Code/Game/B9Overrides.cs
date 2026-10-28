@@ -110,6 +110,8 @@ namespace KSP1PartMod.Game
         internal static Action<string> Sink;
         /// <summary>Tests: runs on the plan before anything is built (a throw must leave Redux's result as it was).</summary>
         internal static Action<B9OverridePlan> AfterPlanForTests;
+        /// <summary>Tests: runs inside <see cref="Commit"/> once the sets are appended (a throw must keep their names).</summary>
+        internal static Action CommitAfterSetsForTests;
 
         private static B9Switches _switches;
         private static volatile B9TankTypes _tankTypes;
@@ -223,6 +225,8 @@ namespace KSP1PartMod.Game
                 return false;
             }
             Info(B9Lines.Armed(s.Mass, s.Resources, s.ModuleData, s.ModuleActive, s.PartScalars, s.NewPartSwitches));
+            // Old saves (final review I1): a set missing from a saved part state gets its default, not the first variant.
+            B9SavedSets.TryApply(harmony);
             if (t.CatalogTypes == null) Warn(B9Lines.BuiltInTankTypesNotFound("Ksp1B9TankCatalog." + CatalogTypesField));
             return true;
         }
@@ -242,7 +246,9 @@ namespace KSP1PartMod.Game
             LastSummary = new List<string>();
             ModuleTypesLogged.Clear();
             AfterPlanForTests = null;
+            CommitAfterSetsForTests = null;
             B9ModuleDiff.Reset();
+            B9SavedSets.Reset();
             lock (RegistryLock) _registry = null;
         }
 
@@ -352,17 +358,19 @@ namespace KSP1PartMod.Game
         {
             if (!_armed || _stopped || __1 == null || __3 == null) return;
             var part = __3.PartName ?? __1.GetValue("name") ?? "?";
+            Built built = null;
             try
             {
                 if (!HasB9(__1)) return;
-                var built = Build(part, __1, __2, __3, __5);
+                built = Build(part, __1, __2, __3, __5);
                 if (built == null)
                 {
                     Tallies.Remove(part);
                     return;
                 }
-                Commit(built, __3, ref __result, ref __5, ref __6);
+                // Recorded before Commit writes anything: if Commit throws after appending a set, the set keeps its name.
                 Tallies[part] = built.Tally;
+                Commit(built, __3, ref __result, ref __5, ref __6);
             }
             catch (PlanMismatchException e)
             {
@@ -373,8 +381,12 @@ namespace KSP1PartMod.Game
             }
             catch (Exception e)
             {
-                Tallies.Remove(part);
-                ModuleTallies.Remove(part);
+                // Once Commit has written into Redux's result, the part keeps its tally (its appended sets need their names).
+                if (built == null || !built.Written)
+                {
+                    Tallies.Remove(part);
+                    ModuleTallies.Remove(part);
+                }
                 Error(B9Lines.PartFailed(part, e.ToString()));
                 if (++_failures >= MaxFailures && !_stopped)
                 {
@@ -397,6 +409,8 @@ namespace KSP1PartMod.Game
             public List<(Variant Target, List<ITransformer> Add)> ToRedux = new List<(Variant, List<ITransformer>)>();
             public List<(VariantSet Set, string Default)> NewSets = new List<(VariantSet, string)>();
             public bool AddResourceCapacities;
+            /// <summary>Set by <see cref="Commit"/> before its first write into Redux's result.</summary>
+            public bool Written;
             public PartTally Tally = new PartTally();
             public List<string> Lines = new List<string>();
         }
@@ -563,10 +577,29 @@ namespace KSP1PartMod.Game
             return built;
         }
 
-        /// <summary>Writes a built part into Redux's result. Only list appends, after every check has passed.</summary>
+        /// <summary>Writes a built part into Redux's result. Only list appends, after every check has passed; everything
+        /// that allocates comes first, so a throw there leaves Redux's result untouched.</summary>
         private static void Commit(Built built, Ksp1PartImportContext context, ref bool result, ref Data_PartSwitch data, ref List<string> baseline)
         {
-            if (built.NewSets.Count > 0 && data == null) data = new Data_PartSwitch();
+            var newData = built.NewSets.Count > 0 && data == null ? new Data_PartSwitch() : null;
+            Data_ResourceCapacities capacities = null;
+            SerializedPartModule? capacitiesModule = null;
+            if (built.AddResourceCapacities)
+            {
+                // Written from the public types; the shape mirrors Redux's own AddResourceCapacitiesModule because the API
+                // allows only this one: a SerializedPartModule initializer naming the behaviour, its component and its data.
+                capacities = new Data_ResourceCapacities();
+                capacitiesModule = new SerializedPartModule
+                {
+                    Name = "PartComponentModule_ResourceCapacities",
+                    BehaviourType = typeof(Module_ResourceCapacities),
+                    ComponentType = typeof(PartComponentModule_ResourceCapacities),
+                    ModuleData = new List<SerializedModuleData> { new SerializedModuleData(capacities) },
+                };
+            }
+
+            built.Written = true;
+            if (newData != null) data = newData;
             foreach (var (target, add) in built.ToRedux) target.Transformers.AddRange(add);
             foreach (var (set, def) in built.NewSets)
             {
@@ -574,19 +607,13 @@ namespace KSP1PartMod.Game
                 data.DefaultActiveVariants.Add(def);
                 data.ActiveVariants.Add(def);
             }
+            CommitAfterSetsForTests?.Invoke();
             if (data != null && data.VariantSets.Count > 0) result = true;
             if (baseline == null) baseline = new List<string>();
-            if (built.AddResourceCapacities)
+            if (capacitiesModule.HasValue)
             {
-                var capacities = new Data_ResourceCapacities();
                 context.ModuleData.Add(capacities);
-                context.PartData.serializedPartModules.Add(new SerializedPartModule
-                {
-                    Name = "PartComponentModule_ResourceCapacities",
-                    BehaviourType = typeof(Module_ResourceCapacities),
-                    ComponentType = typeof(PartComponentModule_ResourceCapacities),
-                    ModuleData = new List<SerializedModuleData> { new SerializedModuleData(capacities) },
-                });
+                context.PartData.serializedPartModules.Add(capacitiesModule.Value);
                 LogNoteOnce(context.PartName, B9Lines.Notes.ResourceCapacitiesAdded);
             }
             foreach (var line in built.Lines) Info(line);

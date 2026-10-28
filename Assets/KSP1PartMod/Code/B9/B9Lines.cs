@@ -134,6 +134,23 @@ namespace KSP1PartMod.B9
         public static string GatesKeptDefault(string part, string set) =>
             Prefix + $"{part}: appended set '{set}' not found when planning the animation gates again, the gates of the part's appended sets stay at their default subtype";
 
+        // ---- Old saves: a saved part state with fewer active variants than the part has sets ----
+
+        public static string SavedSetsMemberNotFound(string member) =>
+            Prefix + member + " not found, old saves: a set missing from a saved part state gets Redux's first variant, not its default";
+
+        public const string SavedSetsArmed = Prefix + "old saves: a set missing from a saved part state gets its default variant";
+
+        public static string SavedSetFilled(string set, string defaultId, string firstId) =>
+            Prefix + $"old saves: set '{set}' was missing from a saved part state, filled with its default '{defaultId}' (Redux's first is '{firstId}')";
+
+        public static string SavedSetsFailed(string exception) =>
+            Prefix + $"old saves: filling a missing set failed, Redux's first variant used: {exception}";
+
+        /// <summary>The audit's B9 column could not be read for a part (once per session).</summary>
+        public static string AuditB9Failed(string part, string exception) =>
+            $"[KSP1PartMod] audit: B9 overrides of {part} not read, the B9 column is empty (logged once): {exception}";
+
         /// <summary>The audit's summary line (the audit's own <c>audit:</c> prefix, as its other lines).</summary>
         public static string AuditSummary(int partsWithOverrides, int partsFailed) =>
             $"audit: B9 overrides: {partsWithOverrides} part(s) with overrides, {partsFailed} part(s) where the default variant failed to apply";

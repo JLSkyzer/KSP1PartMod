@@ -78,8 +78,10 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 
 ## 5. Valeurs de pièce
 
-- [ ] Un sous-type qui change `maxTemp` ou `CoMOffset` : la valeur suit le sous-type (ligne du set : `scalars maxTemp, …`).
-  Le centre de masse bouge dans le VAB (activer l'affichage), sans sauter hors de la pièce.
+- [ ] Un sous-type qui change `maxTemp` ou `CoMOffset` : la valeur suit le sous-type (ligne du set : `scalars maxTemp, …`),
+  **en vol seulement** : V-SwiFT n'applique pas ces valeurs dans le VAB (`PartScalarTransformer.ApplyInOab` est vide), qui
+  montre les valeurs de base. En vol, le centre de masse est décalé (vérifier avec l'affichage du centre de masse ou la
+  température maximale de la pièce), sans sauter hors de la pièce.
 
 ## 6. Nouveaux sélecteurs
 
@@ -96,6 +98,16 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 - [ ] **Sauvegarder en vol, recharger, vérifier ressources et masse.** Attendu : après ce cycle les ressources et valeurs de
   pièce suivent le sous-type par défaut de 0.9.0, mais la masse reste celle de 0.8.0 (pas de delta de masse) ; après
   reconstruction de la fusée dans le VAB, tout s'applique.
+- [ ] **Vaisseau 0.8.0 en arrière-plan au moment de la sauvegarde** (pas le vaisseau actif). Le prendre avec une pièce qui
+  avait déjà un sélecteur visuel de Redux en 0.8.0 **et** un sélecteur B9 ajouté en 0.9.0 dont le sous-type par défaut
+  n'est pas le premier (un réservoir BDB dont le premier sous-type est Structural ou un autre carburant). Charger la
+  sauvegarde 0.8.0, se placer sur **un autre** vaisseau, sauvegarder, recharger, passer sur le vaisseau testé. Attendu : le
+  réservoir suit le sous-type **par défaut** (pas le premier de la liste), et le log contient une fois
+  `[KSP1PartMod] b9: old saves: set '<id>' was missing from a saved part state, filled with its default '<défaut>'
+  (Redux's first is '<premier>')`. Sans cette ligne, ou avec `b9: … not found, old saves:`, le réservoir prend le premier
+  sous-type : **le noter**.
+- [ ] Au démarrage, la ligne `[KSP1PartMod] b9: old saves: a set missing from a saved part state gets its default variant`
+  suit la ligne `b9: armed:`.
 - [ ] Un vaisseau 0.8.0 **construit dans le VAB** (pas encore lancé) : à l'ouverture, les pièces concernées montrent les
   valeurs de 0.9.0.
 - [ ] Recharger une sauvegarde faite en 0.9.0 : sous-types, masses et ressources identiques à ceux d'avant la sauvegarde.

@@ -17,6 +17,7 @@ B9PartSwitch overrides: what a B9 subtype says beyond its visuals now reaches th
 - **Safety.** One try per part around the whole postfix; each transformer is validated (its `Reverter`, types and values) and a bad one is dropped alone; three unexpected failures stop the feature for the session. Redux's own sets and transformers are never replaced.
 - **Clean room.** B9PartSwitch is LGPL: the behaviour comes from its public wiki; no B9 code and no B9 tank data are copied. The volume formula and the dry-mass product are inferred.
 - Doc fixes: the `OwnershipPlanner.Plan` comment on `b9AppendSet`, and a README known limit on gates that name a never-appended set.
+- **Final review fixes.** A vessel saved in 0.8.0 and not loaded when the game saves had no saved choice for the B9 sets appended after Redux's; Redux filled the gap with the set's first subtype, and the mod now fills it first with the set's default (Harmony prefix on `Data_PartSwitch.GetStoredVariantInformation`, members resolved by name, line `b9: old saves:`). A failure inside the final write of a part keeps the names of the sets it appended. The audit logs once when it cannot read a part's B9 column. README and checklist: part values apply in flight only; turning a `b9_*` key off acts on a vessel in flight from its next save, and its mass delta stays until a rebuild.
 - 1907 EditMode tests (1905 passing, 2 explicit and skipped).
 
 ## 0.8.0 - 2026-10-28

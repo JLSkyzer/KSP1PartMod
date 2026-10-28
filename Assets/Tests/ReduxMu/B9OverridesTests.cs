@@ -680,5 +680,86 @@ PART
             Assert.IsTrue(_lines.Any(l => l.StartsWith(B9Lines.Prefix + name + ": tank resources of 'fuelCellSwitch' not applied")), "the note names the switch");
             Assert.IsFalse(_lines.Any(l => l.Contains("failed") || l.Contains("dropped")), string.Join(Environment.NewLine, _lines));
         }
+
+        // ------------------------------------------------------------------ old saves (final review I1, M1)
+
+        /// <summary>A part with one Redux (visual) set and one appended set whose default is not its first variant.</summary>
+        private static Data_PartSwitch OldSavePart(params string[] saved)
+        {
+            Variant Tank(string id, double maxTemp) => new Variant
+            {
+                VariantId = id,
+                Transformers = { B9Overrides.ScalarTransformer(new B9PartScalar { Key = "maxTemp", Values = new[] { maxTemp } }, 1f) },
+            };
+            var data = new Data_PartSwitch
+            {
+                VariantSets =
+                {
+                    new VariantSet { VariantSetId = "texture", Variants = { new Variant { VariantId = "White" }, new Variant { VariantId = "Black" } } },
+                    new VariantSet { VariantSetId = "fuelSwitch", Variants = { Tank("Structural", 1000), Tank("LFO", 2000), Tank("Mono", 1500) } },
+                },
+                DefaultActiveVariants = { "White", "Mono" },
+            };
+            data.ActiveVariants.AddRange(saved);
+            return data;
+        }
+
+        private static string Saved(Data_PartSwitch data) => JsonConvert.SerializeObject(data.GetStoredVariantInformation()["1"]);
+
+        /// <summary>A 0.8.0 vessel that is not loaded: its saved state has an entry for the Redux set only. Redux alone
+        /// saves the appended set's FIRST subtype; with the prefix it saves the default one's overrides.</summary>
+        [Test] public void OldSave_MissingAppendedSet_SavesItsDefault_NotTheFirst() => WithGameSettings(() =>
+        {
+            var expected = Saved(OldSavePart("Black", "Mono"));
+            var first = Saved(OldSavePart("Black", "Structural"));
+            Assert.AreNotEqual(expected, first);
+
+            var redux = OldSavePart("Black");
+            Assert.AreEqual(first, Saved(redux), "Redux's own rule, unarmed: the first variant");
+            CollectionAssert.AreEqual(new[] { "Black", "Structural" }, redux.ActiveVariants);
+
+            Assert.IsTrue(Arm());
+            Assert.IsTrue(B9SavedSets.IsArmed);
+            CollectionAssert.Contains(_lines, B9Lines.SavedSetsArmed);
+            var old = OldSavePart("Black");
+            Assert.AreEqual(expected, Saved(old));
+            CollectionAssert.AreEqual(new[] { "Black", "Mono" }, old.ActiveVariants, "the saved Redux entry is kept");
+            CollectionAssert.Contains(_lines, B9Lines.SavedSetFilled("fuelSwitch", "Mono", "Structural"));
+
+            Saved(OldSavePart("Black"));
+            Assert.AreEqual(1, _lines.Count(l => l.Contains("old saves: set 'fuelSwitch'")), "logged once");
+        });
+
+        [Test] public void OldSave_SavedEntriesAndCompleteStates_Untouched() => WithGameSettings(() =>
+        {
+            Assert.IsTrue(Arm());
+            var full = OldSavePart("Black", "LFO");
+            Assert.AreEqual(Saved(OldSavePart("Black", "LFO")), Saved(full));
+            CollectionAssert.AreEqual(new[] { "Black", "LFO" }, full.ActiveVariants, "a saved choice is never replaced");
+            var none = OldSavePart();
+            Saved(none);
+            CollectionAssert.AreEqual(new[] { "White", "Mono" }, none.ActiveVariants, "every missing set gets its own default");
+            Assert.IsFalse(_lines.Any(l => l.Contains("failed")), string.Join(Environment.NewLine, _lines));
+        });
+
+        [Test] public void OldSave_Resolve_FindsEveryMember()
+        {
+            CollectionAssert.IsEmpty(B9SavedSets.Resolve().Missing);
+        }
+
+        /// <summary>M1: a throw inside <c>Commit</c> after the sets are appended keeps their names.</summary>
+        [Test] public void TryBuild_ThrowInsideCommit_AppendedSetKeepsItsNames()
+        {
+            Assert.IsTrue(Arm());
+            B9Overrides.CommitAfterSetsForTests = () => throw new InvalidOperationException("boom");
+            var r = Import(MassOnlyPart);
+            Assert.IsTrue(_lines.Any(l => l.StartsWith(B9Lines.Prefix + "testMass: failed")));
+            Assert.AreEqual("Shielding", r.Data.VariantSets.Single().VariantSetId, "the set was appended before the throw");
+            Assert.IsNotNull(B9Overrides.TallyOf("testMass"));
+            var terms = new Dictionary<string, string>();
+            Ksp1B9PartSwitchVariantBuilder.AddLocalizationTerms(r.Part, "testMass", x => "[" + x + "]", (k, v) => terms[k] = v);
+            Assert.AreEqual("[Shielding]", terms[B9Overrides.SetKey("testMass", "Shielding")]);
+            Assert.AreEqual("[Heavy]", terms[B9Overrides.VariantKey("testMass", "Shielding", "Heavy")]);
+        }
     }
 }
