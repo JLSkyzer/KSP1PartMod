@@ -16,7 +16,7 @@ récupérer). Les pièces KSP1 à conteneur ou à expérience **stockent** les r
 KSP1). Le clip KSP1 s'ouvre quand l'expérience tourne, et une expérience DMagic qui attend son clip ne se termine qu'une
 fois ouverte. Non reproduits : laboratoire, réinitialisation, rendements décroissants, tests de pièces, science au sol
 (Breaking Ground), expériences de kerbal KSP1, modules DMagic spécialisés.
-Tout est lu dans la décompilation de Redux 26w42c et testé dans l'éditeur (2311 tests EditMode, 2 explicites ignorés) ;
+Tout est lu dans la décompilation de Redux 26w42c et testé dans l'éditeur (2317 tests EditMode, 2 explicites ignorés) ;
 **rien n'a été lancé dans le jeu**.
 
 Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, filtrer sur `[KSP1PartMod] science:`,
@@ -50,8 +50,9 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 ## 1. Au chargement
 
 - [ ] `science: definitions: read <d> EXPERIMENT_DEFINITION(s) from <f> of <n> cfg file(s) under mods/KSP1 in <ms> ms; 0
-  MM edit(s) of EXPERIMENT_DEFINITION not applied`. **Attendu : d = 73** avec le fichier de série (55 de BDB + 18 de
-  série) ; **55** sans. Noter le temps `<ms>`.
+  MM edit(s) of EXPERIMENT_DEFINITION not applied; <m> MM edit(s) of science modules not applied`. **Attendu : d = 73**
+  avec le fichier de série (55 de BDB + 18 de série) ; **55** sans. **m = 17** sur l'installation actuelle (patchs
+  `@PART` bruts, `NEEDS` non résolus : la plupart visent des mods absents). Noter le temps `<ms>`.
 - [ ] `science: localization: <t> term(s) added (…)`. Aucune ligne `localization … failed`.
 - [ ] `science: definitions: <g> queued through Patch Manager; skipped: …`. g = définitions construites : au plus 76 avec
   le fichier (73 + 3 variantes DMagic `KSP1_bd_massSpec_s48_b1`, `KSP1_bd_cosmicRay_s48_b1`, `KSP1_bd_gammaRay_s48_b1`) ;
@@ -121,7 +122,9 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
   est un défaut : recopier le log autour.
 - [ ] **Vaisseau déchargé pendant l'attente.** Lancer une expérience DMagic, puis quitter le vaisseau (centre de suivi,
   autre vaisseau) **avant** que le bras soit ouvert : l'expérience reste en pause tant que le vaisseau n'est pas
-  rechargé. En y revenant, le bras s'ouvre et l'expérience se termine.
+  rechargé. En y revenant, le bras s'ouvre et l'expérience se termine. **Mais** `IsPartAnimated` et `PartIsDeployed` ne
+  sont pas sauvegardés (`[JsonIgnore]`) : après une sauvegarde et un rechargement alors que le vaisseau reste déchargé,
+  l'expérience se termine sans son clip.
 
 ## 7. EVA
 

@@ -31,8 +31,8 @@ namespace KSP1PartMod.Game
     /// <c>IsInitialized</c> and before the game hears of it, when KSP1PartMod is on in the campaign.</item>
     /// <item><b>Check</b> (with <c>ksp1_science</c>, both routes): the same wrapped callback, which no campaign feature gates, reads
     /// the live store once per initialization, mod on or off: how many <c>KSP1_*</c> ids are there (the in-game proof of the
-    /// gating), and the live KSP2 experiments, which replace the 26w42c list (<see cref="Natives"/>). Route A adds nothing
-    /// there.</item>
+    /// gating), and the live KSP2 experiments, for the difference from 26w42c (<see cref="LiveNatives"/>). Route A adds nothing
+    /// there. The import resolves against <see cref="Natives"/>, frozen at its first read.</item>
     /// </list>
     /// Never throws into the game: every failure is one line, and the import goes on.</summary>
     internal static class ScienceDefinitions
@@ -52,8 +52,19 @@ namespace KSP1PartMod.Game
         /// <summary>The KSP1 definitions read, by key (base and DMagic variants), built or not. Empty until read.</summary>
         internal static IReadOnlyDictionary<string, ScienceDefinitionModel> Definitions { get; private set; } = Empty;
 
-        /// <summary>The KSP2 experiments: the live store's once checked, the 26w42c list before.</summary>
-        internal static NativeExperiments Natives => _live ?? NativeExperiments.Redux26w42c;
+        /// <summary>The KSP2 experiments the import resolves against: frozen at the first read (the live store's if a check came first,
+        /// else the 26w42c list), so a later rebuild of a part (prefab rebuild, B9 scratch import) resolves "closest" as the first
+        /// import did. A later check only feeds the difference line (<see cref="LiveNatives"/>).</summary>
+        internal static NativeExperiments Natives
+        {
+            get
+            {
+                lock (FrozenLock) return _frozen ?? (_frozen = _live ?? NativeExperiments.Redux26w42c);
+            }
+        }
+
+        /// <summary>The KSP2 experiments of the last store check; null before any.</summary>
+        internal static NativeExperiments LiveNatives => _live;
 
         /// <summary>The definitions queued (built, generation on).</summary>
         internal static IReadOnlyList<ScienceDefinitionModel> Queued => _queued;
@@ -71,7 +82,8 @@ namespace KSP1PartMod.Game
             return plugin == null ? (bool?)null : plugin.Enabled;
         }
 
-        private static NativeExperiments _live;
+        private static NativeExperiments _live, _frozen;
+        private static readonly object FrozenLock = new object();
         private static List<ScienceDefinitionModel> _queued = new List<ScienceDefinitionModel>();
         private static readonly Dictionary<string, string> Json = new Dictionary<string, string>(StringComparer.Ordinal);
         private static bool _armed;
@@ -111,7 +123,7 @@ namespace KSP1PartMod.Game
             var defs = scan.Build(settings, Resolver(scan), duplicates);
             watch.Stop();
             Definitions = defs;
-            Info(ScienceLines.DefinitionsRead(scan.DefinitionNodes.Count, scan.DefinitionFiles, scan.CfgFiles, watch.ElapsedMilliseconds, scan.MmEdits));
+            Info(ScienceLines.DefinitionsRead(scan.DefinitionNodes.Count, scan.DefinitionFiles, scan.CfgFiles, watch.ElapsedMilliseconds, scan.MmEdits, scan.ScienceModuleMmEdits));
             foreach (var f in scan.Failures) Warn(ScienceLines.ReadFailed(f, "parse error"));
 
             // Both routes: the check runs from the store's callback, which no campaign feature gates.
@@ -424,6 +436,7 @@ namespace KSP1PartMod.Game
         {
             _armed = false;
             _live = null;
+            lock (FrozenLock) _frozen = null;
             Sink = null;
             _queued = new List<ScienceDefinitionModel>();
             Json.Clear();

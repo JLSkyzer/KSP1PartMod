@@ -12,8 +12,8 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
 
         [Test] public void DefinitionsRead()
         {
-            Assert.AreEqual("[KSP1PartMod] science: definitions: read 55 EXPERIMENT_DEFINITION(s) from 55 of 1234 cfg file(s) under mods/KSP1 in 42 ms; 0 MM edit(s) of EXPERIMENT_DEFINITION not applied",
-                ScienceLines.DefinitionsRead(55, 55, 1234, 42, 0));
+            Assert.AreEqual("[KSP1PartMod] science: definitions: read 55 EXPERIMENT_DEFINITION(s) from 55 of 1234 cfg file(s) under mods/KSP1 in 42 ms; 0 MM edit(s) of EXPERIMENT_DEFINITION not applied; 3 MM edit(s) of science modules not applied",
+                ScienceLines.DefinitionsRead(55, 55, 1234, 42, 0, 3));
         }
 
         [Test] public void Definition()

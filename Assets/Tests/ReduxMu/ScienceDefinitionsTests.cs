@@ -322,6 +322,28 @@ EXPERIMENT_DEFINITION
             Assert.AreEqual(2, lines.Count(l => l.Contains("KSP1 definition(s) present")));
         }
 
+        /// <summary>The import's natives are frozen at their first read: a later check does not change what a rebuilt part resolves
+        /// against; the live list only feeds the difference line.</summary>
+        [Test] public void Natives_FrozenAtTheFirstRead_LaterCheckOnlyLive()
+        {
+            Assert.IsTrue(ScienceDefinitions.Natives.Contains("EnvironmentSurvey"), "26w42c before any check");
+            WithGameSettings(() =>
+            {
+                var store = new ScienceExperimentsDataStore();
+                store.AddExperimentDefinition(new ExperimentDefinition
+                {
+                    ExperimentID = "CrewObservation", ExperimentType = ScienceExperimentType.DataType,
+                    ValidLocations = new List<ResearchLocation> { new ResearchLocation(true, "", ScienceSitutation.Landed, "") },
+                });
+                AccessTools.Field(typeof(ScienceExperimentsDataStore), "_isInitialized").SetValue(store, true);
+                ScienceDefinitions.Check(store);
+            });
+            Assert.IsTrue(ScienceDefinitions.Natives.Contains("EnvironmentSurvey"), "still the first list");
+            Assert.AreSame(NativeExperiments.Redux26w42c, ScienceDefinitions.Natives);
+            Assert.IsFalse(ScienceDefinitions.LiveNatives.Contains("EnvironmentSurvey"), "the live list is the store's");
+            Assert.IsTrue(ScienceDefinitions.LiveNatives.Contains("CrewObservation"));
+        }
+
         [Test] public void Check_ReadsTheLiveNatives()
         {
             WithGameSettings(() =>

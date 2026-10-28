@@ -42,9 +42,9 @@ namespace KSP1PartMod.Native.Science
 
         // ---- Task 3: the definitions
 
-        public static string DefinitionsRead(int definitions, int files, int cfgFiles, long ms, int mmEdits) =>
+        public static string DefinitionsRead(int definitions, int files, int cfgFiles, long ms, int mmEdits, int moduleMmEdits) =>
             Prefix + $"definitions: read {definitions} EXPERIMENT_DEFINITION(s) from {files} of {cfgFiles} cfg file(s) under mods/KSP1 in {ms} ms; " +
-            $"{mmEdits} MM edit(s) of EXPERIMENT_DEFINITION not applied";
+            $"{mmEdits} MM edit(s) of EXPERIMENT_DEFINITION not applied; {moduleMmEdits} MM edit(s) of science modules not applied";
 
         public static string Definition(ScienceDefinitionModel d) =>
             Prefix + $"definition {d.ExperimentId} ({d.Title}): {TypeName(d.Type)} data {Inv(d.DataValue)} sample {Inv(d.SampleValue)} " +

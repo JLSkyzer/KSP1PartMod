@@ -76,6 +76,46 @@ PART
 }
 @PART[testInstrument]
 {
+}
+@PART[*]:HAS[@MODULE[ModuleScienceExperiment]]
+{
+    @MODULE[ModuleScienceExperiment]
+    {
+        @xmitDataScalar = 0.5
+    }
+}
+@PART[otherInstrument]:NEEDS[X]
+{
+    MODULE
+    {
+        name = DMModuleScienceAnimateGeneric
+        %sitMask,0 = 48
+    }
+    @MODULE[ModuleScienceContainer]
+    {
+        @experimentID = notCounted
+    }
+}
+%PART[thirdInstrument]
+{
+    @MODULE[DMModuleScienceAnimate]
+    {
+        @usageReqMaskInternal = 1
+    }
+}
+@PART[fourthInstrument]
+{
+    @MODULE[ModuleScienceExperiment]
+    {
+        @title = not a science key
+    }
+}
+@PARTS_LIST[x]
+{
+    @MODULE[ModuleScienceExperiment]
+    {
+        @experimentID = notAPart
+    }
 }";
 
         private static ScienceDefinitionScan Scan()
@@ -98,10 +138,28 @@ PART
             Assert.AreEqual(1, s.DefinitionFiles);
             Assert.AreEqual(3, s.DefinitionNodes.Count);
             Assert.AreEqual(2, s.MmEdits, "@ and + of EXPERIMENT_DEFINITION; @PART is not one");
+            Assert.AreEqual(3, s.ScienceModuleMmEdits, "@PART with xmitDataScalar, @PART with a named MODULE's sitMask, %PART with usageReqMask");
             Assert.AreEqual(1, s.Parts.Count, "only the part with an experiment module");
             CollectionAssert.AreEqual(new[] { "a/loc.cfg" }, s.LocalizationFiles);
             Assert.AreEqual(1, s.Failures.Count);
             StringAssert.StartsWith("a/bad.cfg: broken", s.Failures[0]);
+        }
+
+        [Test] public void ScienceModuleKeys_And_PartPatches()
+        {
+            Assert.IsTrue(ScienceDefinitionScan.IsPartPatch("@PART[x]"));
+            Assert.IsTrue(ScienceDefinitionScan.IsPartPatch("+PART[x]:NEEDS[y]"));
+            Assert.IsTrue(ScienceDefinitionScan.IsPartPatch("%PART"));
+            Assert.IsFalse(ScienceDefinitionScan.IsPartPatch("PART"));
+            Assert.IsFalse(ScienceDefinitionScan.IsPartPatch("!PART[x]"));
+            Assert.IsFalse(ScienceDefinitionScan.IsPartPatch("@PARTS_LIST[x]"));
+            Assert.IsTrue(ScienceDefinitionScan.IsScienceModuleKey("@experimentID"));
+            Assert.IsTrue(ScienceDefinitionScan.IsScienceModuleKey("%sitMask,0"));
+            Assert.IsTrue(ScienceDefinitionScan.IsScienceModuleKey("usageReqMaskExternal"));
+            Assert.IsTrue(ScienceDefinitionScan.IsScienceModuleKey("!FxModules"));
+            Assert.IsFalse(ScienceDefinitionScan.IsScienceModuleKey("@experimentActionName"));
+            Assert.IsFalse(ScienceDefinitionScan.IsScienceModuleKey("@title"));
+            Assert.IsTrue(ScienceDefinitionScan.Relevant("@PART[x] { @MODULE[DMModuleScienceAnimateGeneric] { @bioMask = 1 } }"));
         }
 
         [Test] public void Build_FirstIdWins_VariantFromThePart_SkipCounts()

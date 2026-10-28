@@ -253,6 +253,30 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             Assert.AreEqual(18, t.Skipped);
         }
 
+        private static ScienceDefinitionScan ScanFiles(IEnumerable<string> files)
+        {
+            var scan = new ScienceDefinitionScan();
+            foreach (var path in files) scan.Add(path, File.ReadAllText(path), CfgText.Parse);
+            return scan;
+        }
+
+        /// <summary>The ModuleManager part patches that edit a science key of an experiment module (not seen by the definition scan,
+        /// which reads raw parts): counted for the <c>definitions: read</c> line.</summary>
+        [Test] public void Installed_ScienceModuleMmEdits()
+        {
+            var scan = ScanFiles(InstalledKsp1.AllCfg());
+            TestContext.WriteLine($"installed mods/KSP1: {scan.ScienceModuleMmEdits} MM edit(s) of science modules, {scan.MmEdits} of definitions");
+            Assert.AreEqual(17, scan.ScienceModuleMmEdits, "raw cfgs, NEEDS not resolved (counted 2026-10-28)");
+            Assert.AreEqual(0, scan.MmEdits);
+        }
+
+        [Test] public void GameData_ScienceModuleMmEdits_Printed()
+        {
+            var scan = ScanFiles(InstalledKsp1.GameDataCfg());
+            TestContext.WriteLine($"KSP1 GameData: {scan.ScienceModuleMmEdits} MM edit(s) of science modules, {scan.MmEdits} of definitions");
+            CollectionAssert.IsEmpty(scan.Failures);
+        }
+
         [Test] public void Installed_StorageParts()
         {
             var c = Run(InstalledKsp1.Root, InstalledKsp1.AllCfg());
