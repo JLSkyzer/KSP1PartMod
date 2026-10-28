@@ -291,13 +291,15 @@ namespace KSP1PartMod.Native.Science
                 p._notes.Add($"{id}: science_native_ids gives {native}, which the game does not have");
             }
             definitions.TryGetValue(id, out var def);
+            // The definition this module would use: its own (a DMagic mask override) when there is one, else the base one.
+            ScienceDefinitionModel own = null;
+            if (def != null) definitions.TryGetValue(DefinitionKey(module, def), out own);
+            var shown = own ?? def;
             // 3. generated (a DMagic mask override uses its own definition, never the base one)
             if (settings.ScienceGenerateDefinitions && def != null)
             {
-                var key = DefinitionKey(module, def);
-                definitions.TryGetValue(key, out var own);
                 if (own != null && own.IsBuilt) return (ScienceResolutionKind.Generated, own.ExperimentId, ScienceSkipReason.None);
-                if (own == null && def.IsBuilt) p._notes.Add($"{id}: no definition {key} for the module's own masks, the closest KSP2 experiment is used");
+                if (own == null && def.IsBuilt) p._notes.Add($"{id}: no definition {DefinitionKey(module, def)} for the module's own masks, the closest KSP2 experiment is used");
             }
             // 4. closest
             if (def != null)
@@ -309,7 +311,7 @@ namespace KSP1PartMod.Native.Science
                     if (closest != null)
                     {
                         p._notes.Add($"{id}: the closest KSP2 experiment to situationMask {mask} is {closest.Id}" +
-                                     (def.IsBuilt ? " (science_generate_definitions off)" : $" (definition not generated: {def.SkipReason})"));
+                                     ClosestReason(shown, settings));
                         return (ScienceResolutionKind.Closest, closest.Id, ScienceSkipReason.None);
                     }
                 }
@@ -327,6 +329,13 @@ namespace KSP1PartMod.Native.Science
             // 5. nothing
             p._notes.Add($"{id}: no definition on disk and no KSP2 counterpart, skipped");
             return (ScienceResolutionKind.Skipped, null, ScienceSkipReason.NoDefinitionNoCounterpart);
+        }
+
+        /// <summary>Why the closest match is used although a definition was read, from the definition the module would use.</summary>
+        private static string ClosestReason(ScienceDefinitionModel shown, AnimationSettings settings)
+        {
+            if (!shown.IsBuilt) return $" (definition {shown.Key} not generated: {shown.SkipReason})";
+            return settings.ScienceGenerateDefinitions ? $" (no definition for the module's own masks)" : " (science_generate_definitions off)";
         }
 
         /// <summary>The key of the definition a module uses: the KSP1 id, or
@@ -414,8 +423,9 @@ namespace KSP1PartMod.Native.Science
                         if (IsruCfg.Bool(m, key) == true)
                             p.NotReproducedField(key, $"{moduleName}: {key} = {value} not reproduced (KSP2 has no reset)");
                         break;
-                    case "resetLevel": // part of the reset, noted with it
-                        p.NotReproducedField("resettable", $"{moduleName}: resettable = True not reproduced (KSP2 has no reset)");
+                    case "resetLevel": // part of the reset, noted with it (unless the module says it is not resettable)
+                        if (IsruCfg.Bool(m, "resettable") != false)
+                            p.NotReproducedField("resettable", $"{moduleName}: resettable = True not reproduced (KSP2 has no reset)");
                         break;
                     case "resourceExpCost":
                         if (IsruCfg.Number(m, key) > 0)

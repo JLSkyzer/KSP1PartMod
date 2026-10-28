@@ -272,6 +272,43 @@ PART
                 "requiredParts", "experimentsLimit", "scienceValueRatio", "totalScienceLevel" }, p.NotReproduced);
         }
 
+        [Test] public void ResetLevel_NotNoted_WhenTheModuleIsNotResettable()
+        {
+            var p = Resolve(@"
+PART
+{
+    MODULE
+    {
+        name = ModuleScienceExperiment
+        experimentID = mysteryGoo
+        resettable = False
+        resetLevel = 1
+    }
+}");
+            CollectionAssert.DoesNotContain(p.NotReproduced, "resettable", string.Join("\n", p.Notes));
+            Assert.IsFalse(p.Notes.Any(n => n.Contains("resettable = True")), string.Join("\n", p.Notes));
+        }
+
+        [Test] public void VariantNotBuilt_BaseBuilt_ClosestNoteNamesTheVariant()
+        {
+            var baseDef = ScienceDefinitionBuilder.From(DefNode("bd_invented2"), null, AnimationSettings.Defaults, null);
+            var variant = ScienceDefinitionBuilder.From(DefNode("bd_invented2", baseValue: "0"), new DefinitionOverrides(0.5, 48, 16),
+                AnimationSettings.Defaults, null);
+            Assert.IsTrue(baseDef.IsBuilt);
+            Assert.IsFalse(variant.IsBuilt);
+            Assert.AreEqual("bd_invented2_s48_b16", variant.Key);
+            var p = Resolve(Bdb, Defs(Definition("bd_invented1"), baseDef, variant));
+            var b = p.Configurations[1];
+            Assert.AreEqual(ScienceResolutionKind.Closest, b.Kind);
+            Assert.AreEqual("OrbitalSurvey", b.ExperimentDefinitionId);
+            var note = p.Notes.Single(n => n.StartsWith("bd_invented2: the closest", System.StringComparison.Ordinal));
+            StringAssert.Contains("definition bd_invented2_s48_b16 not generated: " + ScienceDefinitionBuilder.SkipNoBaseValue, note);
+            StringAssert.DoesNotContain("science_generate_definitions off", note);
+
+            var off = Resolve(Goo, Defs(Definition("mysteryGoo")), "{\"science_generate_definitions\": false}");
+            Assert.IsTrue(off.Notes.Any(n => n.Contains("(science_generate_definitions off)")), string.Join("\n", off.Notes));
+        }
+
         [Test] public void WaitTime_AtLeastATenth()
         {
             var p = Resolve(Bdb.Replace("waitForAnimationTime = 2.5", "waitForAnimationTime = 0"), Defs(Definition("bd_invented1")));
