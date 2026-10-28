@@ -42,12 +42,25 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
                 ScienceAnimRules.TargetsFor(Stock(1, 2), Entries, true).Entries.Select(e => e.Key).ToArray());
         }
 
-        [Test] public void Stock_OnlyDeployOrFollower()
+        /// <summary>The stock FxModules name a <c>ModuleAnimateGeneric</c>, which the planner makes a Toggle entry when we own it
+        /// (Task 5: the goo canister and the materials bay).</summary>
+        [Test] public void Stock_ToggleDeployOrFollower_NotAScienceToggle()
         {
             var t = ScienceAnimRules.TargetsFor(Stock(0), Entries, true);
-            Assert.AreEqual(ScienceNoClip.NoEntry, t.Reason, "a Toggle entry is not a deploy clip");
-            Assert.IsNull(t.First);
+            Assert.AreEqual(ScienceNoClip.None, t.Reason, "our ModuleAnimateGeneric entry");
+            Assert.AreEqual("toggle:Lights:0", t.First.Key);
             Assert.AreEqual(ScienceNoClip.NoEntry, ScienceAnimRules.TargetsFor(Stock(3), Entries, true).Reason, "a ScienceToggle needs the DMagic route");
+        }
+
+        [Test] public void ReachedOpen_OpenAndStill_OrAOneWayReturn()
+        {
+            Assert.IsTrue(ScienceAnimRules.ReachedOpen(false, true, false, false), "opening, then open and still");
+            Assert.IsTrue(ScienceAnimRules.ReachedOpen(true, false, false, false), "already open");
+            Assert.IsTrue(ScienceAnimRules.ReachedOpen(false, true, true, true), "oneWayAnimation: opening, then playing back");
+            Assert.IsFalse(ScienceAnimRules.ReachedOpen(true, false, false, true), "starts opening");
+            Assert.IsFalse(ScienceAnimRules.ReachedOpen(false, true, false, true), "still opening");
+            Assert.IsFalse(ScienceAnimRules.ReachedOpen(true, true, true, true), "closing");
+            Assert.IsFalse(ScienceAnimRules.ReachedOpen(false, false, true, true), "the player closes an open clip");
         }
 
         [Test] public void DMagic_ScienceToggleOfItsModule()

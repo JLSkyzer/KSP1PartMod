@@ -132,6 +132,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // The runtime of converted experiments: animator gate, clips, report line (with ksp1_science).
+                ScienceRuntime.TryApply(new Harmony(ScienceRuntime.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.Science.ScienceLines.PatchFailed(e.ToString()));
+            }
+            try
+            {
                 // The runtime of converted drills and scanners: ground probe, deploy bridge (whatever enabled is).
                 IsruRuntime.TryApply(new Harmony(IsruRuntime.HarmonyId), Animations);
             }

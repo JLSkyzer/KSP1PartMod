@@ -81,6 +81,12 @@ namespace KSP1PartMod.Game
             lock (Lock) return Parts.TryGetValue(part, out var p) ? p : null;
         }
 
+        /// <summary>Tests: records <paramref name="p"/> under <paramref name="part"/> as an import would (the runtime reads it).</summary>
+        internal static void RecordForTests(string part, SciencePart p)
+        {
+            lock (Lock) Parts[part] = p;
+        }
+
         /// <summary>The recorded parts that got <c>Module_ScienceExperiment</c>.</summary>
         internal static IReadOnlyList<string> PartsWithModule()
         {

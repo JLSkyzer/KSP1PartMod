@@ -109,6 +109,7 @@ namespace KSP1PartMod.Game.Animation
                 KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {SafePartName()} module init failed: {e}");
             }
             FinishIsruInit(); // the deploy bridge of a native drill or scanner, whether Setup ran or not
+            FinishScienceInit(); // the clips of a converted KSP1 experiment (after FinishIsruInit, which sets _initDone)
         }
 
         protected override void OnModuleUpdate(float deltaTime) => Drive(deltaTime, false);
@@ -782,6 +783,7 @@ namespace KSP1PartMod.Game.Animation
                 if (!e.Disabled) Step(e, dt, inEditor, catchErrors: true);
             }
             StepBridge();
+            StepScience();
             try
             {
                 DriveReduxTracks();

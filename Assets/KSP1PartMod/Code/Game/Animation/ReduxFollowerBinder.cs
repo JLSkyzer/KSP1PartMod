@@ -131,6 +131,14 @@ namespace KSP1PartMod.Game.Animation
             return true;
         }
 
+        /// <summary>The <c>Data_Deployable</c> a Redux follower of <paramref name="clip"/> draws, the one whose <c>toggleExtend</c>
+        /// extends it (science plan, Task 5; S: the 0.2.2 path, as the gear bridge writes it). Null when there is none.</summary>
+        public static Data_Deployable DeployableOf(Module_Ksp1Animations m, string clip)
+        {
+            var deployable = PickDeployable(m, clip, out var data);
+            return deployable == null ? null : data;
+        }
+
         /// <summary>The Module_Deployable (Module_SolarPanel included) whose data names the clip, else the plain
         /// Module_Deployable, else the first one.</summary>
         private static Module_Deployable PickDeployable(Module_Ksp1Animations m, string clip, out Data_Deployable data)

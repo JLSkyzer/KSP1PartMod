@@ -33,8 +33,8 @@ namespace KSP1PartMod.Native.Science
     /// <summary>How an experiment meets the part's KSP1 clips (science plan (i), Task 5). The rules only read existing entries: no
     /// entry is planned, so no key moves. Pure.
     /// <list type="bullet">
-    /// <item>a stock experiment opens the Deploy or Redux follower entry of each of its <c>FxModules</c>; a DMagic Generic one
-    /// the <c>ScienceToggle</c> entry of its own module;</item>
+    /// <item>a stock experiment opens the entry of each of its <c>FxModules</c>: our Toggle (a <c>ModuleAnimateGeneric</c> we own),
+    /// Deploy, or Redux follower entry; a DMagic Generic one the <c>ScienceToggle</c> entry of its own module;</item>
     /// <item>an entry switched off by B9 (inactive) is no target (noted);</item>
     /// <item>the clip opens at a transition to <c>RUNNING</c>, or straight to a stored report (a zero-time run);</item>
     /// <item>a waiting experiment's countdown runs while the clip is open and still (<c>PartIsDeployed</c>).</item>
@@ -75,7 +75,9 @@ namespace KSP1PartMod.Native.Science
         private static bool Matches(ScienceClip clip, AnimEntryDef e)
         {
             if (clip.ToggleModuleIndex >= 0) return e.Kind == EntryKind.ScienceToggle && e.ModuleIndex == clip.ToggleModuleIndex;
-            if (e.Kind != EntryKind.Deploy && e.Kind != EntryKind.ReduxFollower) return false;
+            // The FxModules of a stock experiment name a ModuleAnimateGeneric: our Toggle entry when we own it, a Redux follower
+            // when Redux does (0.2.2); Deploy for the ModuleDeployablePart family.
+            if (e.Kind != EntryKind.Toggle && e.Kind != EntryKind.Deploy && e.Kind != EntryKind.ReduxFollower) return false;
             for (var i = 0; i < clip.FxModules.Count; i++)
                 if (clip.FxModules[i] == e.ModuleIndex) return true;
             return false;
@@ -93,5 +95,12 @@ namespace KSP1PartMod.Native.Science
 
         /// <summary>The value written to <c>PartIsDeployed</c>: the clip is open and not moving.</summary>
         public static bool DeployGate(bool toggleClosed, bool moving) => !toggleClosed && !moving;
+
+        /// <summary>The clip reached its open end between two frames: open and still now (<see cref="DeployGate"/>), or a move
+        /// toward open that turned into a move toward closed without stopping. The second case is DMagic's
+        /// <c>oneWayAnimation</c>: the toggle plays back by itself as soon as it is open, so it is never seen open and still. A
+        /// player's toggle is refused while the clip moves, so only the return flips a moving clip.</summary>
+        public static bool ReachedOpen(bool wasClosed, bool wasMoving, bool closed, bool moving) =>
+            DeployGate(closed, moving) || (!wasClosed && wasMoving && closed);
     }
 }
