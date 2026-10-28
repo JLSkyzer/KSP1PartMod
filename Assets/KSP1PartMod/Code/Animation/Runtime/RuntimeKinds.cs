@@ -21,6 +21,10 @@ namespace KSP1PartMod.Animation.Runtime
                 case EntryKind.ScienceToggle:
                 case EntryKind.AccelSpring:
                 case EntryKind.LandingBag:
+                case EntryKind.RcsGlow:
+                case EntryKind.RcsEmissive:
+                case EntryKind.MeshHider:
+                case EntryKind.LookAt:
                     return true;
                 default:
                     return false;

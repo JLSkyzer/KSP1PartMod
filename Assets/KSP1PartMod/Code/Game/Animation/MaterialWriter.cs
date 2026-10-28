@@ -25,6 +25,11 @@ namespace KSP1PartMod.Game.Animation
         private readonly AnimationSettings _settings;
         private ChannelTable _table;
         private int[] _channels = new int[0];
+        /// <summary>The per-slot constructor: the slot of each renderer (index into <see cref="_renderers"/>), and the
+        /// channel of each slot after <see cref="Register"/> (-1: none).</summary>
+        private readonly List<int> _slotOfRenderer;
+        private int[] _channelOfSlot = new int[0];
+        private readonly int _slots;
 
         /// <summary>Renderers written to.</summary>
         public int RendererCount => _renderers.Count;
@@ -58,6 +63,39 @@ namespace KSP1PartMod.Game.Animation
                 : $"no renderer of {selected} selected has any of [{string.Join(", ", candidates)}] (shader_property_map in animations.json)";
         }
 
+        /// <summary>One renderer per slot, given by the caller (<c>ModuleBdbRCSEmissive</c>: the first renderer under each
+        /// thruster; a null slot has none), the KSP1 property through <c>shader_property_map</c> as above. Each slot is
+        /// written apart with <see cref="WriteAt"/>.</summary>
+        public MaterialWriter(IReadOnlyList<Renderer> slots, AnimEntryDef e, AnimationSettings s)
+        {
+            _def = e;
+            _settings = s;
+            _slots = slots?.Count ?? 0;
+            _slotOfRenderer = new List<int>();
+            var candidates = MaterialRules.Candidates(e.ShaderProperty, s?.ShaderPropertyMap);
+            var used = new SortedSet<string>(System.StringComparer.Ordinal);
+            var given = 0;
+            for (var slot = 0; slot < _slots; slot++)
+            {
+                var r = slots[slot];
+                if (r == null) continue;
+                given++;
+                var material = r.sharedMaterial;
+                if (material == null) continue;
+                LogShader(material.shader);
+                var name = MaterialRules.Pick(candidates, material.HasProperty);
+                if (name == null) continue;
+                _renderers.Add(r);
+                _slotOfRenderer.Add(slot);
+                _propertyIds.Add(Shader.PropertyToID(name));
+                _propertyNames.Add(name);
+                used.Add(name);
+            }
+            Note = _renderers.Count > 0
+                ? $"-> {_renderers.Count} renderer(s) via [{string.Join(", ", used)}]"
+                : $"no renderer of {given} found has any of [{string.Join(", ", candidates)}] (shader_property_map in animations.json)";
+        }
+
         /// <summary>One Color-class channel per selected renderer in <paramref name="table"/> (a new table on each bind
         /// of the part), ranked by the entry's KSP1 module index. A renderer whose property is already registered with
         /// another value type is skipped.</summary>
@@ -65,6 +103,8 @@ namespace KSP1PartMod.Game.Animation
         {
             _table = table;
             var channels = new List<int>();
+            var bySlot = new int[_slots];
+            for (var k = 0; k < bySlot.Length; k++) bySlot[k] = -1;
             for (var i = 0; i < _renderers.Count; i++)
             {
                 var r = _renderers[i];
@@ -74,8 +114,10 @@ namespace KSP1PartMod.Game.Animation
                 var target = sink.AddRenderer(r, _settings, out _, _propertyNames[i]);
                 try
                 {
-                    channels.Add(table.Register(target, _propertyIds[i], ChannelValueType.Color, WriterClass.Color, _def.ModuleIndex,
-                        new Value4(rest.r, rest.g, rest.b, rest.a)));
+                    var channel = table.Register(target, _propertyIds[i], ChannelValueType.Color, WriterClass.Color, _def.ModuleIndex,
+                        new Value4(rest.r, rest.g, rest.b, rest.a));
+                    channels.Add(channel);
+                    if (_slotOfRenderer != null) bySlot[_slotOfRenderer[i]] = channel;
                 }
                 catch (System.ArgumentException)
                 {
@@ -83,6 +125,16 @@ namespace KSP1PartMod.Game.Animation
                 }
             }
             _channels = channels.ToArray();
+            _channelOfSlot = bySlot;
+        }
+
+        /// <summary>Per-slot writer: submits the colour of one slot; nothing for a slot without channel. No allocation.</summary>
+        public void WriteAt(int slot, Rgba c)
+        {
+            var table = _table;
+            if (table == null || slot < 0 || slot >= _channelOfSlot.Length) return;
+            var channel = _channelOfSlot[slot];
+            if (channel >= 0) table.Submit(channel, new Value4(c.R, c.G, c.B, c.A));
         }
 
         /// <summary>Submits the colour on every channel; the flush writes it. No allocation.</summary>

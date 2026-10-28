@@ -21,6 +21,7 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         [TestCase(EntryKind.ScienceToggle, LookupStrategy.FirstMatch)]
         [TestCase(EntryKind.AccelSpring, LookupStrategy.FirstMatch)]
         [TestCase(EntryKind.LandingBag, LookupStrategy.FirstMatch)]
+        [TestCase(EntryKind.RcsGlow, LookupStrategy.AllMatches)]
         public void Strategy_PerKind(EntryKind kind, LookupStrategy expected) =>
             Assert.AreEqual(expected, AnimationLookup.For(kind));
 

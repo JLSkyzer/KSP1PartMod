@@ -12,7 +12,8 @@ namespace KSP1PartMod.Animation.Runtime
     {
         /// <summary>ModuleAnimateGeneric, ModuleAnimationGroup, ModuleDeployablePart: the first holder.</summary>
         FirstMatch,
-        /// <summary>ModuleAnimateHeat, FXModuleAnimateThrottle: every holder, all driven together.</summary>
+        /// <summary>ModuleAnimateHeat, FXModuleAnimateThrottle: every holder, all driven together. FXModuleAnimateRCS:
+        /// every holder, each with its thruster.</summary>
         AllMatches,
         /// <summary>ModuleWheelDeployment: the last holder whose GameObject has the given name.</summary>
         LastByObjectName,
@@ -55,7 +56,8 @@ namespace KSP1PartMod.Animation.Runtime
             switch (kind)
             {
                 case EntryKind.Heat:
-                case EntryKind.Throttle: return LookupStrategy.AllMatches;
+                case EntryKind.Throttle:
+                case EntryKind.RcsGlow: return LookupStrategy.AllMatches; // FXModuleAnimateRCS: one holder per thruster
                 case EntryKind.Gear: return LookupStrategy.LastByObjectName;
                 default: return LookupStrategy.FirstMatch;
             }

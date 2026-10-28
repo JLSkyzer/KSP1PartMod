@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using KSP.Modules;
 using KSP.Sim;
 using KSP.Sim.Definitions;
+using KSP1PartMod.Animation.Runtime;
+using Redux.Ksp1Import.Modules;
 using UnityEngine;
 
 namespace KSP1PartMod.Game.Animation
@@ -10,13 +12,14 @@ namespace KSP1PartMod.Game.Animation
     /// <summary>The game values the phase 2b plugin entries follow (spec "Plugin inputs", read in the Redux 26w42c
     /// decompile). As <see cref="GameInputs"/>: each <c>Try…</c> runs once at bind and returns a reader built then, that
     /// only reads and does not allocate, plus where it reads, for the log. <b>Visual only:</b> nothing here writes
-    /// <c>Data_Engine</c> or <c>Data_Decouple</c>, or calls an engine, decoupler or staging method.</summary>
+    /// <c>Data_Engine</c>, <c>Data_Decouple</c> or <c>Data_RCS</c>, or calls an engine, decoupler or staging method.</summary>
     internal static class PluginInputs
     {
         public const string EngineIgnitedField = "Module_Engine.EngineIgnited";
         public const string EngineModeField = "Data_Engine.currentEngineModeData.engineID";
         public const string DecoupledField = "Data_Decouple.isDecoupled";
         public const string AccelerationField = "VesselComponent.AccelerationOrbital-graviticAcceleration";
+        public const string RcsForceField = "Module_RCS.thrustForces[i].RelativeForce";
 
         /// <summary>Any engine of the part ignited: <c>Data_Engine.EngineIgnited</c> (the field behind
         /// <c>Module_Engine.EngineIgnited</c>), true once the ignition wait is over. Redux merges a part's KSP1 engine
@@ -113,6 +116,63 @@ namespace KSP1PartMod.Game.Animation
                 return (float)(a.x * up.x + a.y * up.y + a.z * up.z);
             };
             return true;
+        }
+
+        /// <summary>The part's first <c>Module_RCS</c> with a <c>Data_RCS</c>: its <c>ThrusterTransforms</c> (filled by
+        /// Redux's <c>Ksp1PartModuleRuntimeSetup.ConfigureRcs</c> when the prefab is configured), and a reader of thruster
+        /// i's <c>|thrustForces[i].RelativeForce|</c> (kN; 1 when <c>requiresFuel</c> is false). <c>thrustForces</c> exists in
+        /// flight only, created by <c>Module_RCS.OnInitialize</c>, which may run after ours: the list is read on each call,
+        /// 0 while it is missing. <paramref name="maxThrust"/> is what the force is divided by
+        /// (<see cref="PluginRules.RcsReference"/>). Only reads.</summary>
+        public static bool TryRcs(Module_Ksp1Animations m, out Transform[] thrusters, out Func<int, float> force, out float maxThrust,
+            out string field)
+        {
+            thrusters = null;
+            force = null;
+            maxThrust = 0f;
+            Module_RCS rcs = null;
+            Data_RCS data = null;
+            foreach (var module in m.GetComponents<Module_RCS>())
+                if (module != null && module.DataModules.TryGetByType<Data_RCS>(out var d) && d != null)
+                {
+                    rcs = module;
+                    data = d;
+                    break;
+                }
+            if (rcs == null || rcs.ThrusterTransforms == null || rcs.ThrusterTransforms.Length == 0)
+            {
+                field = rcs == null ? "Module_RCS with Data_RCS" : "Module_RCS.ThrusterTransforms";
+                return false;
+            }
+            thrusters = rcs.ThrusterTransforms;
+            maxThrust = PluginRules.RcsReference(data.maxThrust, rcs.requiresFuel);
+            field = rcs.requiresFuel ? RcsForceField + " / Data_RCS.maxThrust" : RcsForceField + " / 1 (requiresFuel false)";
+            var r = rcs;
+            force = i =>
+            {
+                var list = r == null ? null : r.thrustForces;
+                if (list == null || i < 0 || i >= list.Count) return 0f;
+                var f = list[i];
+                if (f == null) return 0f;
+                var v = f.RelativeForce;
+                return (float)Math.Sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+            };
+            return true;
+        }
+
+        /// <summary>The rotators Redux's own look-at runtime drives on this part
+        /// (<c>Ksp1LookAtConstraintRuntime.Constraints[].RotatorName</c>, built from <c>FXModuleLookAtConstraint</c> only);
+        /// empty when there is none.</summary>
+        public static string[] ReduxLookAtRotators(Module_Ksp1Animations m)
+        {
+            var names = new List<string>();
+            foreach (var runtime in m.GetComponentsInChildren<Ksp1LookAtConstraintRuntime>(true))
+            {
+                if (runtime == null || runtime.Constraints == null) continue;
+                foreach (var c in runtime.Constraints)
+                    if (c != null && !string.IsNullOrEmpty(c.RotatorName)) names.Add(c.RotatorName);
+            }
+            return names.ToArray();
         }
 
         private static Data_Engine[] EngineData(Module_Ksp1Animations m)

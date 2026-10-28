@@ -191,6 +191,7 @@ namespace KSP1PartMod.Game.Animation
             TrackSampler.SampleAll(e.Tracks, in RestTrackPose);
             TrackSampler.SampleAll(e.ActiveTracks, in RestTrackPose);
             e.Writer?.Withdraw();
+            ReleasePluginObjects(e, destroy: false); // mesh hider shown, look-at off: the gate's Step turns them on again
         }
 
         private static void HoldAtRest(Entry e, AnimationState[] states, bool[] sample, int layer)

@@ -8,19 +8,15 @@ namespace KSP1PartMod.Tests.Animation.Runtime
 {
     public class RuntimeKindsTests
     {
-        [Test] public void HasBinder_KindsOf040_AndTask7PluginKinds()
+        [Test] public void HasBinder_EveryKind_AfterTask8()
         {
             var all = (EntryKind[])Enum.GetValues(typeof(EntryKind));
-            var task7 = new[]
-            {
-                EntryKind.EngineDeploy, EntryKind.EngineMode, EntryKind.DecouplerClip, EntryKind.ScienceToggle,
-                EntryKind.AccelSpring, EntryKind.LandingBag,
-            };
-            CollectionAssert.AreEqual(all.Where(k => k <= EntryKind.ChuteFollower || task7.Contains(k)), all.Where(RuntimeKinds.HasBinder));
-            Assert.IsFalse(RuntimeKinds.HasBinder(EntryKind.LookAt));
-            Assert.IsFalse(RuntimeKinds.HasBinder(EntryKind.RcsGlow));
-            Assert.IsFalse(RuntimeKinds.HasBinder(EntryKind.RcsEmissive));
-            Assert.IsFalse(RuntimeKinds.HasBinder(EntryKind.MeshHider));
+            CollectionAssert.AreEqual(all, all.Where(RuntimeKinds.HasBinder));
+            Assert.IsTrue(RuntimeKinds.HasBinder(EntryKind.LookAt));
+            Assert.IsTrue(RuntimeKinds.HasBinder(EntryKind.RcsGlow));
+            Assert.IsTrue(RuntimeKinds.HasBinder(EntryKind.RcsEmissive));
+            Assert.IsTrue(RuntimeKinds.HasBinder(EntryKind.MeshHider));
+            Assert.IsFalse(RuntimeKinds.HasBinder((EntryKind)999), "a kind of a later version");
         }
 
         [Test] public void OncePerLoad_StringKeys_OncePerKeyAndGeneration()

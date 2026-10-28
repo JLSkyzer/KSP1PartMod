@@ -57,6 +57,8 @@ namespace KSP1PartMod.Game.Animation
         private readonly EncodeGate _gate = new EncodeGate(EncodeInterval);
         private bool _ready;
         private bool _urgent;
+        /// <summary>A tick of the module ran (<see cref="Drive"/>): the bind-time step is over (<see cref="PluginRules.StartsNow"/>).</summary>
+        private bool _ticking;
         /// <summary><see cref="AddDataModules"/> found no data and runs on an empty one it made.</summary>
         private bool _synthesised;
         private string _name;
@@ -121,7 +123,9 @@ namespace KSP1PartMod.Game.Animation
                 SaveIfChanged();
             }
             _ready = false;
+            foreach (var e in _entries) ReleasePluginObjects(e, destroy: true);
             _entries.Clear();
+            _ticking = false;
             _variants = null;
             ResetTracks();
         }
@@ -207,6 +211,7 @@ namespace KSP1PartMod.Game.Animation
             }
 
             ResolveAeroGates();
+            ResolveMeshHiders();
             // Gates before controls and before any entry is driven: an inactive entry never shows its button or its pose.
             BindVariants();
             try
@@ -456,6 +461,39 @@ namespace KSP1PartMod.Game.Animation
                     e.Machine = e.Deploy = new DeployMachine(def, length, editorSpeed);
                     break;
                 }
+                case EntryKind.RcsGlow:
+                {
+                    if (!RcsInput(e, ref note)) return null;
+                    // Material-only clips: tracks-only, one sampler set per thruster, paired when the tracks bind
+                    // (BindRcsGlow). Without tracks yet, the entry waits for them like any tracks-only entry.
+                    if (!TracksOnlyLength(def.Clip, tracks, out var length))
+                    {
+                        note = "no material track for the clip (tracks off or not read yet, or the clip has a Transform curve)";
+                        return null;
+                    }
+                    LogTracksOnly(def, def.Clip, length);
+                    break;
+                }
+                case EntryKind.RcsEmissive:
+                {
+                    if (!RcsInput(e, ref note)) return null;
+                    if (e.Thrusters != null)
+                    {
+                        var slots = new Renderer[e.Thrusters.Length];
+                        for (var i = 0; i < slots.Length; i++) slots[i] = FirstMeshRenderer(e.Thrusters[i]);
+                        e.Writer = new MaterialWriter(slots, def, KSP1PartModPlugin.Animations);
+                        LogPluginLine(def, PluginRules.RcsEmissiveLine(_name, e.Writer.Note));
+                    }
+                    e.RcsAlpha = new KSP1PartMod.Animation.Behaviours.FloatCurve(def.Curves != null && def.Curves.Length > 0 ? def.Curves[0] : null);
+                    break;
+                }
+                case EntryKind.MeshHider:
+                    e.HiddenObjects = ObjectsNamed(def.TransformNames);
+                    e.Hider = new MeshHiderState();
+                    break; // its source (our Deploy entry or Redux's) is resolved once every entry is built
+                case EntryKind.LookAt:
+                    BuildLookAt(e);
+                    break;
                 case EntryKind.AccelSpring:
                 {
                     if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
@@ -490,14 +528,16 @@ namespace KSP1PartMod.Game.Animation
             if (tryRead(this, out read, out field)) return true;
             read = null;
             if (!PluginRules.Requires(def.Kind, PartBackingMode == PartBackingModes.OAB)) return true;
-            Log(PluginRules.MissingLine(_name, def, field));
+            LogPluginLine(def, PluginRules.MissingLine(_name, def, field), "missing");
             note = InputMissingNote;
             return false;
         }
 
-        private void LogPluginLine(AnimEntryDef def, string line)
+        /// <summary>A plugin entry's line, once per part type, entry, scene and <paramref name="what"/> per load.</summary>
+        private void LogPluginLine(AnimEntryDef def, string line, string what = null)
         {
-            if (LoggedPluginLine.First(_name + "|" + def.Key + "|" + PartBackingMode, TrackCache.Generation)) Log(line);
+            if (LoggedPluginLine.First(_name + "|" + def.Key + "|" + PartBackingMode + (what == null ? "" : "|" + what), TrackCache.Generation))
+                Log(line);
         }
 
         /// <summary>Binds <paramref name="clip"/>'s legacy states (into <c>States</c>, or <c>ActiveStates</c> when
@@ -718,6 +758,7 @@ namespace KSP1PartMod.Game.Animation
         private void Drive(float dt, bool inEditor)
         {
             if (!_ready) return;
+            _ticking = true;
             var perf = KSP1PartModPlugin.Animations.PerfCounter;
             var start = perf ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             PollTracks(inEditor);
@@ -817,11 +858,12 @@ namespace KSP1PartMod.Game.Animation
                     case EntryKind.EngineDeploy:
                     {
                         var ignited = e.Ignited != null && e.Ignited();
-                        if (PluginRules.StartsNow(inEditor, e.Started))
+                        if (PluginRules.StartsNow(EntryKind.EngineDeploy, inEditor, e.Started, _ticking))
                         {
                             e.EngineDeploy.Start(ignited);
                             e.Started = true;
                         }
+                        else if (PluginRules.WaitsForStart(EntryKind.EngineDeploy, inEditor, e.Started)) break; // bind step: no pose yet
                         e.EngineDeploy.Tick(dt, inEditor, ignited, KSP1PartModPlugin.Animations.EditorAnimationSpeed);
                         Show(e.States, e.Tracks, e.EngineDeploy.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
@@ -829,11 +871,12 @@ namespace KSP1PartMod.Game.Animation
                     case EntryKind.EngineMode:
                     {
                         var mode = e.ActiveMode?.Invoke();
-                        if (PluginRules.StartsNow(inEditor, e.Started))
+                        if (PluginRules.StartsNow(EntryKind.EngineMode, inEditor, e.Started, _ticking))
                         {
                             e.EngineMode.Start(mode);
                             e.Started = true;
                         }
+                        else if (PluginRules.WaitsForStart(EntryKind.EngineMode, inEditor, e.Started)) break; // bind step: no pose yet
                         e.EngineMode.Tick(dt, inEditor, mode, KSP1PartModPlugin.Animations.EditorAnimationSpeed);
                         Show(e.States, e.Tracks, e.EngineMode.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
@@ -841,6 +884,18 @@ namespace KSP1PartMod.Game.Animation
                     case EntryKind.DecouplerClip:
                         e.Decoupler.Tick(dt, inEditor, e.Decoupled != null && e.Decoupled(), KSP1PartModPlugin.Animations.EditorAnimationSpeed);
                         Show(e.States, e.Tracks, e.Decoupler.Pose, e.Def.Layer, ref e.StatesOn);
+                        break;
+                    case EntryKind.RcsGlow:
+                        StepRcsGlow(e, inEditor);
+                        break;
+                    case EntryKind.RcsEmissive:
+                        StepRcsEmissive(e, inEditor);
+                        break;
+                    case EntryKind.MeshHider:
+                        if (e.Retracted != null && e.Hider.Step(!inEditor, e.Retracted())) SetActive(e.HiddenObjects, !e.Hider.Hiding);
+                        break;
+                    case EntryKind.LookAt:
+                        if (e.LookAt != null && !e.LookAt.enabled) e.LookAt.enabled = true; // a B9 gate opened again
                         break;
                     case EntryKind.AccelSpring:
                         e.Spring.Tick(dt, PluginRules.SpringAcceleration(inEditor, e.Accel != null, e.Accel != null ? e.Accel() : 0f));
@@ -956,6 +1011,7 @@ namespace KSP1PartMod.Game.Animation
         {
             e.Disabled = true;
             Error($"{_name} {e.Def.Kind} '{Subject(e.Def)}' disabled for this session: {ex}");
+            ReleasePluginObjects(e, destroy: false);
             try
             {
                 if (e.Button != null) data.SetVisible(e.Button, false);
@@ -1198,6 +1254,24 @@ namespace KSP1PartMod.Game.Animation
             public Func<bool> Ignited, Decoupled;
             public Func<string> ActiveMode;
             public Func<float> Accel;
+            /// <summary>RcsGlow / RcsEmissive: <c>Module_RCS.ThrusterTransforms</c>, the force of thruster i, and what it
+            /// is divided by (<see cref="PluginRules.RcsReference"/>); null / 0 when not found (editor).</summary>
+            public Transform[] Thrusters;
+            public Func<int, float> RcsForce;
+            public float RcsMax;
+            /// <summary>RcsGlow: the thruster of each sampler of <see cref="Tracks"/> (<see cref="RcsThrusterMatch"/>), null
+            /// on a count mismatch (the glow rests).</summary>
+            public int[] RcsThrusterOf;
+            /// <summary>RcsGlow: the first non-zero sample was logged by this instance.</summary>
+            public bool RcsLogged;
+            /// <summary>RcsEmissive: <c>alphaCurve</c>.</summary>
+            public KSP1PartMod.Animation.Behaviours.FloatCurve RcsAlpha;
+            /// <summary>MeshHider: the objects named by <c>transformName</c>, what they follow, and whether we hide them.</summary>
+            public GameObject[] HiddenObjects;
+            public Func<bool> Retracted;
+            public MeshHiderState Hider;
+            /// <summary>LookAt: our component on the part, null when no constraint was found.</summary>
+            public AdvancedLookAt LookAt;
             /// <summary>An engine machine took its flight-start pose (<see cref="PluginRules.StartsNow"/>).</summary>
             public bool Started;
             public Func<ReduxDeployState> ReadDeploy;

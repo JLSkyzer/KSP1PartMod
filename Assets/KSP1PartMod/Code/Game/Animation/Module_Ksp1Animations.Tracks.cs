@@ -150,7 +150,8 @@ namespace KSP1PartMod.Game.Animation
                 var primary = OwnsClip(e, clip, out var activeClip);
                 if (!primary && !activeClip) continue;
                 owned = true;
-                if (primary) e.Tracks = BindEntryClip(e, tracks, clip, e.States.Length > 0 ? e.Holders : null, false, reduxLights);
+                if (primary && e.Def.Kind == EntryKind.RcsGlow) e.Tracks = BindRcsGlow(e, tracks, clip, reduxLights);
+                else if (primary) e.Tracks = BindEntryClip(e, tracks, clip, e.States.Length > 0 ? e.Holders : null, false, reduxLights);
                 if (activeClip) e.ActiveTracks = BindEntryClip(e, tracks, clip, e.ActiveStates.Length > 0 ? e.ActiveHolders : null,
                     e.Group != null, reduxLights);
             }
@@ -207,6 +208,27 @@ namespace KSP1PartMod.Game.Animation
             }
             // A Group's active clip plays on its own layer (Step), any other clip on the entry's.
             return BindSets(tracks, clip, hosts, e.Def, loop, loop ? ActiveLayer : e.Def.Layer, reduxLights);
+        }
+
+        /// <summary>RCS glow (spec 2b.6): every host of the clip, each sampler paired with its thruster by
+        /// <see cref="RcsThrusterMatch"/> (hierarchy order on both sides); a count mismatch leaves the glow at rest.</summary>
+        private TrackSampler[] BindRcsGlow(Entry e, PartTracks tracks, string clip, IReadOnlyCollection<Light> reduxLights)
+        {
+            var hosts = new List<(TrackSet set, int index)>();
+            foreach (var set in tracks.Sets)
+            {
+                if (!string.Equals(set.Clip, clip, StringComparison.Ordinal)) continue;
+                foreach (var i in TrackBinder.Hosts(_transforms, set, tracks, out var note))
+                    hosts.Add((set, i));
+            }
+            var bound = BindEach(tracks, clip, hosts, e.Def, false, e.Def.Layer, reduxLights);
+            var hostOfSampler = bound.Select(b => _transforms.Transforms.IndexOf(b.host)).ToList();
+            var thrusters = e.Thrusters == null
+                ? new List<int>()
+                : e.Thrusters.Select(t => t == null ? -1 : _transforms.Transforms.IndexOf(t)).ToList();
+            e.RcsThrusterOf = RcsThrusterMatch.Pair(hostOfSampler, thrusters);
+            LogPluginLine(e.Def, PluginRules.RcsGlowLine(_name, thrusters.Count, hostOfSampler.Distinct().Count()));
+            return bound.Select(b => b.sampler).ToArray();
         }
 
         /// <summary>A clip Redux's legacy runtime plays (<c>Ksp1DeployableAnimationRuntime</c>, which drives every
