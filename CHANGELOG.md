@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0 - 2026-10-28
+
+Audit mode: load every KSP1 part once, off screen, and report the ones that fail. Off by default. Not run in game yet; checklist (French) in `docs/testing/2026-10-28-audit-in-game-checklist.md`.
+
+- **Switches** (`animations.json`): `audit_on_vab_entry` (default false), `audit_frame_budget_ms` (default 8, 1 to 50), `audit_unload_every` (default 100, 10 to 1000).
+- **How it runs.** At the first VAB entry of a game session (campaign feature on, VAB only, not the BAE), after a 5 s settle, one part per step on a detached copy: the part is built, finalized, inspected and destroyed in the same call, paced to the frame budget. Five KSP2 control parts (engine, pod, tank, then the first by name) are spawned first; if one fails, the audit says so. Leaving the VAB cancels at once, and the next entry resumes.
+- **Never touched:** the master part list, the assemblies, the selection, the undo history, staging, the module type cache, the real part objects, and the shared KSP1 textures (the audit evicts only the cache entries its own loads added, then calls `Resources.UnloadUnusedAssets` every `audit_unload_every` parts).
+- **Report:** `<mod>/audit/audit-<date>.csv` (one row per part, written as it goes) and `.md` (summary: by kind, by mod, by module, slowest parts, and a `pods:` line for KSP1 pods with engines). A part that crashes the game is named by the breadcrumb file and added to `skip.txt` at the next start.
+- **Leak checks:** the OAB event delegate counts and the message subscriptions of the real builder are compared around each spawn (lines `OAB event ... grew`, `message ... kept ...`). A failed snapshot is logged and skips the check for that part only.
+- **Risks:** the detached spawn is read from the 26w42c decompilation, not tried in game; a module may behave differently when detached; the cost per part and the `UnloadUnusedAssets` hitches are unmeasured.
+- 1354 EditMode tests (1352 passing, 2 explicit and skipped).
+
 ## 0.5.0 - 2026-10-28
 
 Animations phase 2b: KSP1 plugin modules and B9PartSwitch gates. Not run in game yet; checklist (French) in `docs/testing/2026-10-27-animations-phase2-in-game-checklist.md` (section 2b, after 2a; the single in-game test starts with the 0.4.1 checklist, then 2a, then 2b).

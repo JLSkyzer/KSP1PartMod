@@ -148,6 +148,18 @@ Not run in game yet: checklist in `docs/testing/2026-10-27-animations-phase2-in-
 - **Settings.** `plugin_modules` and `b9_module_gates` (default true); `skip_modules` also names plugin modules; `editor_animation_speed` governs the new previews.
 - **Not done yet:** links by module index (cargo bay shielding, docking port gating, science experiments, animation groups with converters), deploy limit and `restrictedNode`, one-shot inflatables, crew capacity when open, radiator and antenna tracking, wheel physics, robotics, Waterfall effects.
 
+## Audit mode (0.6.0)
+
+Off by default. With `"audit_on_vab_entry": true` in `animations.json`, the first time you enter the VAB in a game session (mod enabled in the campaign), the mod loads every KSP1 part once, off screen and one at a time, and writes a report of the parts that fail, throw, stay unfinished or log errors. It changes nothing in your craft, the part list or the undo history, and the shared KSP1 textures are not destroyed. Do not build while it runs; leaving the VAB cancels it, and the next entry resumes. Not run in game yet: checklist in `docs/testing/2026-10-28-audit-in-game-checklist.md`.
+
+| Key | Default | Effect |
+|---|---|---|
+| `audit_on_vab_entry` | false | Run the audit at the first VAB entry of the session. |
+| `audit_frame_budget_ms` | 8 | Time the audit may use per frame (1 to 50). |
+| `audit_unload_every` | 100 | Parts between two unloads of the audit's textures (10 to 1000). |
+
+Output, in `<mod>/audit/`: `audit-<date>.csv` (one row per part), `audit-<date>.md` (summary, including a `pods:` line on KSP1 pods with engines), `skip.txt` (parts that crashed the game, skipped from then on) and a breadcrumb file. Log lines start with `[KSP1PartMod] audit:`.
+
 ## VAB sub-categories
 
 Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category is selected, the mod adds a second vertical bar right of the category bar, with the KSP1 part types of that mod in KSP1 editor order: "All" first, then Pods, Fuel Tanks, Engines, Control, Structural, Coupling, Payload, Aerodynamics, Ground, Thermal, Electrical, Communication, Science, Utility, Robotics, Cargo and Other (custom or unknown KSP1 categories). Clicking a type filters the grid.
@@ -160,7 +172,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
 ## Known limits
 
 - Robotics parts of KSP1 are spread over several KSP1 nodes, so only those of `actuators` land in the new robotics node.
-- Animations: phases 1, 2a and 2b. The items under "Not done yet" in phase 2b are not played.
+- Animations: phases 1, 2a and 2b (all built; none verified in game yet beyond what the checklists record). The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
 - Stock KSP1 parts titled `#autoLOC_…`: Redux reads every `Localization` node under `mods/KSP1`, but a copy of the stock part folders alone carries no dictionary. Copy `GameData/Squad/Localization` and `GameData/SquadExpansion/Serenity/Localization` from your KSP1 install to the same paths under `mods/KSP1` (Making History's keys are in the Squad dictionary). Redux keeps one text per key, English when present, else the first language it reads: a KSP1 installed in French gives French titles in every game language.
 

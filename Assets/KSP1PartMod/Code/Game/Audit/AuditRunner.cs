@@ -458,8 +458,18 @@ namespace KSP1PartMod.Game.Audit
             List<MessageCounts.Kept> keptMessages = null;
             // Snapshots right before the spawn, compared right after it, in the same frame: nothing the player does
             // between frames is blamed on the audited part.
-            run.Events.Snapshot();
-            run.Messages?.Snapshot();
+            var snapshotFault = (Exception)null;
+            try
+            {
+                run.Events.Snapshot();
+                run.Messages?.Snapshot();
+            }
+            catch (Exception e)
+            {
+                // A collection changed under the snapshot: no leak check for this part, and the audit goes on.
+                snapshotFault = e;
+                log.LogWarning(P + $"leak snapshot failed before {target.Name}: {e.Message}");
+            }
             _inSpawn = true;
             try
             {
@@ -477,8 +487,11 @@ namespace KSP1PartMod.Game.Audit
             }
             try
             {
-                grewEvents = run.Events.Compare();
-                keptMessages = run.Messages?.Compare();
+                if (snapshotFault == null)
+                {
+                    grewEvents = run.Events.Compare();
+                    keptMessages = run.Messages?.Compare();
+                }
             }
             catch (Exception e)
             {
