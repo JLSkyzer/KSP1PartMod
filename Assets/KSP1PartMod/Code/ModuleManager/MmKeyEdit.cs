@@ -110,7 +110,7 @@ namespace KSP1PartMod.ModuleManager
             var bracketOperator = brackets && (command == MmCommand.Edit || command == MmCommand.CreateOrEdit)
                 ? TrailingOperator(rest)
                 : MmOperator.None;
-            return new MmKeyEdit(command, baseName, MmIndex.None, MmOperator.None, rawValue, baseName != rest, brackets,
+            return new MmKeyEdit(command, baseName, MmIndex.None, MmOperator.None, rawValue, baseName != rest || brackets, brackets,
                 bracketOperator);
         }
 
@@ -176,17 +176,30 @@ namespace KSP1PartMod.ModuleManager
         }
 
         /// <summary>The base name Redux reads from a value name (observed behaviour, plan (a)): the text before the first
-        /// bracket, then before the first comma, then before the first colon, trimmed.</summary>
+        /// bracket when that bracket is closed (an unclosed one is kept, as Redux keeps it), then before the first comma,
+        /// then before the first colon, trimmed.</summary>
         public static string ReduxBaseName(string rest)
         {
             var s = rest ?? "";
             var cut = s.IndexOf('[');
-            if (cut >= 0) s = s.Substring(0, cut);
+            if (cut >= 0 && ClosingBracket(s, cut) > cut) s = s.Substring(0, cut);
             cut = s.IndexOf(',');
             if (cut >= 0) s = s.Substring(0, cut);
             cut = s.IndexOf(':');
             if (cut >= 0) s = s.Substring(0, cut);
             return s.Trim();
+        }
+
+        /// <summary>The <c>]</c> closing the <c>[</c> at <paramref name="open"/>, counting nested pairs; -1 when none.</summary>
+        private static int ClosingBracket(string s, int open)
+        {
+            var depth = 0;
+            for (var i = open; i < s.Length; i++)
+            {
+                if (s[i] == '[') depth++;
+                else if (s[i] == ']' && --depth == 0) return i;
+            }
+            return -1;
         }
 
         public override string ToString() =>

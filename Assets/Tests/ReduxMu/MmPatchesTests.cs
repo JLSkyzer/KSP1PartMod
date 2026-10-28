@@ -112,6 +112,9 @@ namespace KSP1PartMod.Tests.ReduxMu
         [TestCase(" PART:NEEDS[X] ", true)]
         [TestCase("part", true)]
         [TestCase("@PART[x]", false)]
+        [TestCase("+PART[x]:NEEDS[Y]", true)]
+        [TestCase("+ PART[x]", true)]
+        [TestCase("+MODULE[x]", false)]
         [TestCase("PARTS", false)]
         [TestCase("RESOURCE_DEFINITION", false)]
         public void IsPartRootName(string name, bool expected) => Assert.AreEqual(expected, MmPatches.IsPartRootName(name));
@@ -119,7 +122,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         // ------------------------------------------------------------------ Finalize, in memory
 
         private const string Part =
-            "PART\n{\nname = p1\nmass = 0.5\ncost = 100\nvolume = 1\nvolume = 2\nvolume = 3\nnode_stack_top = 0, 1, 0\n" +
+            "PART\n{\nname = p1\nmass = 0.5\ncost = 100\ncategory = Utility\nvolume = 1\nvolume = 2\nvolume = 3\nnode_stack_top = 0, 1, 0\n" +
             "MODULE\n{\nname = ModuleEnginesFX\nmaxThrust = 10\n}\n" +
             "MODULE\n{\nname = ModuleEnginesFX\nmaxThrust = 20\n}\n" +
             "MODULE\n{\nname = ModuleRCS\n}\n}\n";
@@ -226,6 +229,7 @@ namespace KSP1PartMod.Tests.ReduxMu
 
         private const string PlainPatch =
             "@PART[p1]\n{\n@cost = 7\n%newkey = 1\n%cost = 8\ntitle = added\n!volume = delete\n@missing = 3\n@a,b = 4\n" +
+            "+extra = 1\n&extra2 = 2\n-category = delete\n@cost:HAS[#name[p1]] = 11\n@Cost = 12\n@node_stack_top[1] = 9\n%odd[1 = 9\n" +
             "@MODULE[ModuleEnginesFX]\n{\n@maxThrust = 7\n}\n+MODULE[ModuleRCS]\n{\n@name = ModuleRCS2\n}\n" +
             "%MODULE[ModuleNew]\n{\nx = 1\n}\n!MODULE[ModuleRCS]\n{\n}\n}\n";
 
@@ -315,6 +319,67 @@ namespace KSP1PartMod.Tests.ReduxMu
             Disarm();
             var part = Run(NeedsFiles());
             Assert.AreEqual("rf", part.GetValue("title"));
+        }
+    
+        [Test] public void PlainPatch_CoversEveryReduxForm()
+        {
+            var part = Run(File("Squad", Part), File("Mine", PlainPatch));
+            Assert.AreEqual("1", part.GetValue("extra"));
+            Assert.AreEqual("2", part.GetValue("extra2"));
+            Assert.IsNull(part.GetValue("category"));
+            Assert.AreEqual("9", part.GetValue("odd[1"), "an unclosed bracket stays in the key");
+        }
+
+        [Test] public void FailedWriteBack_LeavesTheNodeAsReduxFoundIt()
+        {
+            const string patch = "@PART[p1]\n{\n@mass *= 2\n@cost = 7\n%newkey = 1\n}\n";
+            var redux = Flat(Run(File("Squad", Part), File("Mine", patch)));
+            Arm();
+            MmPatches.FailWriteBackAfter = 1;
+            var ours = Flat(Run(File("Squad", Part), File("Mine", patch)));
+            Assert.IsTrue(MmPatches.Broken);
+            Assert.IsNotNull(_lines.FirstOrDefault(l => l.StartsWith("[KSP1PartMod] mm: patch failed, stopped for this session:")));
+            CollectionAssert.AreEqual(redux, ours, "restored, then Redux's own code ran");
+        }
+
+        [Test] public void AutomaticRule_NeverBlocksGameDataItself_AndCountsPartCopies()
+        {
+            var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ksp1partmod-mm-" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                void Touch(string rel)
+                {
+                    var path = System.IO.Path.Combine(root, rel);
+                    System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(path));
+                    System.IO.File.WriteAllText(path, "");
+                }
+                Touch("GameData/ModuleManager.4.2.3.dll");
+                Touch("GameData/SomePlugin/Plugins/SomePlugin.dll");
+                Touch("GameData/CopiesOnly/Plugins/CopiesOnly.dll");
+                Arm();
+                MmPatches.ImportRootsOverride = () => new[] { root };
+                var db = Ksp1ConfigFinalizer.Finalize(new[]
+                {
+                    File("Squad", Part),
+                    File("GameData", "@PART[p1]\n{\n%mine = 1\n}\n"),
+                    File("SomePlugin", "@PART[p1]\n{\n%plugin = 1\n}\n"),
+                    File("CopiesOnly", "+PART[p1]\n{\n@name = p2\n}\n"),
+                }, new Ksp1ImportReport());
+                var parts = db.Files.SelectMany(f => f.Node.Nodes).Where(n => n.Name == "PART").ToList();
+                var p1 = parts.Single(n => n.GetValue("name") == "p1");
+                Assert.AreEqual("1", p1.GetValue("mine"), "the player's loose GameData patch is kept");
+                Assert.IsNull(p1.GetValue("plugin"), "a DLL folder without parts is blocked");
+                Assert.AreEqual(1, parts.Count(n => n.GetValue("name") == "p2"), "a folder of +PART copies has parts");
+                var blocked = _lines.Single(l => l.StartsWith("[KSP1PartMod] mm: blocked plugin names:"));
+                StringAssert.Contains("SomePlugin", blocked);
+                StringAssert.DoesNotContain("GameData", blocked);
+                StringAssert.DoesNotContain("CopiesOnly", blocked);
+                StringAssert.Contains("automatic 1;", blocked);
+            }
+            finally
+            {
+                if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true);
+            }
         }
     }
 }

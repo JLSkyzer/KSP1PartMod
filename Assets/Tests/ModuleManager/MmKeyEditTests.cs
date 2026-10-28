@@ -213,5 +213,22 @@ namespace KSP1PartMod.Tests.ModuleManager
             CollectionAssert.AreEqual(new[] { "2", "2" }, System.Linq.Enumerable.Select(values, v => v.Value));
             Assert.AreEqual(0, c.ArithmeticApplied);
         }
+    
+        [TestCase("key[1", "key[1")]
+        [TestCase("odd[a[b]", "odd[a[b]")]
+        [TestCase("curve[x]", "curve")]
+        [TestCase("a[b[c]]d,1", "a")]
+        [TestCase("a,b[x", "a")]
+        [TestCase("cost:HAS[#n[x]]", "cost")]
+        public void ReduxBaseName_CutsOnlyAtAClosedBracket(string rest, string expected) =>
+            Assert.AreEqual(expected, MmKeyEdit.ReduxBaseName(rest));
+
+        [Test] public void Parse_UnclosedBracket_PassedBackWithTheWholeKey()
+        {
+            var e = MmKeyEdit.Parse("%odd[1", "9");
+            Assert.IsTrue(e.PassedBack);
+            Assert.AreEqual("odd[1", e.Key);
+            Assert.IsFalse(e.SkippedVectorEdit);
+        }
     }
 }

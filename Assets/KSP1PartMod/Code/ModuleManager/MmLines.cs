@@ -28,7 +28,7 @@ namespace KSP1PartMod.ModuleManager
             $"{Prefix}blocked plugin names: {Names(names)} (curated {curated}, automatic {automatic}; kept: {Names(kept)})";
 
         public static string BlockedName(string name, int needsTerms, int forDropped, int beforeAfterDropped, int folderDropped) =>
-            $"{Prefix}{name}: {needsTerms} NEEDS term(s) now false, {forDropped + beforeAfterDropped + folderDropped} patch(es) dropped " +
+            $"{Prefix}{name}: {needsTerms} NEEDS lookup(s) answered false (X false, !X true), {forDropped + beforeAfterDropped + folderDropped} patch(es) dropped " +
             $"({forDropped} FOR, {beforeAfterDropped} BEFORE/AFTER, {folderDropped} from its folder)";
 
         public static string BeforeAfterAbsent(IEnumerable<KeyValuePair<string, int>> droppedByMod)

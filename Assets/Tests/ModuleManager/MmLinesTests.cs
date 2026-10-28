@@ -23,7 +23,7 @@ namespace KSP1PartMod.Tests.ModuleManager
                 MmLines.BlockedNames(new string[0], 0, 0, new string[0]));
 
         [Test] public void BlockedName() =>
-            Assert.AreEqual("[KSP1PartMod] mm: RealFuels: 149 NEEDS term(s) now false, 12 patch(es) dropped (3 FOR, 4 BEFORE/AFTER, 5 from its folder)",
+            Assert.AreEqual("[KSP1PartMod] mm: RealFuels: 149 NEEDS lookup(s) answered false (X false, !X true), 12 patch(es) dropped (3 FOR, 4 BEFORE/AFTER, 5 from its folder)",
                 MmLines.BlockedName("RealFuels", 149, 3, 4, 5));
 
         [Test] public void BeforeAfterAbsent() =>

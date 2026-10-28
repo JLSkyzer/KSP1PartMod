@@ -57,7 +57,7 @@ namespace KSP1PartMod.Game
             };
         }
 
-        /// <summary>Per name: NEEDS terms made false, patches dropped by FOR, by BEFORE/AFTER, from its folder.</summary>
+        /// <summary>Per name: NEEDS lookups answered false (where Redux would have said true), patches dropped by FOR, by BEFORE/AFTER, from its folder.</summary>
         private sealed class NameCounts
         {
             public int Needs, For, BeforeAfter, Folder;
@@ -119,6 +119,8 @@ namespace KSP1PartMod.Game
             Absent.Clear();
             _c = new MmCounters();
             LastSummary = new List<string>();
+            ImportRootsOverride = null;
+            FailWriteBackAfter = -1;
         }
 
         public static void TryApply(Harmony harmony, Switches switches)
@@ -249,14 +251,16 @@ namespace KSP1PartMod.Game
                 lines.Add(MmLines.BlockedName(p.Key, p.Value.Needs, p.Value.For, p.Value.BeforeAfter, p.Value.Folder));
         }
 
-        /// <summary>A plain <c>PART</c> root node (no patch command), NEEDS or not.</summary>
+        /// <summary>A root node that makes a part: a plain <c>PART</c>, or a <c>+PART[…]</c> copy (a mod whose parts are all
+        /// copies still has parts), NEEDS or not.</summary>
         internal static bool IsPartRootName(string name)
         {
             if (string.IsNullOrWhiteSpace(name)) return false;
             var s = name.Trim();
-            if (IsPatchName(s)) return false;
-            var colon = s.IndexOf(':');
-            if (colon >= 0) s = s.Substring(0, colon).Trim();
+            if (s[0] == '+') s = s.Substring(1).TrimStart();
+            else if (IsPatchName(s)) return false;
+            var cut = s.IndexOfAny(new[] { ':', '[' });
+            if (cut >= 0) s = s.Substring(0, cut).Trim();
             return s.Equals("PART", StringComparison.OrdinalIgnoreCase);
         }
 
@@ -270,13 +274,18 @@ namespace KSP1PartMod.Game
 
         /// <summary>Top folders of the import roots (and of a <c>GameData</c> folder in one) that hold a <c>.dll</c> and no
         /// imported <c>PART</c>.</summary>
+        /// <summary>Tests: the import roots to scan instead of Redux's.</summary>
+        internal static Func<IEnumerable<string>> ImportRootsOverride;
+
         private static List<string> ScanAutoFolders(HashSet<string> partMods)
         {
             var found = new List<string>();
-            IEnumerable<Ksp1ModRoot> roots;
+            IEnumerable<string> roots;
             try
             {
-                roots = Ksp1PartModDiscovery.DiscoverImportRoots().ToList();
+                roots = ImportRootsOverride != null
+                    ? ImportRootsOverride().ToList()
+                    : Ksp1PartModDiscovery.DiscoverImportRoots().Select(r => r.ImportRoot).ToList();
             }
             catch (Exception e)
             {
@@ -287,10 +296,15 @@ namespace KSP1PartMod.Game
             {
                 try
                 {
-                    var dirs = new List<string>(Directory.GetDirectories(root.ImportRoot, "*", SearchOption.TopDirectoryOnly));
+                    var dirs = new List<string>(Directory.GetDirectories(root, "*", SearchOption.TopDirectoryOnly));
                     foreach (var d in dirs.ToList())
-                        if (string.Equals(Path.GetFileName(d), "GameData", StringComparison.OrdinalIgnoreCase))
-                            dirs.AddRange(Directory.GetDirectories(d, "*", SearchOption.TopDirectoryOnly));
+                    {
+                        if (!IsGameData(d)) continue;
+                        // GameData itself is never a candidate: its loose cfgs (Redux names their mod "GameData") are the
+                        // player's own patches, and it holds ModuleManager's DLL in any full KSP1 copy.
+                        dirs.Remove(d);
+                        dirs.AddRange(Directory.GetDirectories(d, "*", SearchOption.TopDirectoryOnly));
+                    }
                     foreach (var dir in dirs)
                     {
                         var name = Path.GetFileName(dir);
@@ -301,11 +315,14 @@ namespace KSP1PartMod.Game
                 }
                 catch (Exception e)
                 {
-                    Warn("[KSP1PartMod] mm: import root '" + root?.ImportRoot + "' not scanned for plugin folders: " + e.Message);
+                    Warn("[KSP1PartMod] mm: import root '" + root + "' not scanned for plugin folders: " + e.Message);
                 }
             }
             return found;
         }
+
+        private static bool IsGameData(string dir) =>
+            string.Equals(Path.GetFileName(dir.TrimEnd('/', '\\')), "GameData", StringComparison.OrdinalIgnoreCase);
 
         private static bool HasDll(string dir)
         {
@@ -483,29 +500,57 @@ namespace KSP1PartMod.Game
         {
             if (_broken || !_valueEdits || __0 == null || __1 == null) return true;
             var a = _a;
+            List<KeyValuePair<string, string>> snapshot = null;
+            var cleared = false;
             try
             {
                 if (!MightNeedUs(__1)) return true;
                 var edits = Plan(__1, out var ours);
                 if (!ours) return true;
                 var targetValues = a.Values(__0);
-                var work = new List<KeyValuePair<string, string>>(targetValues.Count + edits.Length);
+                snapshot = new List<KeyValuePair<string, string>>(targetValues.Count);
                 for (var i = 0; i < targetValues.Count; i++)
-                    work.Add(new KeyValuePair<string, string>(a.ValueName(__0, i), a.ValueRaw(__0, i)));
+                    snapshot.Add(new KeyValuePair<string, string>(a.ValueName(__0, i), a.ValueRaw(__0, i)));
+                var work = new List<KeyValuePair<string, string>>(snapshot);
                 foreach (var edit in edits) MmValueEditor.Apply(work, edit, _firstMatch, _c);
+                cleared = true;
                 targetValues.Clear();
-                foreach (var v in work) a.AddValue(__0, v.Key, v.Value);
+                var written = 0;
+                foreach (var v in work)
+                {
+                    if (FailWriteBackAfter >= 0 && written++ >= FailWriteBackAfter)
+                        throw new InvalidOperationException("test: write-back failure");
+                    a.AddValue(__0, v.Key, v.Value);
+                }
             }
             catch (Exception e)
             {
                 Break(e);
-                return true;
+                if (cleared) Restore(__0, snapshot);
+                return true; // Redux applies the patch to the node as it found it
             }
             // Redux's own code from here: its exceptions reach Redux's handler, as before.
             var children = a.Nodes(__1);
             for (var i = 0; i < children.Count; i++) a.CallApplyChildPatch(__0, children[i], __2);
             return false;
         }
+
+        /// <summary>Puts the values back as Redux had them, after a failed write-back.</summary>
+        private static void Restore(object node, List<KeyValuePair<string, string>> snapshot)
+        {
+            try
+            {
+                _a.Values(node).Clear();
+                foreach (var v in snapshot) _a.AddValue(node, v.Key, v.Value);
+            }
+            catch (Exception e)
+            {
+                Warn("[KSP1PartMod] mm: values not restored after a failed edit: " + e.Message);
+            }
+        }
+
+        /// <summary>Tests: the write-back fails after this many values (negative: never).</summary>
+        internal static int FailWriteBackAfter = -1;
 
         // ---------------------------------------------------------------- child nodes
 
