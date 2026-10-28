@@ -14,6 +14,7 @@ using ILogger = SpaceWarp2.API.Logging.ILogger;
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.ReduxMu")]
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.Animation")]
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.Audit")]
+[assembly: InternalsVisibleTo("KSP1PartMod.Tests.B9")]
 
 namespace KSP1PartMod
 {

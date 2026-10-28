@@ -16,6 +16,9 @@ namespace KSP1PartMod.Animation.Cfg
         /// <summary>Redux's V-SwiFT set id (<c>Data_PartSwitch.VariantSets[i].VariantSetId</c>), or null when Redux makes no
         /// set of this switch (no visual effect): its gates then stay at <see cref="DefaultSubtype"/>.</summary>
         public string SetId;
+        /// <summary>The id of the set KSP1PartMod appends for a B9 switch Redux makes no set of (B9 overrides, 0.9.0), or
+        /// null: filled by <see cref="VariantSwitches.All"/> only for the switches its <c>appendSet</c> test accepts.</summary>
+        public string OverrideSetId;
         /// <summary>The id before it was made unique (the set id when none was made).</summary>
         public string RawId;
         /// <summary>The variant id Redux selects by default.</summary>
@@ -38,8 +41,12 @@ namespace KSP1PartMod.Animation.Cfg
         /// <summary>Every variant set of the part: first the B9 switches in cfg order, then the stock modules in cfg order.
         /// A switch Redux drops stays in the list with a null <see cref="VariantSwitch.SetId"/>. A B9 switch without
         /// visual data and a stock module without VARIANT nodes are Redux-skipped before any id is reserved: a B9 one
-        /// stays listed (its variants matter to the gates of B9 overrides), a stock one is left out.</summary>
-        public static List<VariantSwitch> All(IReadOnlyList<IKsp1Node> modules)
+        /// stays listed (its variants matter to the gates of B9 overrides), a stock one is left out.
+        /// <para>With <paramref name="appendSet"/>, each B9 switch with SUBTYPEs and no Redux set that the test accepts
+        /// gets <see cref="VariantSwitch.OverrideSetId"/>: the id of a set appended after every Redux set, in cfg order,
+        /// <c>moduleID</c>, else <c>switcherDescription</c>, else <c>B9Switch&lt;n&gt;</c> with n counting on from Redux's
+        /// kept B9 sets, made unique against every id Redux reserved (dropped sets included).</para></summary>
+        public static List<VariantSwitch> All(IReadOnlyList<IKsp1Node> modules, Func<VariantSwitch, bool> appendSet = null)
         {
             var result = new List<VariantSwitch>();
             if (modules == null) return result;
@@ -87,6 +94,17 @@ namespace KSP1PartMod.Animation.Cfg
                 if (!variants.Any(v => HasStockEffect(v, ignored))) continue;
                 sw.SetId = id;
                 stockKept++;
+            }
+
+            if (appendSet == null) return result;
+            var n = kept;
+            foreach (var sw in result)
+            {
+                if (sw.IsStock || sw.SetId != null || sw.Subtypes.Count == 0 || !appendSet(sw)) continue;
+                var raw = FirstNonBlank(sw.Module.GetValue("moduleID"), sw.Module.GetValue("switcherDescription"),
+                    "B9Switch" + n.ToString(CultureInfo.InvariantCulture));
+                sw.OverrideSetId = MakeUnique(raw, used);
+                n++;
             }
             return result;
         }

@@ -115,6 +115,29 @@ namespace KSP1PartMod.Animation.Settings
         /// <c>ksp1_heatshields</c> and, being an animation entry, <c>enabled</c>).</summary>
         public bool AblatorChar => _mm.AblatorChar;
 
+        /// <summary>B9PartSwitch <c>addedMass</c> and tank dry mass become a V-SwiFT <c>MassModifier</c> (<c>b9_mass</c>).</summary>
+        public bool B9Mass => _b9.Mass;
+        /// <summary>B9 tank types set the part's resources per subtype (<c>b9_resources</c>).</summary>
+        public bool B9Resources => _b9.Resources;
+        /// <summary>B9 <c>MODULE</c>/<c>DATA</c> edits reach the native module (<c>b9_module_data</c>).</summary>
+        public bool B9ModuleData => _b9.ModuleData;
+        /// <summary>B9 <c>moduleActive = false</c> gives the native off form (<c>b9_module_active</c>; needs
+        /// <see cref="B9ModuleData"/>).</summary>
+        public bool B9ModuleActive => _b9.ModuleActive;
+        /// <summary>B9 <c>maxTemp</c>, <c>skinMaxTemp</c>, <c>crashTolerance</c>, <c>CoMOffset</c> in flight
+        /// (<c>b9_part_scalars</c>).</summary>
+        public bool B9PartScalars => _b9.PartScalars;
+        /// <summary>Sets (and a <c>Module_PartSwitch</c>) for the B9 modules Redux skips (<c>b9_new_part_switches</c>).</summary>
+        public bool B9NewPartSwitches => _b9.NewPartSwitches;
+
+        /// <summary>The <c>b9_*</c> keys of 0.9.0, read together.</summary>
+        private sealed class SwitchesB9
+        {
+            public bool Mass = true, Resources = true, ModuleData = true, ModuleActive = true, PartScalars = true, NewPartSwitches = true;
+        }
+
+        private readonly SwitchesB9 _b9;
+
         /// <summary>The keys of 0.8.0 (ModuleManager and native modules), read together.</summary>
         private sealed class SwitchesMm
         {
@@ -174,13 +197,14 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
-            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm)
+            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9)
         {
+            _b9 = b9;
             _mm = mm;
             _audit = audit;
             _switches2a = switches2a;
@@ -222,6 +246,7 @@ namespace KSP1PartMod.Animation.Settings
                 var s041 = new Switches041();
                 var audit = new SwitchesAudit();
                 var mm = new SwitchesMm();
+                var b9 = new SwitchesB9();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -263,6 +288,12 @@ namespace KSP1PartMod.Animation.Settings
                         case "ksp1_heatshields": ReadBool(p, ref mm.Heatshields, problems); break;
                         case "ablator_rate_scale": ReadClampedFloat(p, 0.01, 100, ref mm.AblatorRateScale, problems); break;
                         case "ablator_char": ReadBool(p, ref mm.AblatorChar, problems); break;
+                        case "b9_mass": ReadBool(p, ref b9.Mass, problems); break;
+                        case "b9_resources": ReadBool(p, ref b9.Resources, problems); break;
+                        case "b9_module_data": ReadBool(p, ref b9.ModuleData, problems); break;
+                        case "b9_module_active": ReadBool(p, ref b9.ModuleActive, problems); break;
+                        case "b9_part_scalars": ReadBool(p, ref b9.PartScalars, problems); break;
+                        case "b9_new_part_switches": ReadBool(p, ref b9.NewPartSwitches, problems); break;
                         case "mm_plugin_folders": mm.PluginFolders = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.PluginFolders; break;
                         case "mm_needs_keep": mm.NeedsKeep = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.NeedsKeep; break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
@@ -273,7 +304,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9);
             }
             catch (Exception e)
             {

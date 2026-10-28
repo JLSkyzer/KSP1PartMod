@@ -6,6 +6,7 @@ using NUnit.Framework;
 
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.ReduxMu")]
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.ModuleManager")]
+[assembly: InternalsVisibleTo("KSP1PartMod.Tests.B9")]
 
 namespace KSP1PartMod.Tests.Animation
 {
