@@ -187,6 +187,32 @@ namespace KSP1PartMod.Animation.Settings
         /// per kW).</summary>
         public bool RadiatorKsp1Rates => _radiators.Ksp1Rates;
 
+        /// <summary>KSP1 <c>ModuleWheelBase</c> + <c>ModuleWheelSuspension</c> become KSP2's <c>Module_WheelBase</c> +
+        /// <c>Module_WheelSuspension</c> (<c>ksp1_wheels</c>, default true; false: Redux drops every wheel module, and the other
+        /// wheel keys do nothing).</summary>
+        public bool Ksp1Wheels => _wheels.Wheels;
+        /// <summary><c>ModuleWheelSteering</c> → <c>Module_WheelSteering</c> (<c>wheel_steering</c>, default true).</summary>
+        public bool WheelSteering => _wheels.Steering;
+        /// <summary><c>ModuleWheelMotor</c> → <c>Module_WheelMotor</c> and <c>ModuleWheelMotorSteering</c> →
+        /// <c>Module_WheelMotorSteering</c>, with the KSP1 EC rate (<c>wheel_motors</c>, default true).</summary>
+        public bool WheelMotors => _wheels.Motors;
+        /// <summary><c>ModuleWheelBrakes</c> → <c>Module_WheelBrakes</c> (<c>wheel_brakes</c>, default true).</summary>
+        public bool WheelBrakes => _wheels.Brakes;
+        /// <summary><c>ModuleWheelLock</c> → <c>Module_WheelLock</c>, the resting grip of landing legs (<c>wheel_leg_locks</c>,
+        /// default true).</summary>
+        public bool WheelLegLocks => _wheels.LegLocks;
+        /// <summary><c>ModuleWheelDamage</c> → <c>Module_WheelDamage</c> (<c>wheel_damage</c>, default true; false: KSP1 wheels
+        /// never break).</summary>
+        public bool WheelDamage => _wheels.Damage;
+        /// <summary><c>ModuleWheelBogey</c> → <c>Module_WheelBogey</c> (<c>wheel_bogeys</c>, default true).</summary>
+        public bool WheelBogeys => _wheels.Bogeys;
+        /// <summary>KSP1's <c>frictionPeak</c>/<c>frictionLimit</c>, and manual friction where KSP1 had no auto friction
+        /// (<c>wheel_ksp1_friction</c>, default true; false: KSP2's 1.45/1.1 and auto friction).</summary>
+        public bool WheelKsp1Friction => _wheels.Ksp1Friction;
+        /// <summary><c>TsubSys</c> and <c>useStandInCollider</c> of <c>ModuleWheelDeployment</c> (<c>wheel_ksp1_deploy_timing</c>,
+        /// default true; false: KSP2's 0.98/0.02, no stand-in collider).</summary>
+        public bool WheelKsp1DeployTiming => _wheels.Ksp1DeployTiming;
+
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
         /// <summary>A KSP1 <c>EXPERIMENT_DEFINITION</c> becomes a KSP2 definition <c>KSP1_&lt;id&gt;</c>
@@ -238,6 +264,15 @@ namespace KSP1PartMod.Animation.Settings
         }
 
         private readonly SwitchesRadiators _radiators;
+
+        /// <summary>The wheel keys of 0.14.0, read together.</summary>
+        private sealed class SwitchesWheels
+        {
+            public bool Wheels = true, Steering = true, Motors = true, Brakes = true, LegLocks = true, Damage = true, Bogeys = true;
+            public bool Ksp1Friction = true, Ksp1DeployTiming = true;
+        }
+
+        private readonly SwitchesWheels _wheels;
 
         /// <summary>The science keys of 0.12.0, read together. Each object has its own tables.</summary>
         private sealed class SwitchesScience
@@ -332,13 +367,15 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf(), new SwitchesWheels());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
-            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators, SwitchesScience science, SwitchesPerf perf)
+            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators, SwitchesScience science, SwitchesPerf perf,
+            SwitchesWheels wheels)
         {
+            _wheels = wheels;
             _perf = perf;
             _science = science;
             _radiators = radiators;
@@ -390,6 +427,7 @@ namespace KSP1PartMod.Animation.Settings
                 var radiators = new SwitchesRadiators();
                 var science = new SwitchesScience();
                 var perf = new SwitchesPerf();
+                var wheels = new SwitchesWheels();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -456,6 +494,15 @@ namespace KSP1PartMod.Animation.Settings
                         case "radiator_auto_on": ReadBool(p, ref radiators.AutoOn, problems); break;
                         case "radiator_flux_scale": ReadClampedDouble(p, 0.01, 100, ref radiators.FluxScale, problems); break;
                         case "radiator_ksp1_rates": ReadBool(p, ref radiators.Ksp1Rates, problems); break;
+                        case "ksp1_wheels": ReadBool(p, ref wheels.Wheels, problems); break;
+                        case "wheel_steering": ReadBool(p, ref wheels.Steering, problems); break;
+                        case "wheel_motors": ReadBool(p, ref wheels.Motors, problems); break;
+                        case "wheel_brakes": ReadBool(p, ref wheels.Brakes, problems); break;
+                        case "wheel_leg_locks": ReadBool(p, ref wheels.LegLocks, problems); break;
+                        case "wheel_damage": ReadBool(p, ref wheels.Damage, problems); break;
+                        case "wheel_bogeys": ReadBool(p, ref wheels.Bogeys, problems); break;
+                        case "wheel_ksp1_friction": ReadBool(p, ref wheels.Ksp1Friction, problems); break;
+                        case "wheel_ksp1_deploy_timing": ReadBool(p, ref wheels.Ksp1DeployTiming, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;
@@ -477,7 +524,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf, wheels);
             }
             catch (Exception e)
             {

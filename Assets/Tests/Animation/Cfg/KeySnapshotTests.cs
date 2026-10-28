@@ -310,6 +310,69 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             }
         }
 
+        /// <summary>0.14.0: the wheel rules read the cfg and plan nothing, and the gear bridge's stand-down is decided at bind time.
+        /// The keys of the 36 installed wheel parts are in both snapshots, and every key (2b kinds, shrouds and ablator chars
+        /// included) is the same with the nine wheel switches on and off, after the wheel mapping has run under each setting,
+        /// with or without the nine native wheel modules in the planner's native set.</summary>
+        [Test] public void Plan_WheelParts_KeysUnchanged_WithTheWheelSwitchesOnAndOff()
+        {
+            var snapshot032 = new HashSet<string>(Snapshot(), StringComparer.Ordinal);
+            var snapshot040 = new HashSet<string>(Snapshot(Snapshot040Name), StringComparer.Ordinal);
+            var kinds = Enum.GetValues(typeof(KSP1PartMod.Native.Wheels.WheelKind)).Cast<KSP1PartMod.Native.Wheels.WheelKind>().ToList();
+            var natives = new HashSet<string>(kinds.Select(KSP1PartMod.Native.Wheels.WheelMapping.NativeModule), StringComparer.Ordinal);
+            var keys = new[]
+            {
+                "ksp1_wheels", "wheel_steering", "wheel_motors", "wheel_brakes", "wheel_leg_locks", "wheel_damage", "wheel_bogeys",
+                "wheel_ksp1_friction", "wheel_ksp1_deploy_timing",
+            };
+            var switches = new[] { "{}", "{" + string.Join(", ", keys.Select(k => $"\"{k}\": false")) + "}" }
+                .Concat(keys.Select(k => $"{{\"{k}\": false}}")).ToList();
+            var table = new KSP1PartMod.Native.IsruResources(null, null, null, null);
+            var wheelParts = RealParts().Where(p => p.Modules.Any(m =>
+                KSP1PartMod.Native.Wheels.WheelMapping.TryKind(m.GetValue("name"), out _))).ToList();
+            Assert.AreEqual(36, wheelParts.Count, "plan (d): 36 installed wheel parts");
+            foreach (var (name, modules) in wheelParts)
+            {
+                var line = Hex(name, 12) + " " + Hex(KeysOf(modules, Last032Kind), 16);
+                Assert.IsTrue(snapshot032.Contains(line), name + ": 0.3.2 snapshot");
+                Assert.IsTrue(snapshot040.Contains(line), name + ": 0.4.0 snapshot");
+                var every = new List<string>();
+                foreach (var shrouds in new[] { false, true })
+                foreach (var ablatorChar in new[] { false, true })
+                    every.Add(KeysOf(modules, (EntryKind)int.MaxValue, null, shrouds, ablatorChar));
+                var deployment = modules.FirstOrDefault(m => "ModuleWheelDeployment".Equals(m.GetValue("name")?.Trim(), StringComparison.OrdinalIgnoreCase));
+                foreach (var json in switches)
+                {
+                    var s = KSP1PartMod.Animation.Settings.AnimationSettings.Parse(json, out var error);
+                    Assert.IsNull(error, json);
+                    foreach (var m in modules)
+                    {
+                        if (!KSP1PartMod.Native.Wheels.WheelMapping.TryKind(m.GetValue("name"), out var kind)) continue;
+                        switch (kind)
+                        {
+                            case KSP1PartMod.Native.Wheels.WheelKind.Base:
+                                KSP1PartMod.Native.Wheels.WheelMapping.Base(m, deployment, s.WheelKsp1Friction, s.WheelKsp1DeployTiming); break;
+                            case KSP1PartMod.Native.Wheels.WheelKind.Motor: KSP1PartMod.Native.Wheels.WheelMapping.Motor(m, table); break;
+                            case KSP1PartMod.Native.Wheels.WheelKind.MotorSteering: KSP1PartMod.Native.Wheels.WheelMapping.MotorSteering(m, table); break;
+                            case KSP1PartMod.Native.Wheels.WheelKind.Suspension: KSP1PartMod.Native.Wheels.WheelMapping.Suspension(m); break;
+                            case KSP1PartMod.Native.Wheels.WheelKind.Steering: KSP1PartMod.Native.Wheels.WheelMapping.Steering(m); break;
+                            case KSP1PartMod.Native.Wheels.WheelKind.Brakes: KSP1PartMod.Native.Wheels.WheelMapping.Brakes(m); break;
+                            case KSP1PartMod.Native.Wheels.WheelKind.Damage: KSP1PartMod.Native.Wheels.WheelMapping.Damage(m); break;
+                            case KSP1PartMod.Native.Wheels.WheelKind.Lock: KSP1PartMod.Native.Wheels.WheelMapping.Lock(m); break;
+                            default: KSP1PartMod.Native.Wheels.WheelMapping.Bogey(m); break;
+                        }
+                    }
+                    var native = s.Ksp1Wheels ? natives : null;
+                    Assert.AreEqual(line, Hex(name, 12) + " " + Hex(KeysOf(modules, Last032Kind, native), 16), $"{name}: 0.3.2 kinds after {json}");
+                    var i = 0;
+                    foreach (var shrouds in new[] { false, true })
+                    foreach (var ablatorChar in new[] { false, true })
+                        Assert.AreEqual(every[i++], KeysOf(modules, (EntryKind)int.MaxValue, native, shrouds, ablatorChar), $"{name}: every key after {json}");
+                }
+            }
+            TestContext.WriteLine($"{wheelParts.Count} wheel part(s): keys unchanged with the wheel switches on and off");
+        }
+
         /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0
         /// snapshot. 0.4.0 adds no entry kind: its kinds are those of 0.3.2.</summary>
         [Test, Explicit("writes the 0.4.0 key snapshot")]

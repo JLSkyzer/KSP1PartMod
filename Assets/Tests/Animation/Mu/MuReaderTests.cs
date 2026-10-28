@@ -167,6 +167,42 @@ namespace KSP1PartMod.Tests.Animation.Mu
             Assert.AreEqual("root children=1 entries=[7,8,10,12]\nroot/kid children=0 entries=[23,28,2] clips=[blink:1]", sig);
         }
 
+        // ---- wheel collider ----
+
+        [Test] public void Read_WheelCollider_RecordedOnItsNode_AndTheNextEntryStillReads()
+        {
+            var f = Read(MuBytes.Obj("root").Child(MuBytes.Obj("wheelCollider").WheelCollider(0.25f, 0.2f, 0f, -0.1f, 0f).BoxCollider2()));
+            var node = f.Root.Children.Single();
+            Assert.IsNull(f.Root.WheelCollider);
+            Assert.IsNotNull(node.WheelCollider);
+            Assert.AreEqual(0.25f, node.WheelCollider.Radius);
+            Assert.AreEqual(0.2f, node.WheelCollider.SuspensionDistance);
+            Assert.AreEqual((0f, -0.1f, 0f), (node.WheelCollider.CenterX, node.WheelCollider.CenterY, node.WheelCollider.CenterZ));
+            CollectionAssert.AreEqual(new[] { 29, 28 }, node.EntryTypes);
+        }
+
+        [Test] public void Read_WheelCollider_Truncated_Throws()
+        {
+            var bytes = MuBytes.File(MuBytes.Obj("root").WheelCollider(0.25f, 0.2f, 0, 0, 0)).Bytes;
+            var cut = new byte[bytes.Length - 8];
+            Array.Copy(bytes, cut, cut.Length);
+            Assert.Throws<MuFormatException>(() => MuReader.Read(new MemoryStream(cut, false)));
+        }
+
+        /// <summary>The stock rover wheel RoveMax M1: its <c>.mu</c> carries a WheelCollider on the cfg's collider host.</summary>
+        [Test] public void Read_StockRoverWheel_FindsItsColliderNode()
+        {
+            var path = Path.Combine(InstalledKsp1.Root, "Squad", "Parts", "Wheel", "roverWheelM1", "model.mu");
+            Assume.That(File.Exists(path), "stock roverWheelM1 not installed: " + path);
+            var f = MuReader.Read(path);
+            var hosts = All(f.Root).Where(n => n.WheelCollider != null).ToList();
+            TestContext.WriteLine(string.Join(", ", hosts.Select(n => $"{n.Path()} r {n.WheelCollider.Radius}")));
+            Assert.IsNotEmpty(hosts);
+            Assert.IsTrue(hosts.Any(n => n.Name == "WheelCollider"), "the cfg's wheelColliderTransformName");
+        }
+
+        private static IEnumerable<MuNode> All(MuNode n) => new[] { n }.Concat(n.Children.SelectMany(All));
+
         // ---- installed files ----
 
         private static Dictionary<string, (MuFile file, string error)> _installed;

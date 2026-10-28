@@ -45,6 +45,12 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             Assert.AreEqual((0.8f, "Lights", "color:_EmissiveColor:0"), (C.Rate, C.ActionGroup, C.Key));
         }
 
+        [Test] public void Keys_TrailingComment_KeepsFourFloats()
+        {
+            var curve = new RawNode("redCurve", new[] { RawNode.KV("key", "0 0 0 3 // ramp"), RawNode.KV("key", "1 1 0 0//end") });
+            CollectionAssert.AreEqual(new[] { 0f, 0f, 0f, 3f, 1f, 1f, 0f, 0f }, EntryParser.Keys(curve));
+        }
+
         [Test] public void Parse_Throttle_DefaultsMatchKsp1() => Assert.AreEqual((false, 8), (T.PlayInEditor, WrapOf(T)));
 
         [Test] public void Parse_Throttle_ReadsResponseAndEngine() =>

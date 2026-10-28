@@ -195,6 +195,18 @@ namespace KSP1PartMod.Tests.Animation
                 }
             });
 
+        /// <summary>A WheelCollider entry: mass 0.5, then the given radius, suspension distance and centre, then 13 floats
+        /// (spring, damper, target position, two friction curves of 5) set to 9.</summary>
+        public MuObj WheelCollider(float radius, float suspension, float cx, float cy, float cz) =>
+            Add((w, v) =>
+            {
+                w.Write(29); // WheelCollider
+                w.Write(0.5f);
+                w.Write(radius); w.Write(suspension);
+                w.Write(cx); w.Write(cy); w.Write(cz);
+                for (var i = 0; i < 13; i++) w.Write(9f);
+            });
+
         /// <summary>A raw tag with no payload, for unknown entry types.</summary>
         public MuObj Tag(int type) => Add((w, v) => w.Write(type));
 

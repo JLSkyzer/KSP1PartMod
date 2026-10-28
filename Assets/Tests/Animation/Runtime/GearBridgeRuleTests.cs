@@ -16,6 +16,13 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         public void NeedsOwnAction_UnlessReduxIsOnGear(string group, bool expected) =>
             Assert.AreEqual(expected, GearBridgeRule.NeedsOwnAction(group));
 
+        [TestCase("None", false, true)]
+        [TestCase("None", true, false)]
+        [TestCase("Gear", false, false)]
+        [TestCase("Gear", true, false)]
+        public void NeedsOwnAction_UnlessReduxOrANativeWheelBaseIsOnGear(string group, bool nativeWheelGear, bool expected) =>
+            Assert.AreEqual(expected, GearBridgeRule.NeedsOwnAction(group, nativeWheelGear));
+
         [TestCase("ModuleWheelDeployment", "animationStateName")]
         [TestCase("ModuleLandingLeg", "animationName")]
         public void Bridge_CarriesTheGearGroup(string module, string clipKey)

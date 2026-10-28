@@ -198,9 +198,17 @@ namespace KSP1PartMod.Animation.Mu
                     case MuEntryType.BoxCollider: Skip(6 * FloatSize); return; // size, center
                     case MuEntryType.BoxCollider2: Skip(1 + 6 * FloatSize); return; // is trigger, size, center
                     case MuEntryType.WheelCollider:
+                    {
                         // mass, radius, suspension distance, center (3), spring (3), forward and sideways friction (5 each)
-                        Skip(19 * FloatSize);
+                        Need(19 * FloatSize);
+                        Float(); // mass
+                        var radius = Float();
+                        var suspension = Float();
+                        var cx = Float(); var cy = Float(); var cz = Float();
+                        Skip(13 * FloatSize); // spring, damper, target position, two friction curves of 5
+                        node.WheelCollider = new MuWheelCollider(radius, suspension, cx, cy, cz);
                         return;
+                    }
                     case MuEntryType.Camera:
                         // clear flags, background color, culling mask, orthographic, fov, near, far, depth
                         Skip(IntSize + ColorSize + IntSize + 1 + 4 * FloatSize);
@@ -373,9 +381,15 @@ namespace KSP1PartMod.Animation.Mu
 
             private void SkipArray(int bytesEach) => Skip((long)Count(bytesEach) * bytesEach);
 
-            private void Skip(long bytes)
+            /// <summary>Throws as <see cref="Skip"/> does when fewer than <paramref name="bytes"/> remain.</summary>
+            private void Need(long bytes)
             {
                 if (bytes > _length - Pos) throw new MuFormatException(Pos, $"{bytes} bytes expected, file ends first");
+            }
+
+            private void Skip(long bytes)
+            {
+                Need(bytes);
                 _s.Seek(bytes, SeekOrigin.Current);
             }
         }

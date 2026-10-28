@@ -244,13 +244,17 @@ namespace KSP1PartMod.Animation.Cfg
         };
 
         /// <summary>FloatCurve keys flattened as time, value, in, out. KSP1 splits on space, comma, semicolon and
-        /// tab; a key with fewer than four numbers keeps NaN tangents; a key it cannot parse is skipped.</summary>
-        private static float[] Keys(IKsp1Node curve)
+        /// tab; a key with fewer than four numbers keeps NaN tangents; a key it cannot parse is skipped. A trailing
+        /// <c>//</c> comment is dropped first, as KSP1's config reader does.</summary>
+        internal static float[] Keys(IKsp1Node curve)
         {
             var flat = new List<float>();
-            foreach (var key in curve.GetValues("key"))
+            foreach (var raw in curve.GetValues("key"))
             {
-                var parts = (key ?? "").Split(new[] { ' ', ',', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                var key = raw ?? "";
+                var comment = key.IndexOf("//", StringComparison.Ordinal);
+                if (comment >= 0) key = key.Substring(0, comment);
+                var parts = key.Split(new[] { ' ', ',', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 2 || !TryFloat(parts[0], out var t) || !TryFloat(parts[1], out var v)) continue;
                 float tin = float.NaN, tout = float.NaN;
                 if (parts.Length == 4 && (!TryFloat(parts[2], out tin) || !TryFloat(parts[3], out tout)))

@@ -38,6 +38,8 @@ namespace KSP1PartMod.Animation.Mu
         /// <summary>The Animation component on this object, or null. If a file carries several Animation
         /// entries on one object, the last one wins (Unity would refuse the second component).</summary>
         public MuAnim Animation { get; internal set; }
+        /// <summary>The WheelCollider entry (type 29) on this object, or null; the last one wins.</summary>
+        public MuWheelCollider WheelCollider { get; internal set; }
 
         public MuNode(string name, MuNode parent)
         {
@@ -50,6 +52,26 @@ namespace KSP1PartMod.Animation.Mu
 
         /// <summary>Names from the root to this object, joined by '/' (the root's own name included).</summary>
         public string Path() => Parent == null ? Name : Parent.Path() + "/" + Name;
+    }
+
+    /// <summary>The part of a <c>.mu</c> WheelCollider entry the wheel census compares with the cfg: radius, suspension
+    /// distance and centre (the mass, spring and friction curves are read past).</summary>
+    public sealed class MuWheelCollider
+    {
+        public float Radius { get; }
+        public float SuspensionDistance { get; }
+        public float CenterX { get; }
+        public float CenterY { get; }
+        public float CenterZ { get; }
+
+        public MuWheelCollider(float radius, float suspensionDistance, float centerX, float centerY, float centerZ)
+        {
+            Radius = radius;
+            SuspensionDistance = suspensionDistance;
+            CenterX = centerX;
+            CenterY = centerY;
+            CenterZ = centerZ;
+        }
     }
 
     /// <summary>Where one tagged entry sits: <see cref="Offset"/> is the position of its 4-byte type tag,
