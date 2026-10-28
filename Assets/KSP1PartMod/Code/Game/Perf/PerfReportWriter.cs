@@ -136,6 +136,16 @@ namespace KSP1PartMod.Game.Perf
             if (census != null) Add(CensusList, census);
         }
 
+        private static string _auditFile, _auditPerfLine;
+
+        /// <summary>The audit ran this session: its <c>.md</c> (file name, in <c>&lt;mod&gt;/audit/</c>) and its
+        /// <c>audit: perf:</c> line, for the report's link. The last run wins.</summary>
+        internal static void NoteAudit(string fileName, string perfLine)
+        {
+            _auditFile = fileName;
+            _auditPerfLine = perfLine;
+        }
+
         /// <summary>A closed frame window (Task 5): the last one of each scene is kept.</summary>
         internal static void NoteFrameWindow(FrameWindowSummary window)
         {
@@ -183,6 +193,8 @@ namespace KSP1PartMod.Game.Perf
                 Started = _sessionStart.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                 ModVersion = KSP1PartModPlugin.Version,
                 MainMenuAfterSeconds = LoadTimeline.MainMenuAfterSeconds,
+                AuditFile = _auditFile,
+                AuditPerfLine = _auditPerfLine,
             };
             try
             {
@@ -209,6 +221,7 @@ namespace KSP1PartMod.Game.Perf
             SnapshotList.Clear();
             CensusList.Clear();
             FrameWindowList.Clear();
+            _auditFile = _auditPerfLine = null;
         }
     }
 }

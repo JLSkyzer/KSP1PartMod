@@ -46,6 +46,9 @@ namespace KSP1PartMod.Perf
             b.Append($"- System RAM: {(h.SystemRamMb.HasValue ? h.SystemRamMb.Value.ToString(Inv) + " MB" : PerfLines.NotAvailable)}\n");
             b.Append($"- Main menu after: {(h.MainMenuAfterSeconds.HasValue ? PerfLines.S(h.MainMenuAfterSeconds.Value) + " s" : NotMeasured("no main menu yet"))}\n");
             if (h.CampaignLoads.Count > 0) b.Append($"- Campaign loads: {string.Join("; ", h.CampaignLoads)}\n");
+            if (!string.IsNullOrEmpty(h.AuditFile))
+                b.Append($"- Audit: [{h.AuditFile}](../audit/{h.AuditFile})" +
+                         (string.IsNullOrEmpty(h.AuditPerfLine) ? "" : $" (`{h.AuditPerfLine}`)") + "\n");
             b.Append("\n| Switch | Value |\n|---|---|\n");
             Switch(b, "perf_load_timeline", s.PerfLoadTimeline);
             Switch(b, "perf_memory_lines", s.PerfMemoryLines);

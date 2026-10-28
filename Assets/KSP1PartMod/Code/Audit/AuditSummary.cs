@@ -69,6 +69,34 @@ namespace KSP1PartMod.Audit
         public int B9Parts { get; private set; }
         public int B9FailedParts { get; private set; }
 
+        /// <summary>The parts timed (every audited part but the controls), and the nearest-rank percentiles of their
+        /// <c>prefab_ms</c> and <c>finalize_ms</c> (all 0 for an empty run).</summary>
+        public int TimedParts { get; private set; }
+        public Percentiles PrefabMs { get; private set; } = new Percentiles();
+        public Percentiles FinalizeMs { get; private set; } = new Percentiles();
+
+        /// <summary>p50, p95 and max of a list of times, in ms.</summary>
+        public sealed class Percentiles
+        {
+            public double P50, P95, Max;
+
+            /// <summary>Nearest rank: the p-th percentile is the value of rank ceil(p × n) in ascending order (p95 of 20 values
+            /// is the 19th). Non-finite values are left out. Empty: all 0.</summary>
+            public static Percentiles Of(IEnumerable<double> values)
+            {
+                var sorted = (values ?? Enumerable.Empty<double>()).Where(v => !double.IsNaN(v) && !double.IsInfinity(v)).ToList();
+                sorted.Sort();
+                if (sorted.Count == 0) return new Percentiles();
+                return new Percentiles { P50 = Rank(sorted, 0.50), P95 = Rank(sorted, 0.95), Max = sorted[sorted.Count - 1] };
+            }
+
+            private static double Rank(List<double> sorted, double p)
+            {
+                var rank = (int)Math.Ceiling(p * sorted.Count);
+                return sorted[Math.Min(sorted.Count, Math.Max(1, rank)) - 1];
+            }
+        }
+
         public static AuditSummary From(IEnumerable<AuditRecord> records, double elapsedSeconds)
         {
             var all = (records ?? new AuditRecord[0]).Where(r => r != null).ToList();
@@ -120,6 +148,10 @@ namespace KSP1PartMod.Audit
             s.B9Parts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides));
             s.B9FailedParts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides) && AuditB9.IsFailed(r.B9Overrides));
 
+            s.TimedParts = parts.Count;
+            s.PrefabMs = Percentiles.Of(parts.Select(r => r.PrefabMs));
+            s.FinalizeMs = Percentiles.Of(parts.Select(r => r.FinalizeMs));
+
             s.Controls = all.Where(r => r.Control).ToList();
             s.FailedControls = s.Controls.Where(r => AuditClassifier.IsProblem(r.Kinds)).ToList();
             return s;
@@ -145,6 +177,13 @@ namespace KSP1PartMod.Audit
 
         public string SlowestLine() =>
             "audit: slowest: " + (Slowest.Count == 0 ? "none" : string.Join(", ", Slowest.Select(r => $"{r.Part} {Ms(r.TotalMs)} ms")));
+
+        /// <summary><c>audit: perf: prefab_ms p50 …, p95 …, max …; finalize_ms p50 …, p95 …, max … over &lt;n&gt; part(s)</c>
+        /// (performance plan Task 6): how long one part takes to build and to finalize, controls left out.</summary>
+        public string PerfLine() =>
+            $"audit: perf: prefab_ms {Triple(PrefabMs)}; finalize_ms {Triple(FinalizeMs)} over {TimedParts} part(s)";
+
+        private static string Triple(Percentiles p) => $"p50 {Ms(p.P50)}, p95 {Ms(p.P95)}, max {Ms(p.Max)}";
 
         public string PodsLine() =>
             $"audit: pods: {PodsWithCommand} command part(s) with crew, {PodsWithEngine.Count} with an engine" +
@@ -228,6 +267,11 @@ namespace KSP1PartMod.Audit
 
             sb.Append("\n## Slowest parts\n\n| Part | ms |\n|---|---|\n");
             foreach (var r in Slowest) sb.Append($"| {Cell(r.Part)} | {Ms(r.TotalMs)} |\n");
+
+            sb.Append($"\n## Timings\n\nOver {TimedParts} part(s), controls left out (nearest-rank percentiles).\n\n");
+            sb.Append("| Step | p50 ms | p95 ms | max ms |\n|---|---|---|---|\n");
+            sb.Append($"| prefab_ms | {Ms(PrefabMs.P50)} | {Ms(PrefabMs.P95)} | {Ms(PrefabMs.Max)} |\n");
+            sb.Append($"| finalize_ms | {Ms(FinalizeMs.P50)} | {Ms(FinalizeMs.P95)} | {Ms(FinalizeMs.Max)} |\n");
 
             sb.Append("\n## Pods\n\n");
             sb.Append($"- command parts with crew: {PodsWithCommand}\n");

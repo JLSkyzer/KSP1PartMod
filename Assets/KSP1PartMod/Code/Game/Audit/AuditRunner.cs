@@ -14,6 +14,7 @@ using KSP.OAB;
 using KSP.Sim.Definitions;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Audit;
+using KSP1PartMod.Game.Perf;
 using Redux.Ksp1Import.Assets;
 using UnityEngine;
 
@@ -346,6 +347,7 @@ namespace KSP1PartMod.Game.Audit
             log.LogInfo(summary.ShroudsLine());
             log.LogInfo(summary.NativeLine());
             log.LogInfo(summary.B9Line());
+            log.LogInfo(summary.PerfLine());
             WriteMarkdown(summary);
             run.Close();
             _run = null;
@@ -652,7 +654,12 @@ namespace KSP1PartMod.Game.Audit
             if (_stamp == null) return;
             try
             {
-                File.WriteAllText(Path.Combine(Dir, $"audit-{_stamp}.md"), summary.Markdown(_stamp, SkipNotePath(), MmPatches.LastSummary, B9Overrides.LastSummary), new UTF8Encoding(false));
+                var path = Path.Combine(Dir, $"audit-{_stamp}.md");
+                File.WriteAllText(path, summary.Markdown(_stamp, SkipNotePath(), MmPatches.LastSummary, B9Overrides.LastSummary), new UTF8Encoding(false));
+                // The perf report links this run (perf_report_file), rewritten now so that the link is there even if the
+                // session ends before the next memory moment.
+                PerfReportWriter.NoteAudit(Path.GetFileName(path), summary.PerfLine());
+                PerfReportWriter.Write("audit end");
             }
             catch (Exception e)
             {

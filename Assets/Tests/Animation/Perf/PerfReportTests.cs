@@ -41,6 +41,19 @@ namespace KSP1PartMod.Tests.Animation.Perf
                 AnimationSettings.Parse("{\"perf_counter\": true}", out _));
         }
 
+        [Test] public void AuditLink_OnlyWhenTheAuditRan()
+        {
+            StringAssert.DoesNotContain("- Audit:", Full(), "no audit this session");
+            var header = new PerfSessionHeader
+            {
+                AuditFile = "audit-20261028-210000.md",
+                AuditPerfLine = "audit: perf: prefab_ms p50 10, p95 19, max 20; finalize_ms p50 100, p95 190, max 200 over 20 part(s)",
+            };
+            var md = PerfReport.Build(header, null, null, null, null, null, null, null, null);
+            StringAssert.Contains("- Audit: [audit-20261028-210000.md](../audit/audit-20261028-210000.md) (`audit: perf: prefab_ms p50 10, " +
+                                  "p95 19, max 20; finalize_ms p50 100, p95 190, max 200 over 20 part(s)`)\n", md);
+        }
+
         [Test] public void FullReport_EverySection()
         {
             var md = Full();

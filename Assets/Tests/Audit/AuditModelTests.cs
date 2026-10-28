@@ -719,5 +719,53 @@ namespace KSP1PartMod.Tests.Audit
             Assert.AreEqual("audit: shrouds: 0 part(s) with a KSP1 shroud kept, 0 with a shroud transform missing, 0 without the node, " +
                             "0 still carrying Redux's Module_Fairing", AuditSummary.From(new AuditRecord[0], 0).ShroudsLine());
         }
+
+        // ---- Perf percentiles (performance plan Task 6) ----
+
+        [Test] public void Percentiles_NearestRank()
+        {
+            var twenty = AuditSummary.Percentiles.Of(Enumerable.Range(1, 20).Select(i => (double)i).Reverse());
+            Assert.AreEqual(10, twenty.P50, "rank ceil(0.5 × 20) = 10");
+            Assert.AreEqual(19, twenty.P95, "rank ceil(0.95 × 20) = 19");
+            Assert.AreEqual(20, twenty.Max);
+
+            var one = AuditSummary.Percentiles.Of(new[] { 7.5 });
+            Assert.AreEqual(7.5, one.P50);
+            Assert.AreEqual(7.5, one.P95);
+            Assert.AreEqual(7.5, one.Max);
+
+            var hundredOne = AuditSummary.Percentiles.Of(Enumerable.Range(0, 101).Select(i => (double)i));
+            Assert.AreEqual(50, hundredOne.P50, "rank 51 of 101");
+            Assert.AreEqual(95, hundredOne.P95, "rank 96 of 101");
+
+            var odd = AuditSummary.Percentiles.Of(new[] { 3.0, double.NaN, 1.0, double.PositiveInfinity, 2.0 });
+            Assert.AreEqual(2, odd.P50, "non-finite values left out");
+            Assert.AreEqual(3, odd.Max);
+        }
+
+        [Test] public void PerfLine_ControlsLeftOut()
+        {
+            var records = Enumerable.Range(1, 20).Select(i => Rec("p" + i, "BDB", AuditKind.None, i, 10 * i)).ToList();
+            var control = Rec("Control_a", "KSP2", AuditKind.None, 1000, 1000);
+            control.Control = true;
+            records.Add(control);
+            var s = AuditSummary.From(records, 1);
+            Assert.AreEqual(20, s.TimedParts);
+            Assert.AreEqual("audit: perf: prefab_ms p50 10, p95 19, max 20; finalize_ms p50 100, p95 190, max 200 over 20 part(s)",
+                s.PerfLine());
+            var md = s.Markdown("20261028-200000");
+            StringAssert.Contains("## Timings\n\nOver 20 part(s), controls left out (nearest-rank percentiles).\n\n" +
+                                  "| Step | p50 ms | p95 ms | max ms |\n|---|---|---|---|\n" +
+                                  "| prefab_ms | 10 | 19 | 20 |\n| finalize_ms | 100 | 190 | 200 |\n", md);
+        }
+
+        [Test] public void PerfLine_EmptyRun()
+        {
+            var s = AuditSummary.From(new AuditRecord[0], 0);
+            Assert.AreEqual("audit: perf: prefab_ms p50 0, p95 0, max 0; finalize_ms p50 0, p95 0, max 0 over 0 part(s)", s.PerfLine());
+            StringAssert.Contains("| prefab_ms | 0 | 0 | 0 |", s.Markdown("x"));
+            Assert.AreEqual("audit: perf: prefab_ms p50 0, p95 0, max 0; finalize_ms p50 0, p95 0, max 0 over 0 part(s)",
+                AuditSummary.From(null, 0).PerfLine());
+        }
     }
 }

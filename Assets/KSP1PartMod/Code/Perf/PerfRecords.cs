@@ -32,6 +32,10 @@ namespace KSP1PartMod.Perf
         public double? MainMenuAfterSeconds;
         /// <summary>The campaign loads of the session ("&lt;s&gt; s to &lt;state&gt;").</summary>
         public readonly List<string> CampaignLoads = new List<string>();
+        /// <summary>The audit's report of this session (a file name in <c>&lt;mod&gt;/audit/</c>), null when it did not run.</summary>
+        public string AuditFile;
+        /// <summary>The audit's <c>audit: perf:</c> line.</summary>
+        public string AuditPerfLine;
     }
 
     /// <summary>One KSP1 import, from the <see cref="PhaseClock"/> at its end (or a cached reload: <see cref="Reused"/>).</summary>
