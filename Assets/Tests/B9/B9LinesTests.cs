@@ -80,6 +80,10 @@ namespace KSP1PartMod.Tests.B9
         {
             Assert.AreEqual("audit: B9 overrides: 7 part(s) with overrides, 0 part(s) where the default variant failed to apply",
                 B9Lines.AuditSummary(7, 0));
+            Assert.AreEqual(P + "p: appended set 'a' not found when planning the animation gates again, the gates of the part's appended sets stay at their default subtype",
+                B9Lines.GatesKeptDefault("p", "a"));
+            Assert.AreEqual(P + "p: ModuleGimbal off in Vac: not imported natively (not the part's first gimbal, the only one Redux imports), no off form, left on",
+                B9Lines.ModuleOffNotImported("p", "ModuleGimbal", "Vac", "not the part's first gimbal, the only one Redux imports"));
         }
 
         [Test] public void Lines_Numbers_Invariant()

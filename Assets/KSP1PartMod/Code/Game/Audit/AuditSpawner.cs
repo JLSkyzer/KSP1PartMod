@@ -9,11 +9,14 @@ using KSP.OAB;
 using KSP.Sim;
 using KSP.Sim.Definitions;
 using KSP.Sim.impl;
+using KSP.Sim.ResourceSystem;
 using KSP.VFX.Reentry;
 using KSP1PartMod.Audit;
 using Redux.Ksp1Import.Assets;
 using Redux.VFX.ReentryMeshGeneration;
 using UnityEngine;
+using VSwift.Modules.Data;
+using VSwift.Modules.Transformers;
 using Object = UnityEngine.Object;
 
 namespace KSP1PartMod.Game.Audit
@@ -128,6 +131,7 @@ namespace KSP1PartMod.Game.Audit
             string key = null;
             Ksp1ImportedPartRegistry.Entry source = entry;
             ObjectAssemblyPart part = null;
+            List<string> present = null;
             var clock = Stopwatch.StartNew();
             capture.Attach();
             AuditProbe.Begin();
@@ -206,7 +210,7 @@ namespace KSP1PartMod.Game.Audit
                     }
                     rec.FinalizeMs = clock.Elapsed.TotalMilliseconds;
                     obs.IsFinalized = part != null && part.IsFinalized;
-                    Inspect(part, root, rec, obs);
+                    present = Inspect(part, root, rec, obs);
                 }
                 if (root == null) SanityFromDefinition(core, rec);
             }
@@ -229,6 +233,17 @@ namespace KSP1PartMod.Game.Audit
             }
 
             if (error != null) Describe(error, rec, obs);
+            if (!isControl)
+            {
+                try
+                {
+                    rec.B9Overrides = B9Items(core, rec, present);
+                }
+                catch (Exception)
+                {
+                    // read-only bookkeeping: never fails the audit of a part
+                }
+            }
             obs.ImportWarnings = capture.ImportWarnings;
             obs.ImportErrors = capture.ImportErrors;
             obs.LoggedErrors = capture.LoggedErrors;
@@ -255,9 +270,11 @@ namespace KSP1PartMod.Game.Audit
 
         // ---- inspection ----
 
-        private static void Inspect(ObjectAssemblyPart part, GameObject root, AuditRecord rec, AuditObservations obs)
+        /// <summary>Inspects the spawned part; returns the type names of its part modules (empty when it has none), or null
+        /// when nothing was spawned.</summary>
+        private static List<string> Inspect(ObjectAssemblyPart part, GameObject root, AuditRecord rec, AuditObservations obs)
         {
-            if (root == null) return;
+            if (root == null) return null;
             Transform placeholder = null;
             foreach (Transform child in root.transform)
                 if (child.name == Placeholder) placeholder = child;
@@ -296,22 +313,82 @@ namespace KSP1PartMod.Game.Audit
             rec.Engines = root.GetComponentsInChildren<Module_Engine>(true).Length;
             rec.ReduxFairing = root.GetComponentInChildren<Module_Fairing>(true) != null;
 
+            var present = new List<string>();
             try
             {
+                if (modules != null)
+                    for (int i = 0; i < modules.Count; i++)
+                        if (modules.At(i) != null) present.Add(modules.At(i).GetType().Name);
                 var converted = NativeModules.Record.ConvertedModules(rec.Part);
-                if (converted.Count > 0)
-                {
-                    var present = new List<string>();
-                    if (modules != null)
-                        for (int i = 0; i < modules.Count; i++)
-                            if (modules.At(i) != null) present.Add(modules.At(i).GetType().Name);
-                    rec.NativeModules = AuditNative.Tag(converted, present, uninitialized);
-                }
+                if (converted.Count > 0) rec.NativeModules = AuditNative.Tag(converted, present, uninitialized);
             }
             catch (Exception)
             {
                 // read-only bookkeeping: never fails the audit of a part
             }
+            return present;
+        }
+
+        /// <summary>The <c>b9_overrides</c> items (B9 overrides, 0.9.0; <see cref="AuditB9"/>): read only, from the part
+        /// definition's <c>Data_PartSwitch</c> (the variants the VAB applies by default) and from the import's tallies.
+        /// Called after the exception is described, so a failing module is known.</summary>
+        /// <param name="present">The spawned part's module type names, or null when nothing was spawned.</param>
+        private static IReadOnlyList<string> B9Items(PartCore core, AuditRecord rec, List<string> present)
+        {
+            Data_PartSwitch data = null;
+            if (core?.modules != null) data = core.modules.OfType<Data_PartSwitch>().FirstOrDefault();
+            if (data == null && core?.data?.serializedPartModules != null)
+                data = core.data.serializedPartModules.Where(m => m.ModuleData != null).SelectMany(m => m.ModuleData)
+                    .Select(d => d.DataObject).OfType<Data_PartSwitch>().FirstOrDefault();
+
+            var sets = new List<string>();
+            var edited = new List<string>();
+            if (data?.VariantSets != null)
+                for (var i = 0; i < data.VariantSets.Count; i++)
+                {
+                    var set = data.VariantSets[i];
+                    if (set?.Variants == null || !set.Variants.Any(v => v?.Transformers != null && v.Transformers.Any(IsB9Override))) continue;
+                    var active = data.ActiveVariants != null && i < data.ActiveVariants.Count ? data.ActiveVariants[i] : null;
+                    if (active == null && data.DefaultActiveVariants != null && i < data.DefaultActiveVariants.Count)
+                        active = data.DefaultActiveVariants[i];
+                    var variant = set.Variants.FirstOrDefault(v => v != null && string.Equals(v.VariantId, active, StringComparison.Ordinal));
+                    sets.Add(AuditB9.Set(set.VariantSetId, active, B9Kinds(variant?.Transformers, edited)));
+                }
+
+            var tally = B9Overrides.TallyOf(rec.Part);
+            var moduleTally = B9Overrides.ModuleTallyOf(rec.Part);
+            var notes = B9Overrides.NoteCountOf(rec.Part);
+            var counts = tally == null && moduleTally == null && notes == 0
+                ? null
+                : AuditB9.Counts(tally?.MassVariants ?? 0, tally?.ResourceVariants ?? 0, tally?.ScalarVariants ?? 0,
+                    moduleTally?.Transformers ?? 0, moduleTally?.OffForms ?? 0, notes);
+            var failure = AuditB9.Failure(sets.Count > 0, present != null, present, rec.UninitializedModules, rec.FailingModule, edited);
+            return AuditB9.Items(sets, counts, failure);
+        }
+
+        /// <summary>A transformer the B9 overrides add (Redux's KSP1 import builds none of these types).</summary>
+        private static bool IsB9Override(ITransformer t) =>
+            t is MassModifier || t is ResourceContainerRemover || t is ResourceContainerAdder || t is PartScalarTransformer
+            || t is ModuleDefinitionTransformer;
+
+        /// <summary>The kinds of a variant's B9 override transformers; the behaviours its module transformers edit are
+        /// added to <paramref name="edited"/>.</summary>
+        private static List<string> B9Kinds(List<ITransformer> transformers, List<string> edited)
+        {
+            var kinds = new List<string>();
+            if (transformers == null) return kinds;
+            var mass = transformers.OfType<MassModifier>().ToList();
+            if (mass.Count > 0) kinds.Add(AuditB9.Mass(mass.Sum(m => (double)m.Modifier)));
+            var adders = transformers.OfType<ResourceContainerAdder>().ToList();
+            if (adders.Count > 0) kinds.Add(AuditB9.Resources(adders.SelectMany(a => a.Containers ?? new List<ContainedResourceDefinition>()).Select(c => c?.name)));
+            else if (transformers.OfType<ResourceContainerRemover>().Any()) kinds.Add(AuditB9.Resources(null));
+            foreach (var s in transformers.OfType<PartScalarTransformer>()) kinds.Add(AuditB9.Scalar(s.Key));
+            foreach (var m in transformers.OfType<ModuleDefinitionTransformer>())
+            {
+                kinds.Add(AuditB9.Module(m.BehaviourType, m.Key));
+                if (!string.IsNullOrEmpty(m.BehaviourType) && !edited.Contains(m.BehaviourType)) edited.Add(m.BehaviourType);
+            }
+            return kinds;
         }
 
         /// <summary>Command and engines from the part's definition, when no model could be spawned.</summary>

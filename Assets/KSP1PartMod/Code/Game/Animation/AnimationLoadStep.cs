@@ -137,6 +137,23 @@ namespace KSP1PartMod.Game.Animation
             return planned;
         }
 
+        /// <summary>The B9 overrides' <c>appendSet</c> test for the part's gates (<see cref="B9Overrides.GateAppendSet"/>), or
+        /// null: gates off, no appended set, or any error (logged; the gates then stay at their default subtype, as in
+        /// 0.8.0).</summary>
+        private static Func<VariantSwitch, bool> GateAppendSet(string part, IReadOnlyList<IKsp1Node> modules)
+        {
+            if (!KSP1PartModPlugin.Animations.B9ModuleGates) return null;
+            try
+            {
+                return B9Overrides.GateAppendSet(part, modules);
+            }
+            catch (Exception e)
+            {
+                KSP1PartModPlugin.Log.LogError($"[KSP1PartMod] anim: {part} B9 appended sets not followed by the gates: {e}");
+                return null;
+            }
+        }
+
         /// <summary>Keeps <c>PartJson</c> equal to the edited core, which the simulation merges from.</summary>
         private static void RewriteJson(Dictionary<string, string> partJson, Ksp1ImportedPartRegistry.Entry entry)
         {
@@ -163,7 +180,8 @@ namespace KSP1PartMod.Game.Animation
 
             var behaviours = new HashSet<string>(modules.Where(m => m.BehaviourType != null).Select(m => m.BehaviourType.Name),
                 StringComparer.Ordinal);
-            var plan = OwnershipPlanner.Plan(Ksp1NodeAdapter.Modules(entry.PartNode), behaviours.Contains("Module_SolarPanel"),
+            var partModules = Ksp1NodeAdapter.Modules(entry.PartNode);
+            var plan = OwnershipPlanner.Plan(partModules, behaviours.Contains("Module_SolarPanel"),
                 behaviours, ownFirstDeployable, followRedux, skipModules, KSP1PartModPlugin.Animations.PluginModules,
                 KSP1PartModPlugin.Animations.B9ModuleGates,
                 // Shroud entries only when the import kept the meshes: otherwise Redux destroyed them.
@@ -171,7 +189,9 @@ namespace KSP1PartMod.Game.Animation
                 // The char follows the ablator only when our heat shield importer is armed (ksp1_heatshields).
                 ablatorChar: KSP1PartModPlugin.Animations.AblatorChar && NativeModules.IsConverterArmed(KSP1PartMod.Native.AblatorMapping.Ksp1Module),
                 // A char never takes a slot another entry writes (the KV pods' lights), compared through this map.
-                shaderPropertyMap: KSP1PartModPlugin.Animations.ShaderPropertyMap);
+                shaderPropertyMap: KSP1PartModPlugin.Animations.ShaderPropertyMap,
+                // B9 overrides (0.9.0): the gates of a switch Redux made no set of follow the set this import appended.
+                b9AppendSet: GateAppendSet(entry.PartName, partModules));
             action = ModuleInjection.Decide(modules.Select(m => m.Name).ToList(), plan, ModuleName);
             // From here on the caller rewrites PartJson, even if an edit below throws. Notes once per session: on
             // the first load (Add), not on each reload that refreshes the same core.

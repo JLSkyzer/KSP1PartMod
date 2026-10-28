@@ -8,8 +8,10 @@ namespace KSP1PartMod.Animation.Cfg
     /// with the entry.</summary>
     public sealed class B9Gate
     {
-        /// <summary>Redux's V-SwiFT set id (<c>Data_PartSwitch.VariantSets[i].VariantSetId</c>), or null when Redux
-        /// makes no set of this switch (no visual data): the gate then stays at <see cref="DefaultSubtype"/>.</summary>
+        /// <summary>The V-SwiFT set id (<c>Data_PartSwitch.VariantSets[i].VariantSetId</c>): Redux's, else the id of the set
+        /// KSP1PartMod appends for this switch (B9 overrides, 0.9.0, <see cref="VariantSwitch.OverrideSetId"/>), else null
+        /// (no set): the gate then stays at <see cref="DefaultSubtype"/>. A set the part does not have at runtime also keeps
+        /// the default.</summary>
         public string SetId;
         /// <summary>The variant ids in which the module is inactive.</summary>
         public string[] InactiveIn;
@@ -32,8 +34,12 @@ namespace KSP1PartMod.Animation.Cfg
         /// second call gives the same result) and returns one note per override left alone for a reason worth logging.
         /// Overrides on modules that are neither ours nor Redux's are skipped silently.</summary>
         /// <param name="reduxOwnedModuleIndices">MODULE indices whose animation stays with Redux: not gated.</param>
+        /// <param name="appendSet">The <c>appendSet</c> test of <see cref="VariantSwitches.All"/> (B9 overrides, 0.9.0): the
+        /// switches without a Redux set that get an appended set. Their gates follow that set
+        /// (<see cref="VariantSwitch.OverrideSetId"/>). Null: no appended set, every such gate stays at its default
+        /// subtype (0.8.0). It only fills set ids: which entries are gated, and in which subtypes, does not change.</param>
         public static IReadOnlyList<string> Apply(IReadOnlyList<IKsp1Node> modules, IReadOnlyList<AnimEntryDef> entries,
-            ISet<int> reduxOwnedModuleIndices)
+            ISet<int> reduxOwnedModuleIndices, Func<VariantSwitch, bool> appendSet = null)
         {
             var notes = new List<string>();
             if (modules == null || entries == null || entries.Count == 0) return notes;
@@ -41,10 +47,11 @@ namespace KSP1PartMod.Animation.Cfg
             var ours = new HashSet<int>(entries.Where(e => e != null).Select(e => e.ModuleIndex));
             foreach (var e in entries)
                 if (e != null) e.Gates = null;
-            var switches = Switches(modules);
+            var switches = Switches(modules, appendSet);
             foreach (var sw in switches)
             {
-                var label = sw.SetId ?? sw.RawId;
+                var setId = sw.SetId ?? sw.OverrideSetId;
+                var label = setId ?? sw.RawId;
                 // module index -> variant ids in which it is inactive (in subtype order)
                 var inactive = new Dictionary<int, List<string>>();
                 for (var s = 0; s < sw.Subtypes.Count; s++)
@@ -90,7 +97,7 @@ namespace KSP1PartMod.Animation.Cfg
                     {
                         var gate = new B9Gate
                         {
-                            SetId = sw.SetId, InactiveIn = pair.Value.ToArray(), DefaultSubtype = sw.DefaultSubtype,
+                            SetId = setId, InactiveIn = pair.Value.ToArray(), DefaultSubtype = sw.DefaultSubtype,
                             SubtypeIds = sw.VariantIds.ToArray(),
                         };
                         e.Gates = e.Gates == null ? new[] { gate } : e.Gates.Concat(new[] { gate }).ToArray();
@@ -165,8 +172,8 @@ namespace KSP1PartMod.Animation.Cfg
 
         /// <summary>The ModuleB9PartSwitch half of <see cref="VariantSwitches.All"/> (B9 sets are listed first, so their ids
         /// and positions do not depend on the stock modules).</summary>
-        private static List<VariantSwitch> Switches(IReadOnlyList<IKsp1Node> modules) =>
-            VariantSwitches.All(modules).Where(s => !s.IsStock).ToList();
+        private static List<VariantSwitch> Switches(IReadOnlyList<IKsp1Node> modules, Func<VariantSwitch, bool> appendSet = null) =>
+            VariantSwitches.All(modules, appendSet).Where(s => !s.IsStock).ToList();
 
         // ---- helpers ----
 

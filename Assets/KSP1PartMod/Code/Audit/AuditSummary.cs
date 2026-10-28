@@ -57,6 +57,9 @@ namespace KSP1PartMod.Audit
         public int NativeHeatshields { get; private set; }
         public int NativeCrossfeeds { get; private set; }
         public int NativeFailedParts { get; private set; }
+        /// <summary>B9 overrides (0.9.0): parts with an override set, and parts where the default variant did not apply.</summary>
+        public int B9Parts { get; private set; }
+        public int B9FailedParts { get; private set; }
 
         public static AuditSummary From(IEnumerable<AuditRecord> records, double elapsedSeconds)
         {
@@ -101,6 +104,8 @@ namespace KSP1PartMod.Audit
             s.NativeHeatshields = parts.Count(r => HasNative(r, AuditNative.Heatshield));
             s.NativeCrossfeeds = parts.Count(r => HasNative(r, AuditNative.Crossfeed));
             s.NativeFailedParts = parts.Count(r => r.NativeModules != null && r.NativeModules.Any(AuditNative.IsFailed));
+            s.B9Parts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides));
+            s.B9FailedParts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides) && AuditB9.IsFailed(r.B9Overrides));
 
             s.Controls = all.Where(r => r.Control).ToList();
             s.FailedControls = s.Controls.Where(r => AuditClassifier.IsProblem(r.Kinds)).ToList();
@@ -138,6 +143,8 @@ namespace KSP1PartMod.Audit
         public string NativeLine() =>
             $"audit: native modules: {NativeHeatshields} heat shield(s), {NativeCrossfeeds} crossfeed toggle(s), {NativeFailedParts} part(s) where one failed to initialize";
 
+        public string B9Line() => B9.B9Lines.AuditSummary(B9Parts, B9FailedParts);
+
         /// <summary>One line per part with a kind other than <see cref="AuditKind.ImportWarning"/>.</summary>
         public static string PartLine(AuditRecord r)
         {
@@ -170,7 +177,9 @@ namespace KSP1PartMod.Audit
 
         // ---- Markdown ----
 
-        public string Markdown(string stamp, string skipPath = null, IEnumerable<string> moduleManagerLines = null)
+        /// <param name="b9Lines">The session's <c>b9:</c> end-of-import lines (B9 overrides), copied into the header.</param>
+        public string Markdown(string stamp, string skipPath = null, IEnumerable<string> moduleManagerLines = null,
+            IEnumerable<string> b9Lines = null)
         {
             var sb = new StringBuilder();
             sb.Append("# KSP1PartMod audit ").Append(stamp).Append("\n\n");
@@ -182,6 +191,14 @@ namespace KSP1PartMod.Audit
             {
                 sb.Append("## ModuleManager (this session)\n" + "\n");
                 foreach (var l in mm) sb.Append("- ").Append(l.Replace("\r", " ").Replace("\n", " ")).Append('\n');
+                sb.Append('\n');
+            }
+
+            var b9 = (b9Lines ?? Enumerable.Empty<string>()).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+            if (b9.Count > 0)
+            {
+                sb.Append("## B9PartSwitch (this session)\n\n");
+                foreach (var l in b9) sb.Append("- ").Append(l.Replace("\r", " ").Replace("\n", " ")).Append('\n');
                 sb.Append('\n');
             }
 
@@ -206,6 +223,8 @@ namespace KSP1PartMod.Audit
             sb.Append("\n## Shrouds\n\n").Append(ShroudsLine()).Append('\n');
 
             sb.Append("\n## Native modules\n\n").Append(NativeLine()).Append('\n');
+
+            sb.Append("\n## B9 overrides\n\n").Append(B9Line()).Append('\n');
 
             sb.Append("\n## Controls\n\n");
             if (Controls.Count == 0) sb.Append("No control part was audited.\n");

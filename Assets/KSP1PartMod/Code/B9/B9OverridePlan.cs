@@ -94,6 +94,16 @@ namespace KSP1PartMod.B9
         /// <summary>Child B9 modules that add volume to a parent (<c>parentID</c>).</summary>
         public int ParentChildPairs;
 
+        /// <summary>The <c>appendSet</c> test of <see cref="VariantSwitches.All"/> that gives this plan's appended sets (the
+        /// switches <see cref="B9SwitchPlan.Appended"/>, matched by module node), for <see cref="B9GatePlanner.Apply"/>: the
+        /// gates then use the same set ids as the sets. Null when the plan appends no set (the 0.8.0 gates).</summary>
+        public Func<VariantSwitch, bool> AppendSetTest()
+        {
+            var appended = new HashSet<IKsp1Node>(Switches.Where(s => s.Appended).Select(s => s.Module));
+            if (appended.Count == 0) return null;
+            return sw => sw?.Module != null && appended.Contains(sw.Module);
+        }
+
         public static B9OverridePlan For(IReadOnlyList<IKsp1Node> partModules, B9TankTypes tankTypes, B9Switches settings)
         {
             var plan = new B9OverridePlan();

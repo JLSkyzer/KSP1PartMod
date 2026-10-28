@@ -55,5 +55,9 @@ namespace KSP1PartMod.Audit
         /// <summary>The native modules this mod converted on the part (0.8.0): each name as <c>Module_Heatshield</c>, with
         /// <c>:uninitialized</c> or <c>:missing</c> appended when the instantiated part does not have it running.</summary>
         public IReadOnlyList<string> NativeModules = None;
+        /// <summary>B9 overrides (0.9.0), from the part definition's <c>Data_PartSwitch</c> and the import's tallies: one item
+        /// per override set with its active variant's transformer kinds, the part's counts, and a failure when the default
+        /// variant did not apply (<see cref="AuditB9"/>).</summary>
+        public IReadOnlyList<string> B9Overrides = None;
     }
 }

@@ -118,6 +118,7 @@ namespace KSP1PartMod.Game
         private static int _failures;
         private static readonly Dictionary<string, PartTally> Tallies = new Dictionary<string, PartTally>(StringComparer.Ordinal);
         private static readonly HashSet<string> NotesLogged = new HashSet<string>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, int> NoteCounts = new Dictionary<string, int>(StringComparer.Ordinal);
         private static readonly Dictionary<string, ModuleTally> ModuleTallies = new Dictionary<string, ModuleTally>(StringComparer.Ordinal);
         private static readonly HashSet<string> ModuleTypesLogged = new HashSet<string>(StringComparer.Ordinal);
         private static readonly object RegistryLock = new object();
@@ -237,6 +238,8 @@ namespace KSP1PartMod.Game
             Tallies.Clear();
             ModuleTallies.Clear();
             NotesLogged.Clear();
+            NoteCounts.Clear();
+            LastSummary = new List<string>();
             ModuleTypesLogged.Clear();
             AfterPlanForTests = null;
             B9ModuleDiff.Reset();
@@ -248,6 +251,35 @@ namespace KSP1PartMod.Game
 
         /// <summary>What <paramref name="part"/> got at its last import, or null (tests, audit).</summary>
         internal static PartTally TallyOf(string part) => part != null && Tallies.TryGetValue(part, out var t) ? t : null;
+
+        /// <summary>The <c>b9:</c> end-of-import lines of this session (import summary, module data), for the audit report
+        /// header; empty before the summary.</summary>
+        internal static IReadOnlyList<string> LastSummary { get; private set; } = new List<string>();
+
+        /// <summary>How many distinct <c>b9: &lt;part&gt;: &lt;note&gt;</c> lines <paramref name="part"/> logged this session
+        /// (audit).</summary>
+        internal static int NoteCountOf(string part) => part != null && NoteCounts.TryGetValue(part, out var n) ? n : 0;
+
+        /// <summary>The <c>appendSet</c> test the 2b gates of <paramref name="part"/> plan with (B9 overrides, Task 4): the
+        /// part's B9 plan again, with this import's switches and tank types, so the appended ids are those the sets got.
+        /// Null (the 0.8.0 gates, which stay at their default subtype) when the part got no appended set at its import
+        /// (feature off or stopped, <c>b9_new_part_switches</c> false, the part failed or kept Redux's sets), or when an
+        /// appended set it got is not in the plan again (logged once). A planned set that got no transformer was not
+        /// appended: its gates name a set the part does not have, which keeps the default subtype at runtime.</summary>
+        internal static Func<VariantSwitch, bool> GateAppendSet(string part, IReadOnlyList<IKsp1Node> modules)
+        {
+            var tally = TallyOf(part);
+            if (tally == null || tally.Appended.Count == 0 || modules == null) return null;
+            var plan = B9OverridePlan.For(modules, _tankTypes, _switches ?? B9Switches.AllOn);
+            var planned = new HashSet<string>(plan.Switches.Where(s => s.Appended).Select(s => s.SetId), StringComparer.Ordinal);
+            var unknown = tally.Appended.Select(a => a.SetId).FirstOrDefault(id => !planned.Contains(id));
+            if (unknown != null)
+            {
+                LogOnce(part + "\ngates\n", B9Lines.GatesKeptDefault(part, unknown));
+                return null;
+            }
+            return plan.AppendSetTest();
+        }
 
         // ------------------------------------------------------------------ tank types
 
@@ -637,8 +669,11 @@ namespace KSP1PartMod.Game
                 }
                 if (r.Outcome != B9ModuleDiff.Outcome.Compared)
                 {
-                    // No native module: no native effect, decided for the whole part. An off form is logged here.
-                    if (offEdit != null) OffChangesNothing(part, tally, outcomes[0], st.VariantId);
+                    // No native module: no native effect, decided for the whole part. An off form cannot apply: it is
+                    // counted under "no off form", with the reason, and its moduleActive key is not a native effect.
+                    if (offEdit != null)
+                        OffNotImported(part, tally, states[offEdit.TargetIndex], st.VariantId,
+                            r.Outcome == B9ModuleDiff.Outcome.NotImported ? r.Reason : "the native module is not on the part");
                     continue;
                 }
 
@@ -681,7 +716,7 @@ namespace KSP1PartMod.Game
                 }
                 if (fields.Count == 0)
                 {
-                    if (offEdit != null && r.Transformers.Count == 0) OffChangesNothing(part, tally, outcomes[0], st.VariantId);
+                    if (offEdit != null && r.Transformers.Count == 0) OffChangesNothing(part, tally, states[offEdit.TargetIndex], st.VariantId);
                     continue;
                 }
                 foreach (var o in outcomes)
@@ -729,11 +764,25 @@ namespace KSP1PartMod.Game
             return native;
         }
 
-        /// <summary>An off form whose re-import changes no native field: logged and counted.</summary>
+        /// <summary>An off form whose re-import changes no native field: logged and counted once, as "changing nothing".
+        /// Its <c>moduleActive</c> key leaves the module's keys, as on the off-staging path, so the module is not also
+        /// counted as "no native effect" for it (its DATA keys still are).</summary>
         private static void OffChangesNothing(string part, ModuleTally tally, ModuleOutcome o, string variant)
         {
             tally.OffNoChange++;
+            o.Keys.Remove("moduleActive");
             LogOnce(part + "\noff-nochange\n" + o.Ksp1Module + "\n" + variant, B9Lines.ModuleOffNoChange(part, o.Ksp1Module, variant));
+        }
+
+        /// <summary>An off form on a module Redux does not import natively (a gimbal other than the first, a module with
+        /// no native counterpart): logged with Redux's reason and counted under "no off form". Its <c>moduleActive</c> key
+        /// leaves the module's keys, as on the off-staging path.</summary>
+        private static void OffNotImported(string part, ModuleTally tally, ModuleOutcome o, string variant, string reason)
+        {
+            tally.NoOffForm++;
+            if (!tally.NoOffFormModules.Contains(o.Ksp1Module)) tally.NoOffFormModules.Add(o.Ksp1Module);
+            o.Keys.Remove("moduleActive");
+            LogOnce(part + "\noff-notimported\n" + o.Ksp1Module + "\n" + variant, B9Lines.ModuleOffNotImported(part, o.Ksp1Module, variant, reason));
         }
 
         /// <summary>End of a part's module data: an edited module no variant could change natively gets its
@@ -961,7 +1010,9 @@ namespace KSP1PartMod.Game
 
         private static void LogNoteOnce(string part, string note)
         {
-            if (NotesLogged.Add(part + "\n" + note)) Info(B9Lines.PartNote(part, note));
+            if (!NotesLogged.Add(part + "\n" + note)) return;
+            NoteCounts[part] = NoteCounts.TryGetValue(part, out var n) ? n + 1 : 1;
+            Info(B9Lines.PartNote(part, note));
         }
 
         /// <summary>Once per session, after Redux's import is complete.</summary>
@@ -970,9 +1021,14 @@ namespace KSP1PartMod.Game
             if (!_armed || _summaryLogged) return;
             _summaryLogged = true;
             var ts = Tallies.Values.ToList();
-            Info(B9Lines.ImportSummary(ts.Count, ts.Sum(t => t.Sets), ts.Sum(t => t.NewSets), ts.Sum(t => t.NewSetsWithModule),
-                ts.Sum(t => t.MassVariants), ts.Sum(t => t.ResourceVariants), ts.Sum(t => t.ScalarVariants), ts.Sum(t => t.CostVariants)));
-            if (_switches?.ModuleData == true) Info(ModuleDataSummary());
+            var lines = new List<string>
+            {
+                B9Lines.ImportSummary(ts.Count, ts.Sum(t => t.Sets), ts.Sum(t => t.NewSets), ts.Sum(t => t.NewSetsWithModule),
+                    ts.Sum(t => t.MassVariants), ts.Sum(t => t.ResourceVariants), ts.Sum(t => t.ScalarVariants), ts.Sum(t => t.CostVariants)),
+            };
+            if (_switches?.ModuleData == true) lines.Add(ModuleDataSummary());
+            LastSummary = lines;
+            foreach (var line in lines) Info(line);
             lock (RegistryLock) _registry = null;
         }
 

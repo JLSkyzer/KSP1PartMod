@@ -7,6 +7,7 @@ using KSP.IO;
 using KSP.Modules;
 using KSP.Sim.Definitions;
 using KSP1PartMod.Animation.Cfg;
+using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.B9;
 using KSP1PartMod.Game;
@@ -720,6 +721,11 @@ PART
             Assert.IsFalse(_lines.Any(l => l.Contains("failed") || l.Contains("dropped")), Log);
         }
 
+        /// <summary>A node named exactly <c>MODULE:NEEDS[!DefaultActionGroups]</c> (at the start of its line) becomes
+        /// <c>MODULE</c>; a patch node such as <c>@MODULE:NEEDS[…]</c> is left alone.</summary>
+        internal static string ResolveNeeds(string text) =>
+            System.Text.RegularExpressions.Regex.Replace(text, @"(?m)^([ \t]*)MODULE:NEEDS\[!DefaultActionGroups\]", "$1MODULE");
+
         /// <summary>A real cfg, with its <c>MODULE:NEEDS[!DefaultActionGroups]</c> nodes named <c>MODULE</c>: in game
         /// ModuleManager resolves them (that mod is not installed) before Redux reads the part, and the UA120's
         /// <c>MultiModeEngine</c> is such a node.</summary>
@@ -727,7 +733,7 @@ PART
         {
             var path = Path.Combine(InstalledKsp1.Root, relativePath);
             if (!File.Exists(path)) Assert.Ignore("not installed: " + path);
-            var text = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path), @"MODULE:NEEDS\[!DefaultActionGroups\]", "MODULE");
+            var text = ResolveNeeds(File.ReadAllText(path));
             return new Ksp1ConfigFile(new Ksp1ModRoot(InstalledKsp1.Root, InstalledKsp1.Root), path, "Bluedog_DB", Ksp1ConfigNode.Parse(text));
         }
 
@@ -859,9 +865,170 @@ PART
             TestContext.WriteLine(Log);
             CollectionAssert.IsEmpty(Mdt(VariantOf(imported.Data, "Off")));
             CollectionAssert.Contains(_lines, B9Lines.ModuleOffNoChange("testRcsZero", "ModuleRCSFX", "Off"));
+            Assert.IsFalse(_lines.Any(l => l.Contains("no native effect")), "counted once, as changing nothing: " + Log);
             B9Overrides.LogImportSummaryOnce();
             Assert.IsTrue(_lines.Any(l => l.Contains("off forms 0 (1 changing nothing)")), Log);
+            CollectionAssert.Contains(_lines, B9Lines.ModuleDataSummary(0, 0, null, 0, 0, null, 0, null, 1));
         });
+
+        private const string SecondGimbalPart = @"
+PART
+{
+	name = testTwoGimbals
+	mass = 1
+	MODULE
+	{
+		name = ModuleGimbal
+		gimbalTransformName = first
+		gimbalRange = 5
+	}
+	MODULE
+	{
+		name = ModuleGimbal
+		gimbalTransformName = second
+		gimbalRange = 3
+	}
+	MODULE
+	{
+		name = ModuleB9PartSwitch
+		moduleID = gimbalSwitch
+		SUBTYPE
+		{
+			name = Free
+		}
+		SUBTYPE
+		{
+			name = Locked
+			addedMass = 0.01
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleGimbal
+					gimbalTransformName = second
+				}
+				moduleActive = false
+			}
+		}
+	}
+}
+";
+
+        /// <summary>The off form of a gimbal Redux does not import (not the first): its own line, with Redux's reason, counted
+        /// under "no off form", never as "changes no native field" nor "no native effect".</summary>
+        [Test] public void TryBuild_OffFormOnASecondGimbal_NotImportedLine() => WithGameSettings(() =>
+        {
+            Assert.IsTrue(Arm());
+            var imported = Import(SecondGimbalPart);
+            TestContext.WriteLine(Log);
+            CollectionAssert.IsEmpty(Mdt(VariantOf(imported.Data, "Locked")), Log);
+            CollectionAssert.Contains(_lines, B9Lines.ModuleOffNotImported("testTwoGimbals", "ModuleGimbal", "Locked",
+                "not the part's first gimbal, the only one Redux imports"));
+            Assert.IsFalse(_lines.Any(l => l.Contains("changes no native field") || l.Contains("no native effect")), Log);
+            B9Overrides.LogImportSummaryOnce();
+            CollectionAssert.Contains(_lines, B9Lines.ModuleDataSummary(0, 0, null, 0, 1, new[] { "ModuleGimbal" }, 0, null));
+        });
+
+        [Test] public void ResolveNeeds_OnlyTheNodeName_NotPatches()
+        {
+            const string text = "PART\n{\n\tMODULE:NEEDS[!DefaultActionGroups]\n\t{\n\t}\n}\n@PART[x]\n{\n\t@MODULE:NEEDS[!DefaultActionGroups]\n\t{\n\t}\n}\n";
+            Assert.AreEqual("PART\n{\n\tMODULE\n\t{\n\t}\n}\n@PART[x]\n{\n\t@MODULE:NEEDS[!DefaultActionGroups]\n\t{\n\t}\n}\n", ResolveNeeds(text));
+        }
+
+        // ------------------------------------------------------------------ 2b gates (Task 4)
+
+        private const string NozzlePart = @"
+PART
+{
+	name = testNozzle
+	mass = 1
+	MODULE
+	{
+		name = ModuleDeployableEngine
+		EngineAnimationName = Nozzle
+	}
+	MODULE
+	{
+		name = ModuleB9PartSwitch
+		moduleID = nozzleSwitch
+		SUBTYPE
+		{
+			name = Light
+		}
+		SUBTYPE
+		{
+			name = Heavy
+			addedMass = 0.1
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleDeployableEngine
+				}
+				moduleActive = false
+			}
+		}
+	}
+}
+";
+
+        private static IReadOnlyList<IKsp1Node> NozzleModules() =>
+            Ksp1NodeAdapter.Modules(Ksp1ConfigNode.Parse(NozzlePart).GetNodes("PART").First());
+
+        /// <summary>The test matches switches by module node: plan with the same nodes it was made from (as the load step does).</summary>
+        private static B9Gate NozzleGate(IReadOnlyList<IKsp1Node> modules, Func<VariantSwitch, bool> appendSet)
+        {
+            var plan = OwnershipPlanner.Plan(modules, false, new HashSet<string>(), false, false, null, true, true, false, false, null, appendSet);
+            return plan.Entries.Single(e => e.Kind == EntryKind.EngineDeploy).Gates.Single();
+        }
+
+        /// <summary>A part that gains a <c>Module_PartSwitch</c> (no Redux set): the gate planned from the import's tally
+        /// names the appended set, the 2b watch finds it at the index V-SwiFT keeps, and a pick closes the gate.</summary>
+        [Test] public void Gates_PartGainingASwitch_FollowTheAppendedSet() => WithGameSettings(() =>
+        {
+            Assert.IsTrue(Arm());
+            var imported = Import(NozzlePart);
+            TestContext.WriteLine(Log);
+            Assert.IsTrue(imported.Result);
+            var set = imported.Data.VariantSets.Single();
+            Assert.AreEqual("nozzleSwitch", set.VariantSetId);
+
+            var modules = NozzleModules();
+            var test = B9Overrides.GateAppendSet("testNozzle", modules);
+            Assert.IsNotNull(test);
+            var gate = NozzleGate(modules, test);
+            Assert.AreEqual(set.VariantSetId, gate.SetId);
+            Assert.IsNull(NozzleGate(modules, null).SetId, "0.8.0 gate without the test");
+
+            var watch = new VariantWatch(imported.Data.VariantSets.Select(s => s.VariantSetId).ToArray(), () => imported.Data.ActiveVariants);
+            var index = watch.IndexOf(gate.SetId);
+            Assert.AreEqual(0, index);
+            Assert.AreEqual("Light", watch.ActiveOf(index), "the default subtype");
+            var entryGate = new EntryGate(new[] { gate }, new[] { index });
+            entryGate.OnVariant(index, watch.ActiveOf(index));
+            Assert.IsTrue(entryGate.Active);
+            imported.Data.ActiveVariants[0] = "Heavy";
+            Assert.IsTrue(watch.Poll());
+            Assert.IsTrue(watch.Changed(index));
+            Assert.IsTrue(entryGate.OnVariant(index, watch.ActiveOf(index)));
+            Assert.IsFalse(entryGate.Active, "the deployable engine is off in Heavy");
+        });
+
+        [Test] public void Gates_NewPartSwitchesOff_NoTest_The080Gate() => WithGameSettings(() =>
+        {
+            Assert.IsTrue(Arm("{\"b9_new_part_switches\": false}"));
+            var imported = Import(NozzlePart);
+            Assert.IsFalse(imported.Result, "no set: Redux made none, and no set is appended");
+            var modules = NozzleModules();
+            Assert.IsNull(B9Overrides.GateAppendSet("testNozzle", modules));
+            Assert.IsNull(NozzleGate(modules, null).SetId);
+        });
+
+        [Test] public void Gates_NotArmed_NoTest()
+        {
+            Assert.IsNull(B9Overrides.GateAppendSet("testNozzle", NozzleModules()));
+            Assert.IsNull(B9Overrides.GateAppendSet(null, null));
+        }
 
         // ------------------------------------------------------------------ real files
 
@@ -914,7 +1081,7 @@ PART
             {
                 Ksp1ConfigNode node;
                 // MODULE:NEEDS[!DefaultActionGroups] resolved as ModuleManager does in game (BDB's MultiModeEngine nodes).
-                try { node = Ksp1ConfigNode.Parse(System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path), @"MODULE:NEEDS\[!DefaultActionGroups\]", "MODULE")); }
+                try { node = Ksp1ConfigNode.Parse(ResolveNeeds(File.ReadAllText(path))); }
                 catch { continue; }
                 var mod = path.Substring(root.Length).TrimStart('/', '\\').Split('/', '\\')[0];
                 foreach (var part in node.GetNodes("PART"))

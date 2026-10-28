@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using KSP1PartMod.Audit;
@@ -481,7 +482,7 @@ namespace KSP1PartMod.Tests.Audit
         [Test] public void Csv_ReduxFairing_IsTheLastColumn()
         {
             var cols = AuditCsv.Columns.ToList();
-            Assert.AreEqual("native_modules", cols[cols.Count - 1]);
+            Assert.AreEqual("native_modules", cols[cols.Count - 2], "then b9_overrides (0.9.0)");
             var r = Rec("a"); r.ReduxFairing = true;
             var rows = ReadCsv(AuditCsv.Document(new[] { r, Rec("b") }));
             Assert.AreEqual("true", rows[1][cols.IndexOf("redux_fairing")]);
@@ -550,6 +551,100 @@ namespace KSP1PartMod.Tests.Audit
             StringAssert.DoesNotContain("ModuleManager", s.Markdown("x"));
             var md = s.Markdown("x", null, new[] { "[KSP1PartMod] mm: arithmetic: 475 applied", "", "[KSP1PartMod] mm: index: 350 applied" });
             StringAssert.Contains("## ModuleManager (this session)\n\n- [KSP1PartMod] mm: arithmetic: 475 applied\n- [KSP1PartMod] mm: index: 350 applied\n\n## By kind", md);
+        }
+
+        // ---- B9 overrides (0.9.0) ----
+
+        [Test] public void Csv_B9Overrides_IsTheLastColumn_JoinedWithSemicolons()
+        {
+            var cols = AuditCsv.Columns.ToList();
+            Assert.AreEqual("b9_overrides", cols[cols.Count - 1]);
+            Assert.AreEqual(cols.IndexOf("native_modules") + 1, cols.IndexOf("b9_overrides"), "no older column moves");
+            var r = Rec("a");
+            r.B9Overrides = AuditB9.Items(new[] { AuditB9.Set("tank", "LFO", new[] { AuditB9.Mass(0.125), AuditB9.Resources(new[] { "Methalox" }) }) },
+                AuditB9.Counts(2, 2, 0, 1, 0, 3), null);
+            var rows = ReadCsv(AuditCsv.Document(new[] { r, Rec("b") }));
+            Assert.AreEqual("tank=LFO: mass+0.125, res Methalox;counts: mass 2, tank 2, scalars 0, module 1, off 0, notes 3",
+                rows[1][cols.IndexOf("b9_overrides")]);
+            Assert.AreEqual("", rows[2][cols.IndexOf("b9_overrides")]);
+            Assert.AreEqual(cols.Count, rows[1].Count);
+        }
+
+        [Test] public void B9_Kinds_Format()
+        {
+            Assert.AreEqual("mass+0.125", AuditB9.Mass(0.125));
+            Assert.AreEqual("mass-0.05", AuditB9.Mass(-0.05));
+            Assert.AreEqual("mass+0", AuditB9.Mass(0));
+            Assert.AreEqual("res Methalox+Ablator", AuditB9.Resources(new[] { "Methalox", "Ablator", "Methalox", null }));
+            Assert.AreEqual("res none", AuditB9.Resources(null));
+            Assert.AreEqual("scalar maxTemp", AuditB9.Scalar("maxTemp"));
+            Assert.AreEqual("Module_Engine.engineModes", AuditB9.Module("Module_Engine", "engineModes"));
+            Assert.AreEqual("s=v: none", AuditB9.Set("s", "v", new string[0]));
+            Assert.AreEqual("s=none: mass+1", AuditB9.Set("s", null, new[] { "mass+1" }));
+            Assert.AreEqual("failed: Module_PartSwitch missing", AuditB9.Failed("Module_PartSwitch missing"));
+        }
+
+        [Test] public void B9_Kinds_InvariantCulture()
+        {
+            var culture = System.Threading.Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = new CultureInfo("fr-FR");
+                Assert.AreEqual("mass+0.125", AuditB9.Mass(0.125));
+            }
+            finally { System.Threading.Thread.CurrentThread.CurrentCulture = culture; }
+        }
+
+        [Test] public void B9_Failure_OnlyForASpawnedPartWithOverrides()
+        {
+            var present = new[] { "Module_PartSwitch", "Module_Engine" };
+            Assert.IsNull(AuditB9.Failure(false, true, new string[0], null, null, null), "no override set: not judged");
+            Assert.IsNull(AuditB9.Failure(true, false, null, null, null, null), "not spawned: not judged");
+            Assert.IsNull(AuditB9.Failure(true, true, present, new string[0], null, new[] { "Module_Engine" }));
+            Assert.AreEqual("Module_PartSwitch missing", AuditB9.Failure(true, true, new[] { "Module_Engine" }, null, null, null));
+            Assert.AreEqual("Module_PartSwitch threw", AuditB9.Failure(true, true, present, null, "Module_PartSwitch", null));
+            Assert.AreEqual("Module_PartSwitch uninitialized", AuditB9.Failure(true, true, present, new[] { "Module_PartSwitch" }, null, null));
+            Assert.AreEqual("Module_Engine threw", AuditB9.Failure(true, true, present, null, "Module_Engine", new[] { "Module_Engine" }));
+            Assert.AreEqual("Module_Engine uninitialized", AuditB9.Failure(true, true, present, new[] { "Module_Engine" }, null, new[] { "Module_Engine" }));
+            Assert.IsNull(AuditB9.Failure(true, true, present, new[] { "Module_Color" }, "Module_Color", new[] { "Module_Engine" }),
+                "a module no override edits is the audit's other columns' business");
+        }
+
+        [Test] public void B9_Items_OrderAndFlags()
+        {
+            var items = AuditB9.Items(new[] { "a=x: none", "b=y: mass+1" }, "counts: mass 1, tank 0, scalars 0, module 0, off 0, notes 0", "Module_PartSwitch missing");
+            CollectionAssert.AreEqual(new[] { "a=x: none", "b=y: mass+1", "counts: mass 1, tank 0, scalars 0, module 0, off 0, notes 0",
+                "failed: Module_PartSwitch missing" }, items);
+            Assert.IsTrue(AuditB9.HasOverrides(items));
+            Assert.IsTrue(AuditB9.IsFailed(items));
+            var countsOnly = AuditB9.Items(null, "counts: mass 0, tank 0, scalars 0, module 0, off 0, notes 2", null);
+            Assert.IsFalse(AuditB9.HasOverrides(countsOnly), "notes alone are not an override");
+            Assert.IsFalse(AuditB9.IsFailed(countsOnly));
+            Assert.IsFalse(AuditB9.HasOverrides(null));
+            Assert.AreEqual(0, AuditB9.Items(null, null, null).Count);
+        }
+
+        [Test] public void Summary_B9Line_CountsPartsWithOverridesAndFailures_ControlsApart()
+        {
+            var ok = Rec("ok"); ok.B9Overrides = AuditB9.Items(new[] { "s=a: mass+1" }, null, null);
+            var bad = Rec("bad"); bad.B9Overrides = AuditB9.Items(new[] { "s=a: Module_Engine.engineModes" }, null, "Module_Engine threw");
+            var notesOnly = Rec("notes"); notesOnly.B9Overrides = AuditB9.Items(null, "counts: mass 0, tank 0, scalars 0, module 0, off 0, notes 1", null);
+            var control = Rec("ctrl"); control.Control = true; control.B9Overrides = AuditB9.Items(new[] { "s=a: mass+1" }, null, null);
+            var s = AuditSummary.From(new[] { ok, bad, notesOnly, control, Rec("plain") }, 1);
+            Assert.AreEqual("audit: B9 overrides: 2 part(s) with overrides, 1 part(s) where the default variant failed to apply", s.B9Line());
+            StringAssert.Contains("## B9 overrides\n\n" + s.B9Line() + "\n", s.Markdown("x"));
+            Assert.AreEqual("audit: B9 overrides: 0 part(s) with overrides, 0 part(s) where the default variant failed to apply",
+                AuditSummary.From(new AuditRecord[0], 0).B9Line());
+        }
+
+        [Test] public void Markdown_B9Lines_AreInTheHeader_OnlyWhenGiven()
+        {
+            var s = AuditSummary.From(new[] { Rec("a") }, 1);
+            StringAssert.DoesNotContain("B9PartSwitch (this session)", s.Markdown("x"));
+            var md = s.Markdown("x", null, new[] { "[KSP1PartMod] mm: index: 350 applied" },
+                new[] { "[KSP1PartMod] b9: 3 part(s), 4 set(s)", " ", "[KSP1PartMod] b9: module data: 1 transformer(s)" });
+            StringAssert.Contains("## ModuleManager (this session)\n\n- [KSP1PartMod] mm: index: 350 applied\n\n" +
+                                  "## B9PartSwitch (this session)\n\n- [KSP1PartMod] b9: 3 part(s), 4 set(s)\n- [KSP1PartMod] b9: module data: 1 transformer(s)\n\n## By kind", md);
         }
 
         [Test] public void Summary_ShroudsLine_Empty()

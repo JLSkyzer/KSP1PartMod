@@ -91,19 +91,23 @@ namespace KSP1PartMod.Animation.Cfg
         /// (compared through <paramref name="shaderPropertyMap"/>): the KV pods keep their light changer, and the note says
         /// so. Off: the 0.7.0 note, no entry.</param>
         /// <param name="shaderPropertyMap">Settings <c>shader_property_map</c>; null: the built-in map.</param>
+        /// <param name="b9AppendSet">B9 overrides (0.9.0): the switches without a Redux set that get an appended set, as
+        /// <see cref="B9GatePlanner.Apply"/> takes it. Their gates follow that set. Null: those gates stay at their default
+        /// subtype (0.8.0). Keys never depend on it.</param>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules,
             bool pluginModules, bool b9Gates, bool shrouds = false, bool ablatorChar = false,
-            IReadOnlyDictionary<string, string[]> shaderPropertyMap = null) =>
+            IReadOnlyDictionary<string, string[]> shaderPropertyMap = null, Func<VariantSwitch, bool> b9AppendSet = null) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules,
-                pluginModules, b9Gates, shrouds, ablatorChar, shaderPropertyMap);
+                pluginModules, b9Gates, shrouds, ablatorChar, shaderPropertyMap, b9AppendSet);
 
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
         /// table. The plugin modules and the B9 gates are off unless asked for: older callers keep the 0.4.0 plan.</summary>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
             bool followRedux = false, ISet<string> skipModules = null, bool pluginModules = false, bool b9Gates = false,
-            bool shrouds = false, bool ablatorChar = false, IReadOnlyDictionary<string, string[]> shaderPropertyMap = null)
+            bool shrouds = false, bool ablatorChar = false, IReadOnlyDictionary<string, string[]> shaderPropertyMap = null,
+            Func<VariantSwitch, bool> b9AppendSet = null)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -279,11 +283,11 @@ namespace KSP1PartMod.Animation.Cfg
             if (pluginModules)
             {
                 // A clip has one owner among our entries, unless the B9 gates keep its owners apart.
-                if (b9Gates) B9GatePlanner.Apply(modules, entries, reduxOwned);
+                if (b9Gates) B9GatePlanner.Apply(modules, entries, reduxOwned, b9AppendSet);
                 DropSharedClips(modules, entries, notes);
             }
             // B9 gates last (Apply replaces every entry's gates, so the pass above leaves nothing behind).
-            if (b9Gates) notes.AddRange(B9GatePlanner.Apply(modules, entries, reduxOwned));
+            if (b9Gates) notes.AddRange(B9GatePlanner.Apply(modules, entries, reduxOwned, b9AppendSet));
             else
                 foreach (var e in entries) e.Gates = null;
             return new PartAnimationPlan(entries, reduxClips, reduxModule, remove, notes);

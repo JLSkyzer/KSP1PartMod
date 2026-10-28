@@ -102,6 +102,11 @@ namespace KSP1PartMod.B9
         public static string ModuleOffNoChange(string part, string ksp1Module, string variant) =>
             Prefix + $"{part}: {ksp1Module} off in {variant}: the off form changes no native field";
 
+        /// <summary>An off form on a module Redux does not import natively (<paramref name="reason"/>: Redux's, e.g. "not the
+        /// part's first gimbal, the only one Redux imports").</summary>
+        public static string ModuleOffNotImported(string part, string ksp1Module, string variant, string reason) =>
+            Prefix + $"{part}: {ksp1Module} off in {variant}: not imported natively ({reason}), no off form, left on";
+
         public static string NoNativeEffect(string part, string ksp1Module, IEnumerable<string> keys) =>
             Prefix + $"{part}: {ksp1Module}: no native effect ({List(keys)})";
 
@@ -123,7 +128,11 @@ namespace KSP1PartMod.B9
             $"off forms {offForms}{(offNoChange > 0 ? $" ({offNoChange} changing nothing)" : "")}, no off form {noOffForm} ({List(noOffFormModules)}); " +
             $"no native effect {noNativeEffect} ({List(noEffectModules)})";
 
-        // ---- Task 4: audit ----
+        // ---- Task 4: gates and audit ----
+
+        /// <summary>Once per part: the 2b gates could not be matched to the sets the import appended.</summary>
+        public static string GatesKeptDefault(string part, string set) =>
+            Prefix + $"{part}: appended set '{set}' not found when planning the animation gates again, the gates of the part's appended sets stay at their default subtype";
 
         /// <summary>The audit's summary line (the audit's own <c>audit:</c> prefix, as its other lines).</summary>
         public static string AuditSummary(int partsWithOverrides, int partsFailed) =>
