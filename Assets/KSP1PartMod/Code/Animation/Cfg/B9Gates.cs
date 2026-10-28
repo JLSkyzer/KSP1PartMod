@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 
 namespace KSP1PartMod.Animation.Cfg
@@ -140,7 +139,7 @@ namespace KSP1PartMod.Animation.Cfg
             if (b9 == null) return null;
             var subtypes = b9.GetNodes("SUBTYPE").ToList();
             if (subtypes.Count == 0) return null;
-            return VariantIdsOf(subtypes)[DefaultIndex(b9, subtypes)];
+            return VariantSwitches.B9VariantIds(subtypes)[VariantSwitches.B9DefaultIndex(b9, subtypes)];
         }
 
         /// <summary>The indices of the modules an IDENTIFIER matches: same <c>name</c> (trimmed, ignoring case), and
@@ -162,141 +161,14 @@ namespace KSP1PartMod.Animation.Cfg
             return result;
         }
 
-        // ---- Redux's rule ----
+        // ---- Redux's rule: see VariantSwitches ----
 
-        private sealed class Switch
-        {
-            public string SetId, RawId, DefaultSubtype;
-            public List<IKsp1Node> Subtypes;
-            public string[] VariantIds;
-        }
-
-        private static List<Switch> Switches(IReadOnlyList<IKsp1Node> modules)
-        {
-            var result = new List<Switch>();
-            if (modules == null) return result;
-            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var ignored = ShroudTransforms(modules);
-            var kept = 0;
-            foreach (var m in modules)
-            {
-                if (m == null || !B9Name.Equals(Trim(m.GetValue("name")), StringComparison.OrdinalIgnoreCase)) continue;
-                var subtypes = m.GetNodes("SUBTYPE").ToList();
-                var raw = FirstNonBlank(m.GetValue("moduleID"), m.GetValue("switcherDescription"),
-                    "B9Switch" + kept.ToString(CultureInfo.InvariantCulture));
-                var sw = new Switch
-                {
-                    RawId = raw, Subtypes = subtypes, VariantIds = VariantIdsOf(subtypes),
-                    DefaultSubtype = subtypes.Count == 0 ? null : VariantIdsOf(subtypes)[DefaultIndex(m, subtypes)],
-                };
-                result.Add(sw);
-                if (subtypes.Count == 0 || !subtypes.Any(HasVisualData)) continue;
-                // Built: the id is reserved even if the set is then dropped.
-                var id = MakeUnique(raw, used);
-                if (!subtypes.Any(st => HasTransformer(st, ignored))) continue;
-                sw.SetId = id;
-                kept++;
-            }
-            return result;
-        }
-
-        private static string[] VariantIdsOf(List<IKsp1Node> subtypes)
-        {
-            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var ids = new string[subtypes.Count];
-            for (var i = 0; i < subtypes.Count; i++)
-                ids[i] = MakeUnique(FirstNonBlank(subtypes[i].GetValue("name"), subtypes[i].GetValue("title"),
-                    "Subtype" + i.ToString(CultureInfo.InvariantCulture)), used);
-            return ids;
-        }
-
-        private static int DefaultIndex(IKsp1Node b9, List<IKsp1Node> subtypes)
-        {
-            var explicitName = FirstNonBlank(b9.GetValue("currentSubtype"), b9.GetValue("defaultSubtype"));
-            if (explicitName.Length > 0)
-            {
-                var i = subtypes.FindIndex(s => string.Equals(s.GetValue("name"), explicitName, StringComparison.OrdinalIgnoreCase));
-                if (i >= 0) return i;
-            }
-            var best = 0;
-            var bestPriority = float.NegativeInfinity;
-            for (var i = 0; i < subtypes.Count; i++)
-            {
-                var raw = subtypes[i].GetValue("defaultSubtypePriority");
-                var p = raw != null && float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0f;
-                if (p > bestPriority) { best = i; bestPriority = p; }
-            }
-            return best;
-        }
-
-        private static IEnumerable<string> Transforms(IKsp1Node subtype) =>
-            subtype.GetValues("transform").Select(Trim).Where(t => !string.IsNullOrEmpty(t));
-
-        private static IEnumerable<IKsp1Node> TextureNodes(IKsp1Node subtype) => subtype.AllNodes.Where(n =>
-            n.Name != null && (n.Name.Equals("TEXTURE", StringComparison.OrdinalIgnoreCase)
-                               || n.Name.StartsWith("TEXTURE:", StringComparison.OrdinalIgnoreCase)));
-
-        private static bool HasVisualData(IKsp1Node subtype) =>
-            Transforms(subtype).Any() || subtype.GetNodes("NODE").Any() || TextureNodes(subtype).Any();
-
-        /// <summary>A transformer Redux would build for the subtype. Its transforms leave out the engine-shroud names
-        /// (<paramref name="ignored"/>); the visual-data test above does not, as in Redux.</summary>
-        private static bool HasTransformer(IKsp1Node subtype, HashSet<string> ignored) =>
-            Transforms(subtype).Any(t => !ignored.Contains(t))
-            || subtype.GetNodes("NODE").Any(n => !string.IsNullOrWhiteSpace(n.GetValue("name")) && IsVector3(n.GetValue("position")))
-            || TextureNodes(subtype).Any(t =>
-                FirstNonBlank(t.GetValue("texture"), t.GetValue("newTexture"), t.GetValue("mainTextureURL")).Length > 0
-                || t.AllValues.Any(v => IsShaderTextureKey(v.Key)));
-
-        /// <summary>Redux's ignored transforms (<c>Ksp1EngineShroudBuilder.GetFairingShroudTransformNames</c>, read in
-        /// the 26w42c decompile): the comma-separated <c>jettisonName</c> of each ModuleJettison, trimmed, compared
-        /// ignoring case, unless <c>ignoreNodes</c> parses as true. (<c>bottomNodeName</c> defaults to <c>bottom</c>, so
-        /// its other condition always holds.)</summary>
-        private static HashSet<string> ShroudTransforms(IReadOnlyList<IKsp1Node> modules)
-        {
-            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var m in modules)
-            {
-                if (m == null || !"ModuleJettison".Equals(Trim(m.GetValue("name")), StringComparison.OrdinalIgnoreCase)) continue;
-                var names = (m.GetValue("jettisonName") ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
-                if (names.Count == 0) continue;
-                if (bool.TryParse(m.GetValue("ignoreNodes"), out var ignoreNodes) && ignoreNodes) continue;
-                foreach (var n in names) set.Add(n);
-            }
-            return set;
-        }
-
-        private static bool IsVector3(string raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw)) return false;
-            var parts = raw.Split(new[] { ',', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-            return parts.Length >= 3 && parts.Take(3).All(p => float.TryParse(p, NumberStyles.Float, CultureInfo.InvariantCulture, out _));
-        }
-
-        private static bool IsShaderTextureKey(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name) || !name.StartsWith("_", StringComparison.Ordinal)) return false;
-            return name.EndsWith("Tex", StringComparison.OrdinalIgnoreCase) || name.EndsWith("Map", StringComparison.OrdinalIgnoreCase)
-                   || name.Equals("_Emissive", StringComparison.OrdinalIgnoreCase) || name.Equals("_Emission", StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static string MakeUnique(string value, HashSet<string> used)
-        {
-            var baseId = string.IsNullOrWhiteSpace(value) ? "Variant" : value.Trim();
-            var id = baseId;
-            for (var n = 2; !used.Add(id); n++) id = baseId + "_" + n.ToString(CultureInfo.InvariantCulture);
-            return id;
-        }
+        /// <summary>The ModuleB9PartSwitch half of <see cref="VariantSwitches.All"/> (B9 sets are listed first, so their ids
+        /// and positions do not depend on the stock modules).</summary>
+        private static List<VariantSwitch> Switches(IReadOnlyList<IKsp1Node> modules) =>
+            VariantSwitches.All(modules).Where(s => !s.IsStock).ToList();
 
         // ---- helpers ----
-
-        private static string FirstNonBlank(params string[] values)
-        {
-            foreach (var v in values)
-                if (!string.IsNullOrWhiteSpace(v)) return v.Trim();
-            return "";
-        }
 
         private static string Trim(string s) => s?.Trim();
 

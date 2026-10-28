@@ -78,17 +78,22 @@ namespace KSP1PartMod.Animation.Cfg
         /// entry of ours plays unless the B9 gates keep the two apart; each refusal is a note.</param>
         /// <param name="b9Gates">Settings <c>b9_module_gates</c>: <see cref="B9GatePlanner.Apply"/> runs last and gates
         /// our entries with the part's B9 subtypes. Off: no entry has gates.</param>
+        /// <param name="shrouds">Settings <c>ksp1_engine_shrouds</c> (0.7.0): every <c>ModuleJettison</c> with a
+        /// <c>jettisonName</c> becomes a <see cref="EntryKind.Shroud"/> entry, planned after the plugin entries with
+        /// ordinals of its own kind. Its names get their variant gates (<see cref="ShroudVariantPlanner"/>) and leave any
+        /// mesh hider that names them (<see cref="ShroudOwnership"/>). Off: no shroud entry, as in 0.6.0.</param>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules,
-            bool pluginModules, bool b9Gates) =>
+            bool pluginModules, bool b9Gates, bool shrouds = false) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules,
-                pluginModules, b9Gates);
+                pluginModules, b9Gates, shrouds);
 
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
         /// table. The plugin modules and the B9 gates are off unless asked for: older callers keep the 0.4.0 plan.</summary>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
-            bool followRedux = false, ISet<string> skipModules = null, bool pluginModules = false, bool b9Gates = false)
+            bool followRedux = false, ISet<string> skipModules = null, bool pluginModules = false, bool b9Gates = false,
+            bool shrouds = false)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -180,6 +185,11 @@ namespace KSP1PartMod.Animation.Cfg
             // Phase 2b: the plugin modules, after every phase 1 entry (their kinds have their own ordinals).
             if (pluginModules) PlanPluginModules(modules, entries, reduxClips, notes);
 
+            // Engine shrouds (0.7.0): after the plugin entries, so that no older key moves.
+            if (shrouds)
+                for (var i = 0; i < modules.Count; i++)
+                    Add(entries, ShroudParser.Parse(modules[i], i, 0));
+
             // skip_modules, after the keys: dropping an entry never renumbers another.
             if (skipModules != null && skipModules.Count > 0)
             {
@@ -213,6 +223,14 @@ namespace KSP1PartMod.Animation.Cfg
             }
             // FXModuleThrottleEffects: links our Color entries; never an entry itself.
             notes.AddRange(ScalarSourceParser.Apply(modules, entries, skipModules));
+
+            // The shrouds that survived skip_modules: their variant gates per name, then the mesh hiders lose their names.
+            if (shrouds)
+            {
+                foreach (var s in entries.Where(e => e.Kind == EntryKind.Shroud))
+                    s.NameGates = ShroudVariantPlanner.Gates(modules, s.TransformNames);
+                notes.AddRange(ShroudOwnership.TrimMeshHiders(entries));
+            }
 
             // The modules whose animation Redux keeps: never gated.
             var reduxOwned = new HashSet<int>(entries.Where(e => e.Kind == EntryKind.GearBridge || e.Kind == EntryKind.ReduxFollower

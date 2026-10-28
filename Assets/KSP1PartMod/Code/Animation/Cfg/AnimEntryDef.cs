@@ -6,9 +6,10 @@ namespace KSP1PartMod.Animation.Cfg
     /// Gear action group for a gear clip that Redux's deployable module plays. ReduxFollower: Redux's single deployable
     /// source, whose Mecanim copy does not move; we draw its legacy clip from Redux's state. ChuteFollower: the same for
     /// ModuleParachute (Clip = semi, SecondClip = full, SpeedFactorIn / Out = semi / full deployment speed). The last ten kinds are the
-    /// plugin modules of <see cref="PluginEntryParser"/> (DeployableEngines, Bluedog_DB, DMagic, FXModuleAnimateRCS).</summary>
+    /// plugin modules of <see cref="PluginEntryParser"/> (DeployableEngines, Bluedog_DB, DMagic, FXModuleAnimateRCS).
+    /// Shroud (appended last, 0.7.0): the jettison shroud of a KSP1 <c>ModuleJettison</c>, see <see cref="ShroudParser"/>.</summary>
     public enum EntryKind { Toggle, Deploy, Gear, Throttle, Heat, Color, Group, AeroGate, GearBridge, ReduxFollower, ChuteFollower,
-        EngineDeploy, EngineMode, LookAt, DecouplerClip, RcsGlow, RcsEmissive, MeshHider, ScienceToggle, AccelSpring, LandingBag }
+        EngineDeploy, EngineMode, LookAt, DecouplerClip, RcsGlow, RcsEmissive, MeshHider, ScienceToggle, AccelSpring, LandingBag, Shroud }
 
     /// <summary>One KSP1 animation module we drive, read from its cfg. Plain public fields so that Newtonsoft and
     /// <c>IOProvider</c> serialize it into the part definition.</summary>
@@ -98,7 +99,7 @@ namespace KSP1PartMod.Animation.Cfg
         /// <summary>RcsGlow: <c>thrustForceMult</c>.</summary>
         public float ThrustForceMult = 1;
         /// <summary>LookAt: the <c>targetName</c> / <c>rotatorsName</c> of each CONSTRAINLOOKFX (same length).
-        /// MeshHider: <see cref="TransformNames"/>.</summary>
+        /// MeshHider and Shroud: <see cref="TransformNames"/>.</summary>
         public string[] TargetNames, RotatorNames, TransformNames;
         /// <summary>LookAt: <c>axisConstrained</c> and <c>axisScales</c> (x, y, z).</summary>
         public bool[] AxisConstrained;
@@ -110,6 +111,22 @@ namespace KSP1PartMod.Animation.Cfg
         public bool OneWay;
         /// <summary>LandingBag: speed of the backward play (KSP1: 0.2).</summary>
         public float RetractSpeed = 1;
+
+        /// <summary>Shroud: <c>bottomNodeName</c> (default <c>bottom</c>), the attach node whose attachment shows the shroud.
+        /// The names of the shroud transforms are <see cref="TransformNames"/>, in <c>jettisonName</c> order.</summary>
+        public string NodeName = "bottom";
+        /// <summary>Shroud: <c>isFairing</c> (default true).</summary>
+        public bool IsFairing = true;
+        /// <summary>Shroud: <c>checkBottomNode</c>, <c>decoupleEnabled</c> (default true), <c>manualJettison</c> and
+        /// <c>ignoreNodes</c>.</summary>
+        public bool CheckBottomNode, ManualJettison, IgnoreNodes;
+        public bool DecoupleEnabled = true;
+        /// <summary>Shroud: <c>allowShroudToggle</c> (default true): the VAB offers a hide/show button.</summary>
+        public bool AllowShroudToggle = true;
+        /// <summary>Shroud: for each name of <see cref="TransformNames"/>, the variant gates that decide whether the name is
+        /// enabled (<see cref="ShroudVariantPlanner"/>); an empty or null array means always enabled. Parallel to
+        /// <see cref="TransformNames"/>.</summary>
+        public B9Gate[][] NameGates;
 
         /// <summary>The B9PartSwitch subtypes that switch this entry's module off (<c>moduleActive = false</c>), one
         /// gate per switch (<see cref="B9GatePlanner"/>); null when no switch does. Any kind.</summary>

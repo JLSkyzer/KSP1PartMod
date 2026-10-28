@@ -95,10 +95,11 @@ namespace KSP1PartMod.Animation.Cfg
         }
 
         /// <summary>The name an entry is known by in its key: its clip, else its shader property, else (AeroGate)
-        /// its controller index.</summary>
+        /// its controller index, or (Shroud) its first transform name.</summary>
         internal static string KeyName(AnimEntryDef e) =>
             FirstNonBlank(e.Clip, e.SecondClip, e.ThirdClip, e.ShaderProperty)
-            ?? (e.Kind == EntryKind.AeroGate ? e.ControllerModuleIndex.ToString(CultureInfo.InvariantCulture) : "");
+            ?? (e.Kind == EntryKind.AeroGate ? e.ControllerModuleIndex.ToString(CultureInfo.InvariantCulture)
+                : e.Kind == EntryKind.Shroud && e.TransformNames != null && e.TransformNames.Length > 0 ? e.TransformNames[0] : "");
 
         internal static void SetKey(AnimEntryDef e, int ordinal) =>
             e.Key = e.Kind.ToString().ToLowerInvariant() + ":" + KeyName(e) + ":" + ordinal.ToString(CultureInfo.InvariantCulture);

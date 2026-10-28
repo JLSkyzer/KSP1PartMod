@@ -67,6 +67,11 @@ namespace KSP1PartMod.Animation.Settings
         /// memory (<c>raise_streaming_budget</c>).</summary>
         public bool RaiseStreamingBudget => _switches041.RaiseStreamingBudget;
 
+        /// <summary>Keep the KSP1 mesh of engine shrouds (<c>ModuleJettison</c>) and show it by the KSP1 rules, instead of
+        /// Redux's <c>Module_Fairing</c> (<c>ksp1_engine_shrouds</c>, default true). It acts only with <see cref="Enabled"/>
+        /// (<see cref="ShroudSwitch.Arm"/>).</summary>
+        public bool Ksp1EngineShrouds => _switches041.Ksp1EngineShrouds;
+
         /// <summary>Opt-in (default false): audit every KSP1 part once at the first VAB entry (<c>audit_on_vab_entry</c>).</summary>
         public bool AuditOnVabEntry => _audit.OnVabEntry;
         /// <summary>Milliseconds per frame the audit may use (<c>audit_frame_budget_ms</c>, default 8, 1 to 50).</summary>
@@ -90,11 +95,11 @@ namespace KSP1PartMod.Animation.Settings
             public bool PluginModules = true, B9ModuleGates = true;
         }
 
-        /// <summary>The 0.4.1 fix switches, read together.</summary>
+        /// <summary>The 0.4.1 fix switches and the later per-feature switches, read together.</summary>
         private sealed class Switches041
         {
             public bool FixFairingInit = true, EngineTooltipStats = true, SubcategoryBarKeepsGrid = true;
-            public bool ShareKsp1Textures = true, Ksp1TexturesFollowQuality = true;
+            public bool ShareKsp1Textures = true, Ksp1TexturesFollowQuality = true, Ksp1EngineShrouds = true;
             public bool RaiseStreamingBudget;
         }
 
@@ -197,6 +202,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "subcategory_bar_keeps_grid": ReadBool(p, ref s041.SubcategoryBarKeepsGrid, problems); break;
                         case "share_ksp1_textures": ReadBool(p, ref s041.ShareKsp1Textures, problems); break;
                         case "ksp1_textures_follow_quality": ReadBool(p, ref s041.Ksp1TexturesFollowQuality, problems); break;
+                        case "ksp1_engine_shrouds": ReadBool(p, ref s041.Ksp1EngineShrouds, problems); break;
                         case "raise_streaming_budget": ReadBool(p, ref s041.RaiseStreamingBudget, problems); break;
                         case "audit_on_vab_entry": ReadBool(p, ref audit.OnVabEntry, problems); break;
                         case "audit_frame_budget_ms": ReadClampedFloat(p, 1, 50, ref audit.FrameBudgetMs, problems); break;

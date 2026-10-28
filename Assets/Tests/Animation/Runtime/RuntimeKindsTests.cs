@@ -11,7 +11,9 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         [Test] public void HasBinder_EveryKind_AfterTask8()
         {
             var all = (EntryKind[])Enum.GetValues(typeof(EntryKind));
-            CollectionAssert.AreEqual(all, all.Where(RuntimeKinds.HasBinder));
+            // Shroud (0.7.0) is planned before its binder exists (Task 3 of the shroud plan adds it).
+            CollectionAssert.AreEqual(all.Where(k => k != EntryKind.Shroud), all.Where(RuntimeKinds.HasBinder));
+            Assert.IsFalse(RuntimeKinds.HasBinder(EntryKind.Shroud));
             Assert.IsTrue(RuntimeKinds.HasBinder(EntryKind.LookAt));
             Assert.IsTrue(RuntimeKinds.HasBinder(EntryKind.RcsGlow));
             Assert.IsTrue(RuntimeKinds.HasBinder(EntryKind.RcsEmissive));
