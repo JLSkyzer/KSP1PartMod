@@ -216,6 +216,47 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             Assert.That(playedOn, Is.GreaterThanOrEqualTo(2), "the switch plays the drills' active clips (RadialDrill, MiniDrill)");
         }
 
+        /// <summary>0.11.0: the radiator rules read the cfg and plan nothing. The keys of the stock radiators and of two BDB louvers
+        /// are in both snapshots and are the same before and after the radiator mapping has run under every combination of its
+        /// switches (<c>ksp1_radiators</c> and <c>radiator_deploy_bridge</c> are not inputs of the planner), and the Deploy entry
+        /// of a deployable radiator is the one the bridge follows.</summary>
+        [Test] public void Plan_RadiatorParts_KeysUnchanged_WhateverTheRadiatorSwitches()
+        {
+            var names = new[] { "radPanelSm", "radPanelEdge", "radPanelLg", "foldingRadSmall", "foldingRadMed", "foldingRadLarge",
+                                "bluedog_Pioneer_SmallLouver", "bluedog_Pioneer_MediumLouver" };
+            var snapshot032 = new HashSet<string>(Snapshot());
+            var snapshot040 = new HashSet<string>(Snapshot(Snapshot040Name));
+            var table = new KSP1PartMod.Native.IsruResources(null, null, null, null);
+            var found = 0;
+            var bridged = 0;
+            foreach (var name in names)
+            {
+                var part = RealParts().FirstOrDefault(p => p.Name == name);
+                if (part.Name == null) continue;
+                found++;
+                var line = Hex(part.Name, 12) + " " + Hex(KeysOf(part.Modules, Last032Kind), 16);
+                Assert.IsTrue(snapshot032.Contains(line), name + ": 0.3.2 snapshot");
+                Assert.IsTrue(snapshot040.Contains(line), name + ": 0.4.0 snapshot");
+                var radiators = part.Modules.Where(m => "ModuleActiveRadiator".Equals(m.GetValue("name")?.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+                var deployableAt = part.Modules.ToList().FindIndex(m => "ModuleDeployableRadiator".Equals(m.GetValue("name")?.Trim(), StringComparison.OrdinalIgnoreCase));
+                Assert.AreEqual(1, radiators.Count, name);
+                foreach (var hasDeployable in new[] { false, true })
+                foreach (var ksp1Rates in new[] { false, true })
+                foreach (var autoOn in new[] { false, true })
+                {
+                    Assert.IsTrue(KSP1PartMod.Native.RadiatorMapping.From(radiators, hasDeployable, table, 100, 1, ksp1Rates, autoOn).HasModule, name);
+                    Assert.AreEqual(line, Hex(part.Name, 12) + " " + Hex(KeysOf(part.Modules, Last032Kind), 16),
+                        $"{name}: keys moved after the radiator rules ran ({hasDeployable}, {ksp1Rates}, {autoOn})");
+                }
+                var plan = OwnershipPlanner.Plan(part.Modules, HasNativeSolar(part.Modules), new HashSet<string>(), false, false, null, true, true, false, false);
+                var deploy = plan.Entries.FirstOrDefault(e => KSP1PartMod.Animation.Behaviours.RadiatorAnimRules.CanDriveBridge(e, deployableAt));
+                Assert.AreEqual(deployableAt >= 0, deploy != null, name + ": the bridge finds the Deploy entry of the ModuleDeployableRadiator");
+                if (deploy != null) bridged++;
+            }
+            Assert.AreEqual(names.Length, found, "the six stock radiators and two BDB louvers are installed");
+            Assert.AreEqual(5, bridged, "the three folding radiators and the two BDB louvers");
+        }
+
         /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0
         /// snapshot. 0.4.0 adds no entry kind: its kinds are those of 0.3.2.</summary>
         [Test, Explicit("writes the 0.4.0 key snapshot")]

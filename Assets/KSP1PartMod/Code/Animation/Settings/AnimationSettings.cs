@@ -160,6 +160,20 @@ namespace KSP1PartMod.Animation.Settings
         /// KSP2 converter's consumption per EC/s, as the drills follow the KSP2 drill's yield per EC/s).</summary>
         public bool IsruKsp1Rates => _isru.Ksp1Rates;
 
+        /// <summary>KSP1 <c>ModuleActiveRadiator</c> imported as KSP2's <c>Module_Cooler</c>, or <c>Module_ActiveRadiator</c> with a
+        /// <c>ModuleDeployableRadiator</c> (<c>ksp1_radiators</c>, default true).</summary>
+        public bool Ksp1Radiators => _radiators.Radiators;
+        /// <summary>A deployable KSP1 radiator cools only while its deploy clip is extended (<c>radiator_deploy_bridge</c>, default
+        /// true; needs <see cref="Enabled"/> to follow a clip).</summary>
+        public bool RadiatorDeployBridge => _radiators.DeployBridge;
+        /// <summary>Fixed radiators start on, deployable ones turn on when extended (<c>radiator_auto_on</c>, default true).</summary>
+        public bool RadiatorAutoOn => _radiators.AutoOn;
+        /// <summary>Multiplies the kW a KSP1 radiator removes (<c>radiator_flux_scale</c>, default 1, 0.01 to 100).</summary>
+        public double RadiatorFluxScale => _radiators.FluxScale;
+        /// <summary>A KSP1 radiator keeps its cfg electric charge rate (<c>radiator_ksp1_rates</c>, default false: KSP2's own rate
+        /// per kW).</summary>
+        public bool RadiatorKsp1Rates => _radiators.Ksp1Rates;
+
         /// <summary>Redux's own mapping of KSP1 Ore.</summary>
         public const string ReduxOreResource = "TestRocks";
 
@@ -173,6 +187,16 @@ namespace KSP1PartMod.Animation.Settings
         }
 
         private readonly SwitchesIsru _isru;
+
+        /// <summary>The radiator keys of 0.11.0, read together.</summary>
+        private sealed class SwitchesRadiators
+        {
+            public bool Radiators = true, DeployBridge = true, AutoOn = true;
+            public bool Ksp1Rates;
+            public double FluxScale = 1.0;
+        }
+
+        private readonly SwitchesRadiators _radiators;
 
         /// <summary>The <c>b9_*</c> keys of 0.9.0, read together.</summary>
         private sealed class SwitchesB9
@@ -241,13 +265,14 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
-            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru)
+            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators)
         {
+            _radiators = radiators;
             _isru = isru;
             _b9 = b9;
             _mm = mm;
@@ -293,6 +318,7 @@ namespace KSP1PartMod.Animation.Settings
                 var mm = new SwitchesMm();
                 var b9 = new SwitchesB9();
                 var isru = new SwitchesIsru();
+                var radiators = new SwitchesRadiators();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -349,6 +375,11 @@ namespace KSP1PartMod.Animation.Settings
                         case "isru_heat_scale": ReadClampedDouble(p, 0, 10, ref isru.HeatScale, problems); break;
                         case "isru_active_animation": ReadBool(p, ref isru.ActiveAnimation, problems); break;
                         case "isru_ksp1_rates": ReadBool(p, ref isru.Ksp1Rates, problems); break;
+                        case "ksp1_radiators": ReadBool(p, ref radiators.Radiators, problems); break;
+                        case "radiator_deploy_bridge": ReadBool(p, ref radiators.DeployBridge, problems); break;
+                        case "radiator_auto_on": ReadBool(p, ref radiators.AutoOn, problems); break;
+                        case "radiator_flux_scale": ReadClampedDouble(p, 0.01, 100, ref radiators.FluxScale, problems); break;
+                        case "radiator_ksp1_rates": ReadBool(p, ref radiators.Ksp1Rates, problems); break;
                         case "mm_plugin_folders": mm.PluginFolders = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.PluginFolders; break;
                         case "mm_needs_keep": mm.NeedsKeep = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.NeedsKeep; break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
@@ -359,7 +390,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators);
             }
             catch (Exception e)
             {
