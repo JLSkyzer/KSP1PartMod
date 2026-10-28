@@ -52,6 +52,9 @@ namespace KSP1PartMod.Native.Science
             new NativeExperiment("ResourceScan", new[] { L(Ksp2Situation.HighOrbit), L(Ksp2Situation.LowOrbit) }, ScienceExperimentKind.Data, false),
         });
 
+        /// <summary>Never a closest match: <c>CrewReport</c> is a leftover stock definition whose name is plain text (it shows empty).</summary>
+        public static readonly IReadOnlyCollection<string> ClosestExcluded = Array.AsReadOnly(new[] { "CrewReport" });
+
         private readonly Dictionary<string, NativeExperiment> _byId = new Dictionary<string, NativeExperiment>(StringComparer.Ordinal);
 
         public IReadOnlyList<NativeExperiment> All { get; }
@@ -87,7 +90,7 @@ namespace KSP1PartMod.Native.Science
         private static int KindTier(ScienceExperimentKind native, ScienceExperimentKind wanted) =>
             native == wanted ? 2 : ((byte)native & (byte)wanted) != 0 ? 1 : 0;
 
-        /// <summary>Rule 4 of plan (h): the experiment, not EVA-only, whose situations best match the mask (Jaccard above 0); ties
+        /// <summary>Rule 4 of plan (h): the experiment, not EVA-only and not in <see cref="ClosestExcluded"/>, whose situations best match the mask (Jaccard above 0); ties
         /// go to the type that serves <paramref name="kind"/> best, then to the table order. Null when nothing matches.</summary>
         public NativeExperiment Closest(int ksp1SituationMask, ScienceExperimentKind kind)
         {
@@ -96,7 +99,7 @@ namespace KSP1PartMod.Native.Science
             var bestTier = -1;
             foreach (var e in All)
             {
-                if (e.RequiresEva) continue;
+                if (e.RequiresEva || ClosestExcluded.Contains(e.Id)) continue;
                 var score = Jaccard(ksp1SituationMask, e);
                 if (score <= 0) continue;
                 var tier = KindTier(e.Type, kind);

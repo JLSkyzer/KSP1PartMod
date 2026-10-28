@@ -111,7 +111,15 @@ EXPERIMENT_DEFINITION
     biomeMask = {bio}
 }}").GetNodes("EXPERIMENT_DEFINITION").Single(), new DefinitionOverrides(x, null, null), AnimationSettings.Defaults, null);
 
-        private static Dictionary<string, ScienceDefinitionModel> Defs(params ScienceDefinitionModel[] d) => d.ToDictionary(x => x.Ksp1Id);
+        private static Dictionary<string, ScienceDefinitionModel> Defs(params ScienceDefinitionModel[] d) => d.ToDictionary(x => x.Key);
+
+        private static IKsp1Node DefNode(string id, int sit = 63, int bio = 3, string baseValue = "10") =>
+            CfgText.Parse($"EXPERIMENT_DEFINITION\n{{\nid = {id}\ntitle = Invented {id}\nbaseValue = {baseValue}\nsituationMask = {sit}\nbiomeMask = {bio}\n}}")
+                .GetNodes("EXPERIMENT_DEFINITION").Single();
+
+        /// <summary>The definitions as the game glue builds them: the base ones and one per DMagic mask pair of the part.</summary>
+        private static Dictionary<string, ScienceDefinitionModel> AllDefs(string part, params string[] ids) =>
+            ScienceDefinitionBuilder.BuildAll(ids.Select(i => DefNode(i)), new[] { Modules(part) }, AnimationSettings.Defaults, null);
 
         private static SciencePart Resolve(string part, Dictionary<string, ScienceDefinitionModel> defs = null, string json = "{}") =>
             ScienceMapping.Resolve(Modules(part), defs ?? new Dictionary<string, ScienceDefinitionModel>(), NativeExperiments.Redux26w42c,
@@ -170,12 +178,13 @@ EXPERIMENT_DEFINITION
 
         [Test] public void Bdb_TwoDMagicGenericModules_TwoConfigurations_Waits()
         {
-            var p = Resolve(Bdb, Defs(Definition("bd_invented1"), Definition("bd_invented2")));
+            var p = Resolve(Bdb, AllDefs(Bdb, "bd_invented1", "bd_invented2"));
             Assert.AreEqual(2, p.Configurations.Count);
             var a = p.Configurations[0];
             var b = p.Configurations[1];
             Assert.AreEqual("KSP1_bd_invented1", a.ExperimentDefinitionId);
-            Assert.AreEqual("KSP1_bd_invented2", b.ExperimentDefinitionId);
+            Assert.AreEqual("KSP1_bd_invented2_s48_b16", b.ExperimentDefinitionId, "its own masks: its own definition");
+            Assert.AreEqual(ScienceResolutionKind.Generated, b.Kind);
             Assert.AreEqual(0, a.Clip.ToggleModuleIndex);
             Assert.AreEqual(1, b.Clip.ToggleModuleIndex);
             Assert.IsTrue(a.Clip.ExperimentAnimation);
@@ -194,6 +203,73 @@ EXPERIMENT_DEFINITION
             Assert.AreEqual(0, noWait.Configurations[0].TimeToComplete, 1e-12);
             Assert.IsFalse(Resolve(Bdb, Defs(Definition("bd_invented1")), "{\"enabled\": false}").Configurations[0].Waits, "animations off");
             Assert.IsFalse(Resolve(Bdb, Defs(Definition("bd_invented1")), "{\"science_deploy_animations\": false}").Configurations[0].Waits);
+        }
+
+        [Test] public void DMagicMaskOverride_NeverTheBaseDefinition()
+        {
+            var defs = AllDefs(Bdb, "bd_invented2");
+            Assert.IsTrue(defs.ContainsKey("bd_invented2_s48_b16"));
+            Assert.AreEqual("LowOrbit+R, HighOrbit", Ksp1Situations.Labels(defs["bd_invented2_s48_b16"].Locations));
+            Assert.AreEqual("Landed+R, Splashed+R, Atmosphere, LowOrbit, HighOrbit", Ksp1Situations.Labels(defs["bd_invented2"].Locations), "the base keeps its own");
+
+            // Without its own definition (the glue did not build it), the module takes the closest match by its own mask.
+            var p = Resolve(Bdb, Defs(Definition("bd_invented1"), Definition("bd_invented2")));
+            var b = p.Configurations[1];
+            Assert.AreEqual(ScienceResolutionKind.Closest, b.Kind);
+            Assert.AreEqual("OrbitalSurvey", b.ExperimentDefinitionId, "sitMask 48, x 0.5 (Both)");
+            Assert.IsTrue(p.Notes.Any(n => n.Contains("bd_invented2_s48_b16")), string.Join("\n", p.Notes));
+        }
+
+        [Test] public void DefinitionNotBuilt_ClosestFromItsMask_ThenTheTable()
+        {
+            var noValue = Defs(ScienceDefinitionBuilder.From(DefNode("mysteryGoo", 32, 0, "0"), null, AnimationSettings.Defaults, null));
+            Assert.IsFalse(noValue["mysteryGoo"].IsBuilt);
+            var p = Resolve(Goo, noValue);
+            Assert.AreEqual(ScienceResolutionKind.Closest, p.Configurations.Single().Kind);
+            Assert.AreEqual("OrbitalSurvey", p.Configurations.Single().ExperimentDefinitionId, "situationMask 32 of the definition, not the table");
+
+            var noSituation = Defs(ScienceDefinitionBuilder.From(DefNode("mysteryGoo", 0, 0, "0"), null, AnimationSettings.Defaults, null));
+            var t = Resolve(Goo, noSituation);
+            Assert.AreEqual("EnvironmentSurvey", t.Configurations.Single().ExperimentDefinitionId, "nothing matches its mask: the table");
+            Assert.IsTrue(t.Notes.Any(n => n.Contains("science_fallback_ids")), string.Join("\n", t.Notes));
+
+            var neither = Resolve(Goo.Replace("mysteryGoo", "bd_inventedX"),
+                Defs(ScienceDefinitionBuilder.From(DefNode("bd_inventedX", 0, 0, "0"), null, AnimationSettings.Defaults, null)));
+            Assert.AreEqual(ScienceSkipReason.NoCounterpart, neither.Resolutions.Single().SkipReason);
+        }
+
+        [Test] public void QuietUiKeys_NotedBehaviourKeys()
+        {
+            var p = Resolve(@"
+PART
+{
+    MODULE
+    {
+        name = DMModuleScienceAnimateGeneric
+        experimentID = mysteryGoo
+        xmitDataScalar = 0.3
+        planetFailMessage = x
+        hideFxModuleUI = true
+        extraResultString = x
+        storeFailMessage = x
+        startEventGUIName = x
+        someActionName = x
+        externalDeploy = true
+        labDataBoost = 0.5
+        resetLevel = 1
+        keepDeployedMode = 1
+        planetaryMask = 1
+        excludeAtmosphere = true
+        asteroidReports = true
+        requiredParts = x
+        experimentsLimit = 1
+        scienceValueRatio = 1
+        totalScienceLevel = 1
+        resourceExpCost = 0
+    }
+}");
+            CollectionAssert.AreEquivalent(new[] { "resettable", "keepDeployedMode", "planetaryMask", "excludeAtmosphere", "asteroidReports",
+                "requiredParts", "experimentsLimit", "scienceValueRatio", "totalScienceLevel" }, p.NotReproduced);
         }
 
         [Test] public void WaitTime_AtLeastATenth()

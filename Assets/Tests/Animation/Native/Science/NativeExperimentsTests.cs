@@ -44,8 +44,8 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
         [TestCase("mobileMaterialsLab", 63, "EnvironmentSurvey", "EnvironmentSurvey")]
         [TestCase("temperatureScan", 63, "EnvironmentSurvey", "EnvironmentSurvey")]
         [TestCase("barometerScan", 63, "AtmosphereSurvey", "EnvironmentSurvey")] // every situation: AtmosphereSurvey is 1/5
-        [TestCase("atmosphereAnalysis", 13, "AtmosphereSurvey", "AtmosphereSurvey")] // 1/2, tie with CrewReport (Data) won by the kind
-        [TestCase("seismicScan", 1, "MarineSurvey", "CrewReport")] // Landed only: CrewReport 1, MarineSurvey 1/2
+        [TestCase("atmosphereAnalysis", 13, "AtmosphereSurvey", "AtmosphereSurvey")] // 1/2 (CrewReport, also 1/2, is excluded)
+        [TestCase("seismicScan", 1, "MarineSurvey", "MarineSurvey")] // Landed only: MarineSurvey 1/2 (CrewReport, 1, is excluded)
         [TestCase("gravityScan", 51, "OrbitalSurvey", "EnvironmentSurvey")] // four of five situations: 4/5
         [TestCase("infraredTelescope", 32, "OrbitalSurvey", "OrbitalSurvey")] // 1/2, tie with ResourceScan (Data) won by the kind
         [TestCase("magnetometer", 48, "RadiationReport", "OrbitalSurvey")] // both orbits: OrbitalSurvey 1, RadiationReport 2/5
@@ -72,6 +72,17 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             foreach (var kind in new[] { ScienceExperimentKind.Data, ScienceExperimentKind.Sample, ScienceExperimentKind.Both })
                 Assert.AreNotEqual("SurfaceSurvey", N.Closest(mask, kind)?.Id, $"mask {mask}, {kind}");
             Assert.AreEqual("MarineSurvey", N.Closest(3, ScienceExperimentKind.Both).Id, "Landed and Splashed");
+        }
+
+        /// <summary><c>CrewReport</c> (a leftover with a plain-text name) is never a closest match, even where it fits best.</summary>
+        [Test] public void CrewReport_Excluded()
+        {
+            CollectionAssert.Contains(NativeExperiments.ClosestExcluded, "CrewReport");
+            for (var mask = 1; mask <= 63; mask++)
+            foreach (var kind in new[] { ScienceExperimentKind.Data, ScienceExperimentKind.Sample, ScienceExperimentKind.Both })
+                Assert.AreNotEqual("CrewReport", N.Closest(mask, kind)?.Id, $"mask {mask}, {kind}");
+            Assert.AreEqual("MarineSurvey", N.Closest(1, ScienceExperimentKind.Data).Id, "Landed only, Data");
+            Assert.IsTrue(N.Contains("CrewReport"), "still a KSP2 experiment for science_native_ids");
         }
 
         [Test] public void EmptyMask_NoCounterpart()

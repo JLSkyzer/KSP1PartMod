@@ -156,21 +156,27 @@ namespace KSP1PartMod.Native.Science
             "resettableOnEVA", "animationName", "experimentAnimation", "experimentWaitForAnimation", "waitForAnimationTime",
             "oneWayAnimation", "animSpeed", "showEditorEvents", "sitMask", "bioMask", "resourceExpCost", "customFailMessage",
             "deployingMessage", "startEventGUIName", "endEventGUIName", "toggleEventGUIName", "showStartEvent", "showEndEvent",
-            "showToggleEvent", "endEventsDescription", "collectWarningText", "includeExperimentInAG", "experimentActionName",
-            "tag", "moduleIsEnabled", "isEnabled",
+            "showToggleEvent", "endEventsDescription", "collectWarningText", "includeExperimentInAG", "tag", "moduleIsEnabled",
+            "isEnabled", "planetFailMessage", "hideFxModuleUI", "extraResultString", "externalDeploy", "labDataBoost",
         };
+
+        /// <summary>UI text: any key ending with one of these is quiet.</summary>
+        private static readonly string[] QuietSuffixes = { "Message", "GUIName", "ActionName" };
+
+        private static bool IsQuiet(string key) =>
+            QuietKeys.Contains(key) || QuietSuffixes.Any(x => key.EndsWith(x, StringComparison.Ordinal));
 
         /// <summary>The DMagic fields whose behaviour is not readable from the cfg (plan (f)), noted when present.</summary>
         private static readonly string[] DMagicNotReproduced =
         {
-            "keepDeployedMode", "planetaryMask", "excludeAtmosphere", "excludeAtmosphereMessage", "asteroidReports", "asteroidTypeDependent",
-            "requiredParts", "requiredPartsMessage", "experimentsLimit", "scienceValueRatio", "totalScienceLevel", "resourceToUse",
+            "keepDeployedMode", "planetaryMask", "excludeAtmosphere", "asteroidReports", "asteroidTypeDependent",
+            "requiredParts", "experimentsLimit", "scienceValueRatio", "totalScienceLevel", "resourceToUse",
         };
 
-        private static readonly string[] ContainerQuietKeys =
+        /// <summary>The container keys noted with the per-vessel pool reason (KSP2 keeps one report pool per vessel).</summary>
+        private static readonly string[] ContainerNotedKeys =
         {
-            "name", "reviewActionName", "storeActionName", "collectActionName", "evaOnlyStorage", "storageRange", "canTransferInVessel",
-            "allowRepeatedSubjects", "capacity", "canBeTransferredToInVessel", "tag",
+            "evaOnlyStorage", "storageRange", "canTransferInVessel", "allowRepeatedSubjects", "capacity", "canBeTransferredToInVessel",
         };
 
         private static readonly string[] SpecialisedDMagic =
@@ -285,9 +291,14 @@ namespace KSP1PartMod.Native.Science
                 p._notes.Add($"{id}: science_native_ids gives {native}, which the game does not have");
             }
             definitions.TryGetValue(id, out var def);
-            // 3. generated
-            if (settings.ScienceGenerateDefinitions && def != null && def.IsBuilt)
-                return (ScienceResolutionKind.Generated, def.ExperimentId, ScienceSkipReason.None);
+            // 3. generated (a DMagic mask override uses its own definition, never the base one)
+            if (settings.ScienceGenerateDefinitions && def != null)
+            {
+                var key = DefinitionKey(module, def);
+                definitions.TryGetValue(key, out var own);
+                if (own != null && own.IsBuilt) return (ScienceResolutionKind.Generated, own.ExperimentId, ScienceSkipReason.None);
+                if (own == null && def.IsBuilt) p._notes.Add($"{id}: no definition {key} for the module's own masks, the closest KSP2 experiment is used");
+            }
             // 4. closest
             if (def != null)
             {
@@ -302,17 +313,32 @@ namespace KSP1PartMod.Native.Science
                         return (ScienceResolutionKind.Closest, closest.Id, ScienceSkipReason.None);
                     }
                 }
-                p._notes.Add($"{id}: no KSP2 experiment matches its situations, skipped");
-                return (ScienceResolutionKind.Skipped, null, ScienceSkipReason.NoCounterpart);
+                if (!(settings.ScienceFallbackIds.TryGetValue(id, out var table) && natives.Contains(table)))
+                {
+                    p._notes.Add($"{id}: no KSP2 experiment matches its situations, skipped");
+                    return (ScienceResolutionKind.Skipped, null, ScienceSkipReason.NoCounterpart);
+                }
             }
             if (settings.ScienceFallbackIds.TryGetValue(id, out var fallback) && natives.Contains(fallback))
             {
-                p._notes.Add($"{id}: no definition on disk, science_fallback_ids gives {fallback}");
+                p._notes.Add($"{id}: {(def == null ? "no definition on disk" : "no KSP2 experiment matches its situations")}, science_fallback_ids gives {fallback}");
                 return (ScienceResolutionKind.Closest, fallback, ScienceSkipReason.None);
             }
             // 5. nothing
             p._notes.Add($"{id}: no definition on disk and no KSP2 counterpart, skipped");
             return (ScienceResolutionKind.Skipped, null, ScienceSkipReason.NoDefinitionNoCounterpart);
+        }
+
+        /// <summary>The key of the definition a module uses: the KSP1 id, or
+        /// <see cref="ScienceDefinitionBuilder.VariantKey"/> when a DMagic module's <c>sitMask</c>/<c>bioMask</c> differ from the base
+        /// definition's masks.</summary>
+        public static string DefinitionKey(IKsp1Node module, ScienceDefinitionModel baseDefinition)
+        {
+            var id = baseDefinition?.Ksp1Id ?? IsruCfg.Value(module, "experimentID") ?? "";
+            if (baseDefinition == null || !IsDMagic(module)) return id;
+            var sit = DefinitionOverrides.Mask(module, "sitMask") ?? baseDefinition.SituationMask;
+            var bio = DefinitionOverrides.Mask(module, "bioMask") ?? baseDefinition.BiomeMask;
+            return sit == baseDefinition.SituationMask && bio == baseDefinition.BiomeMask ? id : ScienceDefinitionBuilder.VariantKey(id, sit, bio);
         }
 
         /// <summary>The report kind a module's transmit share asks for (as the definition builder reads it).</summary>
@@ -388,13 +414,16 @@ namespace KSP1PartMod.Native.Science
                         if (IsruCfg.Bool(m, key) == true)
                             p.NotReproducedField(key, $"{moduleName}: {key} = {value} not reproduced (KSP2 has no reset)");
                         break;
+                    case "resetLevel": // part of the reset, noted with it
+                        p.NotReproducedField("resettable", $"{moduleName}: resettable = True not reproduced (KSP2 has no reset)");
+                        break;
                     case "resourceExpCost":
                         if (IsruCfg.Number(m, key) > 0)
                             p.NotReproducedField(key, $"{moduleName}: resourceExpCost = {value} not reproduced (the KSP2 experiment costs no resource)");
                         break;
                     default:
                         if (DMagicNotReproduced.Contains(key)) p.NotReproducedField(key, $"{moduleName}: {key} = {value} not reproduced");
-                        else if (!QuietKeys.Contains(key)) p.NotReproducedField(key, $"{moduleName}: {key} not reproduced");
+                        else if (!IsQuiet(key)) p.NotReproducedField(key, $"{moduleName}: {key} not reproduced");
                         break;
                 }
             }
@@ -410,8 +439,8 @@ namespace KSP1PartMod.Native.Science
             foreach (var kv in m.AllValues)
             {
                 var key = kv.Key?.Trim() ?? "";
-                if (key == "name" || key == "tag" || key.EndsWith("ActionName", StringComparison.Ordinal)) continue;
-                if (ContainerQuietKeys.Contains(key))
+                if (key == "name" || key == "tag" || QuietSuffixes.Any(x => key.EndsWith(x, StringComparison.Ordinal))) continue;
+                if (ContainerNotedKeys.Contains(key))
                     p.NotReproducedField(key, $"{ContainerModule}: {key} not reproduced (KSP2 keeps one report pool per vessel)");
                 else p.NotReproducedField(key, $"{ContainerModule}: {key} not reproduced");
             }

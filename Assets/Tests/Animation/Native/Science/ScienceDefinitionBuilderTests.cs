@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Settings;
@@ -165,13 +166,63 @@ EXPERIMENT_DEFINITION
             Assert.AreEqual(1, noResults.DataScale, 1e-12, "dataScale missing: 1");
         }
 
-        [Test] public void DMagicOverride_SitMaskBioMask()
+        [Test] public void DMagicOverride_SitMaskBioMask_OwnId()
         {
             var d = Build(sit: 48, bio: 16);
+            Assert.IsTrue(d.IsBuilt);
+            Assert.IsTrue(d.IsVariant);
+            Assert.AreEqual("testProbe_s48_b16", d.Key);
+            Assert.AreEqual("KSP1_testProbe_s48_b16", d.ExperimentId);
+            Assert.AreEqual("testProbe", d.Ksp1Id);
             Assert.AreEqual("LowOrbit+R, HighOrbit", Ksp1Situations.Labels(d.Locations));
             Assert.AreEqual(48, d.SituationMask);
             Assert.AreEqual(16, d.BiomeMask);
+            Assert.IsTrue(d.Terms.All(t => t.Term.StartsWith("KSP1PartMod/Science/testProbe_s48_b16/")), "its own terms");
             Assert.IsTrue(d.Notes.Any(n => n.Contains("sitMask")), string.Join("\n", d.Notes));
+
+            var same = Build(sit: 63, bio: 7);
+            Assert.IsFalse(same.IsVariant, "the same masks: the base definition");
+            Assert.AreEqual("KSP1_testProbe", same.ExperimentId);
+            Assert.AreEqual("KSP1_testProbe_s63_b3", Build(bio: 3).ExperimentId, "only the biome mask differs");
+        }
+
+        [Test] public void NotBuilt_KeepsItsMasks()
+        {
+            var d = Build(Def.Replace("baseValue = 10", "").Replace("situationMask = 63", "situationMask = 32"));
+            Assert.IsFalse(d.IsBuilt);
+            Assert.AreEqual(32, d.SituationMask, "read before the baseValue check, for the closest match");
+            Assert.AreEqual(7, d.BiomeMask);
+        }
+
+        [Test] public void BuildAll_BaseAndOneDefinitionPerDMagicMaskPair()
+        {
+            var defs = new[] { Node(Def), Node(Def.Replace("id = testProbe", "id = other")) };
+            var parts = new[]
+            {
+                (IReadOnlyList<IKsp1Node>)new[]
+                {
+                    CfgText.Module("name = DMModuleScienceAnimateGeneric\nexperimentID = testProbe\nxmitDataScalar = 0.4\nsitMask = 48\nbioMask = 16"),
+                    CfgText.Module("name = ModuleScienceExperiment\nexperimentID = testProbe\nxmitDataScalar = 0.9"),
+                },
+                new[]
+                {
+                    CfgText.Module("name = DMModuleScienceAnimateGeneric\nexperimentID = testProbe\nxmitDataScalar = 0.2\nsitMask = 48\nbioMask = 16"),
+                    CfgText.Module("name = DMModuleScienceAnimateGeneric\nexperimentID = testProbe\nsitMask = 63\nbioMask = 7"),
+                    CfgText.Module("name = DMModuleScienceAnimateGeneric\nexperimentID = other\nsitMask = 1"),
+                    CfgText.Module("name = ModuleScienceExperiment\nexperimentID = testProbe\nsitMask = 1"),
+                },
+            };
+            var duplicates = new List<string>();
+            var all = ScienceDefinitionBuilder.BuildAll(defs.Concat(new[] { Node(Def) }), parts, AnimationSettings.Defaults, null, duplicates);
+            CollectionAssert.AreEquivalent(new[] { "testProbe", "testProbe_s48_b16", "other", "other_s1_b7" }, all.Keys);
+            CollectionAssert.AreEqual(new[] { "testProbe" }, duplicates);
+            Assert.IsFalse(all["testProbe"].IsVariant);
+            Assert.AreEqual(63, all["testProbe"].SituationMask, "the base keeps its masks");
+            Assert.AreEqual(0.4, all["testProbe"].XmitDataScalar, 1e-12, "the first module that uses the id");
+            Assert.AreEqual(0.4, all["testProbe_s48_b16"].XmitDataScalar, 1e-12, "the first module with that pair");
+            Assert.AreEqual("Landed+R", Ksp1Situations.Labels(all["other_s1_b7"].Locations), "bioMask of the definition kept");
+            Assert.AreEqual(0.4, DefinitionOverrides.FirstUses(parts)["testProbe"].XmitDataScalar.Value, 1e-12);
+            Assert.IsNull(DefinitionOverrides.FirstUses(parts)["testProbe"].SitMask, "a base definition never takes a module's masks");
         }
 
         [Test] public void RequireAtmosphere_NotedNotReproduced()

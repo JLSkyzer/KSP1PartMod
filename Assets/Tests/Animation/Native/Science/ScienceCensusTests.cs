@@ -47,8 +47,9 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             public readonly SortedDictionary<string, int> ClosestIds = new SortedDictionary<string, int>(StringComparer.Ordinal);
             public readonly SortedDictionary<string, int> DefinitionSkips = new SortedDictionary<string, int>(StringComparer.Ordinal);
             public readonly List<string> Failures = new List<string>();
-            public int DefinitionFiles, CfgFiles, MmEdits, DuplicateDefinitions, Overridden;
-            public readonly Dictionary<string, ScienceDefinitionModel> Definitions = new Dictionary<string, ScienceDefinitionModel>(StringComparer.Ordinal);
+            public int DefinitionFiles, CfgFiles, MmEdits, DuplicateDefinitions, Variants, ModulesWithoutXmit;
+            public readonly List<string> VariantKeys = new List<string>();
+            public Dictionary<string, ScienceDefinitionModel> Definitions = new Dictionary<string, ScienceDefinitionModel>(StringComparer.Ordinal);
             public readonly List<(string Mod, string Name, SciencePart Part)> Parts = new List<(string, string, SciencePart)>();
 
             public ModCount Mod(string mod)
@@ -93,7 +94,6 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
                         var d = ScienceDefinitionBuilder.From(node, o, settings, null);
                         if (c.Definitions.ContainsKey(id)) { c.DuplicateDefinitions++; continue; }
                         c.Definitions[id] = d;
-                        if (o != null && (o.SitMask.HasValue || o.BioMask.HasValue)) c.Overridden++;
                         void Both(Action<ModCount> a) { a(c.Mod(mod)); a(c.Total); }
                         Both(x =>
                         {
@@ -111,6 +111,16 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
                     }
                     catch (Exception e) { c.Failures.Add($"{mod}/definition {id}: {e}"); }
                 }
+            }
+
+            // What the resolution reads: the base definitions and one per DMagic mask pair (as the game glue builds them).
+            c.Definitions = ScienceDefinitionBuilder.BuildAll(
+                parsed.SelectMany(f => f.File.AllNodes.Where(n => n.Name?.Trim() == "EXPERIMENT_DEFINITION")),
+                parsed.SelectMany(f => f.File.GetNodes("PART")).Select(q => (IReadOnlyList<IKsp1Node>)q.GetNodes("MODULE").ToList()), settings, null);
+            foreach (var v in c.Definitions.Values.Where(d => d.IsVariant).OrderBy(d => d.Key, StringComparer.Ordinal))
+            {
+                c.Variants++;
+                c.VariantKeys.Add($"{v.ExperimentId} ({Ksp1Situations.Labels(v.Locations)}{(v.IsBuilt ? "" : ", not built")})");
             }
 
             foreach (var (mod, file) in parsed)
@@ -132,6 +142,7 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             foreach (var scope in modules.Select(m => ScienceMapping.OutOfScope(IsruCfg.Value(m, "name"))).Where(s => s != null).Distinct())
                 Both(x => Add(x.OutOfScope, scope)); // parts, as plan (g) counts them
             var experiments = modules.Count(ScienceMapping.IsExperimentModule);
+            c.ModulesWithoutXmit += modules.Count(m => ScienceMapping.IsExperimentModule(m) && IsruCfg.Value(m, "xmitDataScalar") == null);
             var container = modules.Any(ScienceMapping.IsContainer);
             if (experiments == 0 && !container) return;
             var p = ScienceMapping.Resolve(modules, c.Definitions, NativeExperiments.Redux26w42c, settings);
@@ -175,7 +186,8 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
         private static void Print(string title, Census c)
         {
             TestContext.WriteLine($"== {title}: {c.CfgFiles} cfg file(s), definitions read {c.Total.Definitions} from {c.DefinitionFiles} file(s), " +
-                                  $"{c.DuplicateDefinitions} duplicate id(s), {c.MmEdits} MM edit(s) of EXPERIMENT_DEFINITION, {c.Overridden} with a DMagic mask override");
+                                  $"{c.DuplicateDefinitions} duplicate id(s), {c.MmEdits} MM edit(s) of EXPERIMENT_DEFINITION; {c.Variants} definition(s) of a DMagic mask override: " +
+                                  $"{(c.VariantKeys.Count == 0 ? "none" : string.Join(", ", c.VariantKeys))}; {c.ModulesWithoutXmit} experiment module(s) without xmitDataScalar (1 assumed)");
             TestContext.WriteLine($"  total: {c.Total}");
             foreach (var kv in c.PerMod.Where(kv => kv.Value.Parts > 0 || kv.Value.Definitions > 0 || kv.Value.Storage > 0 || kv.Value.OutOfScope.Count > 0))
                 TestContext.WriteLine($"  {kv.Key}: {kv.Value}");
@@ -184,6 +196,10 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             TestContext.WriteLine("  skipped: " + Join(c.SkippedIds));
             TestContext.WriteLine("  not reproduced (parts or definitions): " + Join(c.NotReproduced));
         }
+
+        /// <summary>Four installed DMagic modules have <c>sitMask = 48</c> (BDB's Apollo SIM bay mass spectrometer, the two OGO OPEP
+        /// modules, the Ranger gamma-ray spectrometer); the distinct id and mask pairs.</summary>
+        private const int VariantsInstalled = 3;
 
         [Test] public void Installed_EveryDefinitionBuilds_EveryPartResolves_ExpectedCounts()
         {
@@ -200,6 +216,8 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             Assert.AreEqual(48, t.Identical, "crewReport -> CrewObservation");
             Assert.AreEqual(41, t.Closest, "stock instruments without a definition on disk");
             Assert.AreEqual(18, t.Skipped, "kerbal experiments, ROCScience, bd_GooLab");
+            Assert.AreEqual(VariantsInstalled, c.Variants, "the DMagic modules with sitMask = 48 get their own definitions");
+            Assert.IsTrue(c.Definitions.Values.Where(d => d.IsVariant).All(d => d.IsBuilt && d.SituationMask == 48));
         }
 
         [Test] public void Installed_StorageParts()

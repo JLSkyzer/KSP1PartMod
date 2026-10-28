@@ -61,7 +61,9 @@ namespace KSP1PartMod.Native.Science
             return n.HasValue && n.Value >= 0 && n.Value <= int.MaxValue ? (int)n.Value : (int?)null;
         }
 
-        /// <summary>For each KSP1 id, the overrides of the first experiment module (parts and modules in order) that uses it.</summary>
+        /// <summary>For each KSP1 id, the <c>xmitDataScalar</c> of the first experiment module (parts and modules in order) that uses
+        /// it. The masks are left out: a base definition keeps its own; a DMagic mask override gets its own definition
+        /// (<see cref="ScienceDefinitionBuilder.BuildAll"/>).</summary>
         public static IReadOnlyDictionary<string, DefinitionOverrides> FirstUses(IEnumerable<IReadOnlyList<IKsp1Node>> parts)
         {
             var first = new Dictionary<string, DefinitionOverrides>(StringComparer.Ordinal);
@@ -71,7 +73,7 @@ namespace KSP1PartMod.Native.Science
                 if (!ScienceMapping.IsExperimentModule(m)) continue;
                 var id = IsruCfg.Value(m, "experimentID");
                 if (string.IsNullOrEmpty(id) || first.ContainsKey(id)) continue;
-                first[id] = From(m);
+                first[id] = new DefinitionOverrides(IsruCfg.Number(m, "xmitDataScalar"), null, null);
             }
             return first;
         }
@@ -81,6 +83,11 @@ namespace KSP1PartMod.Native.Science
     public sealed class ScienceDefinitionModel
     {
         public string Ksp1Id { get; internal set; }
+        /// <summary>The key of this definition among the definitions read: the KSP1 id, or <c>&lt;id&gt;_s&lt;sit&gt;_b&lt;bio&gt;</c> for a DMagic
+        /// mask override (<see cref="ScienceDefinitionBuilder.VariantKey"/>). Its terms use it.</summary>
+        public string Key { get; internal set; }
+        /// <summary>Built from a DMagic module's own <c>sitMask</c>/<c>bioMask</c>, which differ from the definition's.</summary>
+        public bool IsVariant { get; internal set; }
         /// <summary><c>KSP1_&lt;id&gt;</c>.</summary>
         public string ExperimentId { get; internal set; }
         /// <summary>The resolved title (the id when there is none).</summary>
@@ -134,7 +141,7 @@ namespace KSP1PartMod.Native.Science
 
         internal string AddTerm(string suffix, string english)
         {
-            var term = ScienceDefinitionBuilder.TermPrefix + Ksp1Id + "/" + suffix;
+            var term = ScienceDefinitionBuilder.TermPrefix + Key + "/" + suffix;
             _terms.Add(new ScienceTerm(term, english));
             return term;
         }
@@ -169,6 +176,43 @@ namespace KSP1PartMod.Native.Science
         public const string SkipNoBaseValue = "no baseValue";
         public const string SkipNoSituation = "no mapped situation";
 
+        /// <summary>The key (and, after <see cref="IdPrefix"/>, the KSP2 id) of a definition built from a DMagic mask override:
+        /// <c>&lt;id&gt;_s&lt;sit&gt;_b&lt;bio&gt;</c>.</summary>
+        public static string VariantKey(string ksp1Id, int sit, int bio) => $"{ksp1Id}_s{sit}_b{bio}";
+
+        /// <summary>Every definition, by <see cref="ScienceDefinitionModel.Key"/>: each <c>EXPERIMENT_DEFINITION</c> (the first of an id
+        /// wins; later ones are counted in <paramref name="duplicates"/>), with the <c>xmitDataScalar</c> of the first module that uses
+        /// it, and one more per distinct DMagic <c>sitMask</c>/<c>bioMask</c> pair that differs from the definition's masks (built
+        /// with that pair and the <c>xmitDataScalar</c> of the first module that has it). Never shared with the base definition.</summary>
+        public static Dictionary<string, ScienceDefinitionModel> BuildAll(IEnumerable<IKsp1Node> definitionNodes,
+            IEnumerable<IReadOnlyList<IKsp1Node>> parts, AnimationSettings settings, Func<string, string> titleResolver, List<string> duplicates = null)
+        {
+            var partList = (parts ?? Enumerable.Empty<IReadOnlyList<IKsp1Node>>()).ToList();
+            var uses = DefinitionOverrides.FirstUses(partList);
+            var nodes = new Dictionary<string, IKsp1Node>(StringComparer.Ordinal);
+            var all = new Dictionary<string, ScienceDefinitionModel>(StringComparer.Ordinal);
+            foreach (var node in definitionNodes ?? Enumerable.Empty<IKsp1Node>())
+            {
+                var id = IsruCfg.Value(node, "id") ?? "";
+                if (nodes.ContainsKey(id)) { duplicates?.Add(id); continue; }
+                nodes[id] = node;
+                uses.TryGetValue(id, out var o);
+                all[id] = From(node, o, settings, titleResolver);
+            }
+            foreach (var modules in partList)
+            foreach (var m in modules ?? (IReadOnlyList<IKsp1Node>)Array.Empty<IKsp1Node>())
+            {
+                if (!ScienceMapping.IsDMagic(m)) continue;
+                var id = IsruCfg.Value(m, "experimentID");
+                if (string.IsNullOrEmpty(id) || !nodes.TryGetValue(id, out var node)) continue;
+                var key = ScienceMapping.DefinitionKey(m, all[id]);
+                if (key == id || all.ContainsKey(key)) continue;
+                var o = DefinitionOverrides.From(m);
+                all[key] = From(node, o, settings, titleResolver);
+            }
+            return all;
+        }
+
         private static readonly string[] QuietKeys = { "id", "title", "baseValue", "dataScale", "situationMask", "biomeMask" };
 
         public static ScienceDefinitionModel From(IKsp1Node def, DefinitionOverrides overrides, AnimationSettings settings,
@@ -179,11 +223,28 @@ namespace KSP1PartMod.Native.Science
             var d = new ScienceDefinitionModel();
             var id = IsruCfg.Value(def, "id");
             d.Ksp1Id = id ?? "";
+            d.Key = d.Ksp1Id;
             d.ExperimentId = IdPrefix + d.Ksp1Id;
             if (string.IsNullOrEmpty(id)) return Skip(d, SkipNoId, "EXPERIMENT_DEFINITION without an id, skipped");
 
             d.Title = Title(def, id, titleResolver, d._notes);
             ReadFields(def, d);
+
+            // The masks first: a definition that is not built still drives the closest match by its mask.
+            var baseSit = DefinitionOverrides.Mask(def, "situationMask") ?? 0;
+            var baseBio = DefinitionOverrides.Mask(def, "biomeMask") ?? 0;
+            var sit = overrides.SitMask ?? baseSit;
+            var bio = overrides.BioMask ?? baseBio;
+            if (sit != baseSit || bio != baseBio)
+            {
+                d.Key = VariantKey(id, sit, bio);
+                d.ExperimentId = IdPrefix + d.Key;
+                d.IsVariant = true;
+                d._notes.Add($"{id}: the DMagic module's sitMask {sit} / bioMask {bio} replace situationMask {baseSit} / biomeMask {baseBio}: " +
+                             $"own definition {d.ExperimentId}");
+            }
+            d.SituationMask = sit;
+            d.BiomeMask = bio;
 
             var baseValue = IsruCfg.Number(def, "baseValue");
             if (!baseValue.HasValue || !(baseValue.Value > 0))
@@ -193,17 +254,6 @@ namespace KSP1PartMod.Native.Science
             if (dataScale.HasValue && dataScale.Value > 0) d.DataScale = dataScale.Value;
             else d._notes.Add($"{id}: dataScale '{IsruCfg.Value(def, "dataScale") ?? "(none)"}' is not a number above 0, 1 used");
 
-            var sit = DefinitionOverrides.Mask(def, "situationMask") ?? 0;
-            var bio = DefinitionOverrides.Mask(def, "biomeMask") ?? 0;
-            if (overrides.SitMask.HasValue || overrides.BioMask.HasValue)
-            {
-                d._notes.Add($"{id}: the DMagic module's sitMask {overrides.SitMask?.ToString() ?? "-"} / bioMask {overrides.BioMask?.ToString() ?? "-"} " +
-                             $"replace situationMask {sit} / biomeMask {bio}");
-                sit = overrides.SitMask ?? sit;
-                bio = overrides.BioMask ?? bio;
-            }
-            d.SituationMask = sit;
-            d.BiomeMask = bio;
             var map = Ksp1Situations.Map(sit, bio);
             foreach (var n in map.Notes) d._notes.Add(id + ": " + n);
             d.Locations = map.Locations;

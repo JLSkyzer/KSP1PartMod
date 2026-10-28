@@ -278,7 +278,6 @@ namespace KSP1PartMod.Tests.Animation.Cfg
                 "{\"science_definitions_via_patch_manager\": false}", "{\"science_value_scale\": 2}", "{\"enabled\": false}",
             };
             var natives = KSP1PartMod.Native.Science.NativeExperiments.Redux26w42c;
-            var clips = 0;
             foreach (var name in names)
             {
                 var parts = RealParts().Where(p => p.Name == name).ToList();
@@ -306,10 +305,9 @@ namespace KSP1PartMod.Tests.Animation.Cfg
                     foreach (var config in science.Configurations)
                         if (KSP1PartMod.Native.Science.ScienceAnimRules.TargetsFor(config, plan.Entries, true).First != null) found = true;
                 }
-                if (found) clips++;
+                Assert.AreEqual(name != "mk1pod_v2", found, name + ": the goo canister, the materials bay and the BDB parts find their clip, the pod has none");
                 TestContext.WriteLine($"{name}: keys unchanged with the science switches on and off; clip found {found}");
             }
-            Assert.That(clips, Is.GreaterThanOrEqualTo(6), "the goo canister, the materials bay and the four BDB parts find their clip");
         }
 
         /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0
