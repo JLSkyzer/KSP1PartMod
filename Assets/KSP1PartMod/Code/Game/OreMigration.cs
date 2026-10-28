@@ -38,7 +38,7 @@ namespace KSP1PartMod.Game
         private static readonly HashSet<string> LoggedParts = new HashSet<string>(StringComparer.Ordinal);
         private static int _parts;
         private static double _sourceUnits, _targetUnits;
-        private static bool _broken, _totalPending;
+        private static bool _broken, _totalPending, _noDatabaseLogged;
 
         /// <summary>Tests: replaces the deferred total (null: logged on the next frame through the mod's coroutine runner).</summary>
         internal static Action ScheduleTotal;
@@ -95,6 +95,11 @@ namespace KSP1PartMod.Game
                 var data = __instance.PartData;
                 if (data?.tags == null || data.tags.IndexOf("KSP1", StringComparison.OrdinalIgnoreCase) < 0) return;
                 var db = GameManager.Instance?.Game?.ResourceDefinitionDatabase;
+                if (db == null)
+                {
+                    NoDatabase(data.partName ?? __instance.PartName ?? "?", partState.resources[Source].storedUnits);
+                    return;
+                }
                 var r = Migrate(partState.resources, __instance.PartResourceContainer, db, target);
                 if (r.Migrated) Count(data.partName ?? __instance.PartName ?? "?", target, r);
             }
@@ -125,6 +130,20 @@ namespace KSP1PartMod.Game
             var capacity = container.GetResourceCapacityUnits(targetId);
             var set = container.SetResourceStoredUnits(targetId, Math.Min(units, capacity));
             return new Result { Migrated = true, SourceUnits = state.storedUnits, TargetUnits = set, Capacity = capacity, Capped = units > capacity };
+        }
+
+        /// <summary>The game has no resource database while a KSP1 part with saved <c>TestRocks</c> loads: not migrated, one
+        /// line per session (the Task 2 review: that skip was silent).</summary>
+        internal static void NoDatabase(string part, double savedUnits)
+        {
+            if (!(savedUnits > 0)) return;
+            bool first;
+            lock (Lock)
+            {
+                first = !_noDatabaseLogged;
+                _noDatabaseLogged = true;
+            }
+            if (first) NativeModules.Warn(Lines.NoDatabase(part, savedUnits));
         }
 
         internal static void Count(string part, string target, Result r)
@@ -170,7 +189,7 @@ namespace KSP1PartMod.Game
                 LoggedParts.Clear();
                 _parts = 0;
                 _sourceUnits = _targetUnits = 0;
-                _broken = _totalPending = false;
+                _broken = _totalPending = _noDatabaseLogged = false;
             }
             ScheduleTotal = null;
         }
@@ -187,6 +206,10 @@ namespace KSP1PartMod.Game
 
             public static string NotArmed(string what) =>
                 NativeLines.Prefix + $"ore: old saves: {what} not found, not migrated (Ore saved before the remap is lost on load)";
+
+            public static string NoDatabase(string part, double source) =>
+                NativeLines.Prefix + $"ore: old saves: no resource database while {part} loads, its saved {Source} {Inv(source)} not migrated " +
+                "(logged once; later parts without a database are not migrated either)";
 
             public static string Failed(string error) =>
                 NativeLines.Prefix + "ore: old saves: migration failed, stopped for this session: " + error;

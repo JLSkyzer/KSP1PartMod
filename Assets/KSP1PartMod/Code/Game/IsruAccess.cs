@@ -20,6 +20,8 @@ namespace KSP1PartMod.Game
     /// writes;</item>
     /// <item><c>Ksp1PartLocalizationBuilder</c>: <c>AddPart</c> (patched), its private <c>Add(string, string)</c> and its
     /// private <c>_catalog</c> (whose public <c>Resolve</c> turns <c>#autoLOC</c> tags into English).</item>
+    /// <item><c>Data_Mine</c>/<c>Module_Mine</c> and <c>Data_ResourceScanner</c>/<c>Module_ResourceScanner</c> (Redux's
+    /// own ISRU modules, Task 3): the fields the drill and scanner importers write.</item>
     /// </list>
     /// Each group lists what it lacks; a missing member turns off only the feature that needs it.</summary>
     internal static class IsruAccess
@@ -27,6 +29,10 @@ namespace KSP1PartMod.Game
         public const string ResourceMapField = "DirectResourceMap";
         public const string ConvertAmountName = "ConvertAmount";
         public const string LocalizationBuilderTypeName = "Redux.Ksp1Import.Ksp1PartLocalizationBuilder";
+        public const string DataMineTypeName = "Redux.Modules.Data_Mine";
+        public const string ModuleMineTypeName = "Redux.Modules.Module_Mine";
+        public const string DataScannerTypeName = "Redux.Modules.Data_ResourceScanner";
+        public const string ModuleScannerTypeName = "Redux.Modules.Module_ResourceScanner";
 
         /// <summary>The bound members (null when missing).</summary>
         internal sealed class Targets
@@ -38,6 +44,10 @@ namespace KSP1PartMod.Game
             public readonly List<string> MissingOre = new List<string>();
             public readonly List<string> MissingConverter = new List<string>();
             public readonly List<string> MissingNames = new List<string>();
+            /// <summary>The drill importer's members (Task 3): <c>Data_Mine</c>, <c>Module_Mine</c>, and the rate members.</summary>
+            public readonly List<string> MissingDrill = new List<string>();
+            /// <summary>The scanner importers' members (Task 3): <c>Data_ResourceScanner</c>, <c>Module_ResourceScanner</c>.</summary>
+            public readonly List<string> MissingScanner = new List<string>();
         }
 
         private static readonly object Lock = new object();
@@ -91,6 +101,44 @@ namespace KSP1PartMod.Game
                 ["FluxGenerated"] = typeof(float),
             });
             if (AccessTools.TypeByName("KSP.Modules.Module_ResourceConverter") == null) t.MissingConverter.Add("KSP.Modules.Module_ResourceConverter");
+
+            // Drills: the mining formula is a converter formula; rates and names through the same Redux members.
+            if (t.ConvertAmount == null) t.MissingDrill.Add("Ksp1ResourceMapper." + ConvertAmountName);
+            if (t.MissingConverter.Contains("Ksp1ResourceMapper.MapResourceName")) t.MissingDrill.Add("Ksp1ResourceMapper.MapResourceName");
+            var dataMine = AccessTools.TypeByName(DataMineTypeName);
+            if (dataMine == null) t.MissingDrill.Add(DataMineTypeName);
+            else
+                CheckFields(t.MissingDrill, dataMine, "Data_Mine", new Dictionary<string, Type>
+                {
+                    ["MiningFormulaDefinition"] = typeof(ResourceConverterFormulaDefinition),
+                    ["AutoShutdownTemperatureRatio"] = typeof(double),
+                });
+            CheckFields(t.MissingDrill, typeof(ResourceConverterFormulaDefinition), "ResourceConverterFormulaDefinition", new Dictionary<string, Type>
+            {
+                ["InternalName"] = typeof(string),
+                ["FormulaLocalizationKey"] = typeof(string),
+                ["InputResources"] = typeof(List<PartModuleResourceSetting>),
+                ["OutputResources"] = typeof(List<PartModuleResourceSetting>),
+                ["FluxGenerated"] = typeof(float),
+            });
+            if (AccessTools.TypeByName(ModuleMineTypeName) == null) t.MissingDrill.Add(ModuleMineTypeName);
+
+            // Scanners.
+            if (t.MissingConverter.Contains("Ksp1ResourceMapper.MapResourceName")) t.MissingScanner.Add("Ksp1ResourceMapper.MapResourceName");
+            var dataScanner = AccessTools.TypeByName(DataScannerTypeName);
+            if (dataScanner == null) t.MissingScanner.Add(DataScannerTypeName);
+            else
+                CheckFields(t.MissingScanner, dataScanner, "Data_ResourceScanner", new Dictionary<string, Type>
+                {
+                    ["RequiredResources"] = typeof(List<PartModuleResourceSetting>),
+                    ["ScannableResources"] = typeof(List<PartModuleResourceSetting>),
+                    ["TimeToComplete"] = typeof(float),
+                    ["minAltitude"] = typeof(double),
+                    ["maxAltitude"] = typeof(double),
+                    ["minInclination"] = typeof(double),
+                    ["maxInclination"] = typeof(double),
+                });
+            if (AccessTools.TypeByName(ModuleScannerTypeName) == null) t.MissingScanner.Add(ModuleScannerTypeName);
 
             var builder = AccessTools.TypeByName(LocalizationBuilderTypeName);
             if (builder == null) t.MissingNames.Add(LocalizationBuilderTypeName);

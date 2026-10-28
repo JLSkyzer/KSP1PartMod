@@ -138,6 +138,35 @@ namespace KSP1PartMod.Native
             return m;
         }
 
+        /// <summary>Several kept resource scanners of one part as one native scanner (one per part): their resources in cfg
+        /// order without repeats, the highest altitude bound, every note and not-reproduced field once. One: itself.</summary>
+        public static ScannerMapping MergeResources(IReadOnlyList<ScannerMapping> kept)
+        {
+            var list = (kept ?? Array.Empty<ScannerMapping>()).Where(k => k != null && k.HasModule && k.Kind == ScannerKind.Resource).ToList();
+            if (list.Count == 0) throw new ArgumentException("no kept resource scanner", nameof(kept));
+            if (list.Count == 1) return list[0];
+            var first = list[0];
+            var m = new ScannerMapping
+            {
+                Kind = ScannerKind.Resource,
+                Ksp1Resource = first.Ksp1Resource,
+                ScannableResources = list.SelectMany(k => k.ScannableResources).Distinct(StringComparer.Ordinal).ToList(),
+                RequiredResources = first.RequiredResources,
+                TimeToComplete = first.TimeToComplete,
+                MinAltitude = first.MinAltitude,
+                MaxAltitude = list.Max(k => k.MaxAltitude),
+                MinInclination = first.MinInclination,
+                MaxInclination = first.MaxInclination,
+            };
+            foreach (var k in list)
+            {
+                foreach (var f in k.NotReproduced) IsruCfg.AddOnce(m._notReproduced, f);
+                foreach (var n in k.Notes) IsruCfg.AddOnce(m._notes, n);
+            }
+            m._notes.Add($"{ResourceScannerModule} x{list.Count} merged into one {NativeModule} (one per part), the highest altitude bound used");
+            return m;
+        }
+
         private void ReadUnknown(IKsp1Node node, string module, IReadOnlyList<string> known)
         {
             if (node == null) return;

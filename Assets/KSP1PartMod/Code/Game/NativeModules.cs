@@ -91,11 +91,48 @@ namespace KSP1PartMod.Game
                 SummaryLines = ConverterImporter.SummaryLines,
                 AfterArm = h => ConverterImporter.ArmNames(h),
             },
+            new Converter
+            {
+                Ksp1Module = HarvesterMapping.Ksp1Module,
+                NativeModule = HarvesterMapping.NativeModule,
+                SwitchKey = "ksp1_drills",
+                IsOn = s => s.Ksp1Drills,
+                MissingMembers = HarvesterImporter.MissingMembers,
+                Create = () => new HarvesterImporter(_settings?.HarvestAbundanceAtFullDensity ?? HarvesterMapping.DefaultAbundance,
+                    _settings?.IsruHeatScale ?? 1.0, AbundanceIsDefault(_settings)),
+                Summary = HarvesterImporter.Summary,
+            },
+            new Converter
+            {
+                Ksp1Module = ScannerMapping.SurveyorModule,
+                NativeModule = ScannerMapping.NativeModule,
+                SwitchKey = "ksp1_survey_scanners",
+                IsOn = s => s.Ksp1SurveyScanners,
+                MissingMembers = ScannerImporters.MissingMembers,
+                Create = () => new SurveyorImporter(),
+                SummaryLines = ScannerImporters.SummaryLines,
+            },
+            new Converter
+            {
+                Ksp1Module = ScannerMapping.ResourceScannerModule,
+                NativeModule = ScannerMapping.NativeModule,
+                SwitchKey = "ksp1_resource_scanners",
+                IsOn = s => s.Ksp1ResourceScanners,
+                MissingMembers = ScannerImporters.MissingMembers,
+                Create = () => new ResourceScannerImporter(),
+                SummaryLines = ScannerImporters.SummaryLines, // one scanners line for both (the first asks)
+            },
         };
+
+        private static bool AbundanceIsDefault(AnimationSettings s) =>
+            s == null || Math.Abs(s.HarvestAbundanceAtFullDensity - HarvesterMapping.DefaultAbundance) < 1e-12;
 
         /// <summary>By part name: the native modules our importers added this session (read by the audit), the notes
         /// logged, and the summary flags.</summary>
         internal static readonly NativeRecord Record = new NativeRecord();
+
+        /// <summary>By part name: the drills' impact data and the scanner parts, for the ISRU runtime (Task 4).</summary>
+        internal static readonly IsruRecord Isru = new IsruRecord();
 
         /// <summary>Tests: receives every line instead of the game log.</summary>
         internal static Action<string> Sink;
@@ -229,8 +266,12 @@ namespace KSP1PartMod.Game
             _broken = _summaryLogged = false;
             HeatshieldImporter.ResetReference();
             ConverterImporter.ResetSession();
+            HarvesterImporter.ResetSession();
+            ScannerImporters.ResetSession();
+            IsruReference.Reset();
             RejectedNames.Clear();
             Record.Clear();
+            Isru.Clear();
         }
 
         /// <summary>Every registry Redux builds (one per translator) gets our importers where its name is free.</summary>

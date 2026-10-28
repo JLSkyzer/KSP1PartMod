@@ -160,6 +160,27 @@ namespace KSP1PartMod.Native
             $"{string.Join(", ", s.ScannableResources)}, {Inv(s.RequiredResources.Where(f => IsruResources.IsElectricCharge(f.Name)).Sum(f => f.Rate))} EC/s, " +
             $"{Inv(s.TimeToComplete)} s, altitude {Altitude(s.MinAltitude, s.MaxAltitude)}, inclination {Inclination(s.MinInclination, s.MaxInclination)}";
 
+        /// <summary>Not in the plan's list (ruling: the abundance is a guess, so its value is logged once, at the first drill).</summary>
+        public static string HarvestAbundance(double abundance, bool isDefault) =>
+            Prefix + $"drills: a density of 1 counts as a KSP1 abundance of {Inv(abundance)} " +
+            $"(harvest_abundance_at_full_density{(isDefault ? ", default" : "")}; a guess, to calibrate in game)";
+
+        /// <summary>A part that already holds a <c>Data_Mine</c> (a future Redux importer, or a rebuild): nothing added.</summary>
+        public const string ExistingMineNote = HarvesterMapping.Ksp1Module + ": the part already has a Data_Mine, ours not added";
+
+        /// <summary>A part that already holds a <c>Data_ResourceScanner</c>: nothing added.</summary>
+        public const string ExistingScannerNote = "the part already has a Data_ResourceScanner, ours not added";
+
+        /// <summary>A part with both KSP1 scanners: one native scanner per part, the surveyor's.</summary>
+        public const string SurveyorWinsNote = ScannerMapping.ResourceScannerModule + ": the part also has a " +
+                                               ScannerMapping.SurveyorModule + ", whose " + ScannerMapping.NativeModule + " wins (one per part)";
+
+        public static string OrbitalScannerFolded(int count) =>
+            $"{ScannerMapping.OrbitalScannerModule} x{count} folded into the surveyor's {ScannerMapping.NativeModule} (no importer of ours)";
+
+        public static string AsteroidDrillIgnored(int count) =>
+            $"{HarvesterMapping.AsteroidDrillModule}/{HarvesterMapping.CometDrillModule} x{count} ignored (no asteroids or comets in KSP2)";
+
         public static string ScannersSummary(int surveyors, int resourceScanners, int leftOut, int noScannable) =>
             Prefix + $"scanners: {surveyors} survey scanner(s) and {resourceScanners} resource scanner(s) got {ScannerMapping.NativeModule}; " +
             $"{leftOut} {ScannerMapping.ResourceScannerModule} left out (RequiresUnlock: KSP1 reads local abundance after a survey, KSP2 has no part readout), " +

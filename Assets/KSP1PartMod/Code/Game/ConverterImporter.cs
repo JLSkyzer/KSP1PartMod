@@ -36,8 +36,11 @@ namespace KSP1PartMod.Game
 
         /// <summary>Tests: the resource database (returning null: none). Null: the game's (<see cref="IsruAccess.Database"/>).</summary>
         internal static Func<ResourceDefinitionDatabase> DatabaseSource;
-        /// <summary>The native converters' median heat per EC/s; Task 3 reads it from the game. Default: the 26w42c fallback.</summary>
-        internal static Func<double> HeatPerEc = () => NativeIsruRef.FallbackConverterHeatPerEc;
+        /// <summary>The native converters' median heat per EC/s, read from the game's parts (<see cref="IsruReference"/>, its
+        /// 26w42c fallback when none is read). Tests may replace it.</summary>
+        internal static Func<double> HeatPerEc = DefaultHeatPerEc;
+
+        private static double DefaultHeatPerEc() => IsruReference.Get().ConverterHeatPerEc;
         /// <summary>Tests: called after Redux's <c>CreateSerialized</c>, before the conversion is counted (a throw = a failure).</summary>
         internal static Action<string> FaultForTests;
 
@@ -158,8 +161,8 @@ namespace KSP1PartMod.Game
                 var at = raw.FindIndex(n => ReferenceEquals(n, moduleNode));
                 var called = at >= 0 ? list[at] : new Ksp1NodeAdapter(moduleNode);
 
-                var db = Database();
-                var r = Resources(db);
+                var db = CurrentDatabase();
+                var r = Resources(db, null);
                 var map = ConverterMapping.From(list, 0, called, r, HeatPerEc(), _heatScale);
                 var stats = new PartStats { Modes = map.Formulas.Count, Dropped = map.DroppedFormulas, Several = map.SourceCount > 1 };
                 if (!map.HasModule)
@@ -231,15 +234,16 @@ namespace KSP1PartMod.Game
         private static List<PartModuleResourceSetting> Settings(IEnumerable<IsruFlow> flows) =>
             flows.Select(x => new PartModuleResourceSetting { ResourceName = x.Name, Rate = (float)x.Rate }).ToList();
 
-        private static ResourceDefinitionDatabase Database()
+        /// <summary>The resource database the ISRU importers read (<see cref="DatabaseSource"/> in tests).</summary>
+        internal static ResourceDefinitionDatabase CurrentDatabase()
         {
             if (DatabaseSource != null) return DatabaseSource();
             return IsruAccess.Database();
         }
 
-        /// <summary>Redux's resource rules over <paramref name="db"/>; with no database every name is taken as known (logged
-        /// once).</summary>
-        private static IsruResources Resources(ResourceDefinitionDatabase db)
+        /// <summary>Redux's resource rules over <paramref name="db"/> and <paramref name="minable"/> (shared by the ISRU
+        /// importers); with no database every name is taken as known (logged once per session).</summary>
+        internal static IsruResources Resources(ResourceDefinitionDatabase db, IEnumerable<string> minable)
         {
             if (db == null)
             {
@@ -255,7 +259,7 @@ namespace KSP1PartMod.Game
                 Ksp1ResourceMapper.MapResourceName,
                 (source, target, amount) => IsruAccess.ConvertAmount(source, target, amount, db),
                 db == null ? null : new Func<string, bool>(name => IsruAccess.Exists(db, name)),
-                null,
+                minable,
                 db == null ? null : new Func<string, double>(name => IsruAccess.MassPerUnit(db, name)));
         }
 
@@ -300,7 +304,7 @@ namespace KSP1PartMod.Game
             _catalog = null;
             DatabaseSource = null;
             FaultForTests = null;
-            HeatPerEc = () => NativeIsruRef.FallbackConverterHeatPerEc;
+            HeatPerEc = DefaultHeatPerEc;
         }
     }
 }
