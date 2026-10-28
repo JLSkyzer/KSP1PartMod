@@ -11,7 +11,7 @@ optimisations suivantes (feuille de route, point 8b). Le mod ajoute :
 - un **fichier de rapport** `<jeu>/mods/KSP1PartMod/perf/perf-<date>.md`, réécrit à chaque moment de mémoire : c'est le
   fichier à renvoyer avec `Player.log`.
 
-Tout est testé dans l'éditeur (2425 tests EditMode, 2 explicites ignorés) ; **rien n'a été lancé dans le jeu**.
+Tout est testé dans l'éditeur (2426 tests EditMode, 2 explicites ignorés) ; **rien n'a été lancé dans le jeu**.
 
 Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, filtrer sur `[KSP1PartMod] perf:` et
 `[KSP1PartMod] textures:`.
@@ -39,9 +39,12 @@ seconde quand une fusée de test est posée.
   même absentes du fichier : les laisser ainsi.
 - [ ] Pour la mesure des images : ajouter `"perf_counter": true` dans `animations.json` (absent = `false`).
   Facultatif : `"perf_window_seconds": 30` pour une ligne toutes les 30 s au lieu de 10.
-- [ ] Ouvrir le **Gestionnaire des tâches**, onglet **Performances**, **GPU** : on y lira la « Mémoire GPU dédiée ».
-  C'est le seul vrai chiffre de mémoire vidéo : le mod ne sait pas le lire (il faudrait du code natif). Le noter à la
-  main, avec son moment, à chaque point « Mémoire » ci-dessous.
+- [ ] Ouvrir le **Gestionnaire des tâches**, onglet **Détails**. Clic droit sur les en-têtes de colonnes, « Sélectionner
+  les colonnes », cocher **« Mémoire GPU dédiée »**. On lira ce chiffre sur la ligne de `KSP2_x64.exe` : c'est la mémoire
+  vidéo du jeu seul. C'est le seul vrai chiffre de mémoire vidéo : le mod ne sait pas le lire (il faudrait du code natif).
+  Le noter à la main, avec son moment, à chaque point « Mémoire » ci-dessous.
+  - Chiffre secondaire, facultatif : onglet **Performances**, **GPU**, « Mémoire GPU dédiée » de tout le système. Il
+    compte aussi le navigateur, le bureau et les autres applications : ne pas le confondre avec celui du jeu.
 - [ ] Au démarrage, une ligne `perf: armed: load timeline on (24 of 24 Redux phase(s) timed), memory lines on, report
   file on, frame cost on (window 10 s); timer overhead ~<n> ns per timing`. **Attendu** : 24 sur 24, aucune liste
   `not found`, et `<n>` de quelques dizaines de ns (25 à 33 ns mesurés dans l'éditeur ; 0 voudrait dire une mesure ratée).
@@ -81,7 +84,7 @@ seconde quand une fusée de test est posée.
 
 ## 3. Mémoire
 
-- [ ] À chaque moment (menu principal, VAB, vol), noter la « Mémoire GPU dédiée » du Gestionnaire des tâches à côté des
+- [ ] À chaque moment (menu principal, VAB, vol), noter la « Mémoire GPU dédiée » de `KSP2_x64.exe` (onglet Détails) à côté des
   lignes du même moment :
   - `perf: memory at <moment>: allocated … MB, reserved … MB, mono …/… MB, process working set … MB, private … MB; system
     RAM … MB` ;
@@ -144,7 +147,7 @@ seconde quand une fusée de test est posée.
 - [ ] `Player.log`, complet (pas un extrait : les lignes `[System] … completed in …` du jeu servent aussi).
 - [ ] Le fichier le plus récent de `<jeu>/mods/KSP1PartMod/perf/` (`perf-<date>.md` ; les 10 plus récents sont gardés).
 - [ ] Si l'audit a tourné : `<jeu>/mods/KSP1PartMod/audit/audit-<date>.md`.
-- [ ] Les chiffres « Mémoire GPU dédiée » notés à la main, avec leur moment (menu principal, VAB après chaque visite,
-  pas de tir, orbite).
+- [ ] Les chiffres « Mémoire GPU dédiée » de `KSP2_x64.exe` (onglet Détails) notés à la main, avec leur moment (menu
+  principal, VAB après chaque visite, pas de tir, orbite) ; le chiffre de tout le système à part, s'il a été noté.
 - [ ] Les lignes à recopier si le log est trop gros : `[KSP1PartMod] perf:`, `[KSP1PartMod] textures:`,
   `[KSP1PartMod] anim: perf:`, `[KSP1PartMod] audit: perf:` et les `[System] … completed in …`.
