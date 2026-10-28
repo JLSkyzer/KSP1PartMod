@@ -79,6 +79,12 @@ namespace KSP1PartMod.Tests.Animation.Native
                 RadiatorLines.DeployFollows("foldingRadMed", "deploy:Deploy:0"));
         }
 
+        [Test] public void Thermal_KeepsReduxDeployable()
+        {
+            Assert.AreEqual("[KSP1PartMod] thermal: foldingRadLarge: Module_ActiveRadiator keeps Redux's own Data_Deployable (no deploy bridge)",
+                RadiatorLines.KeepsReduxDeployable("foldingRadLarge"));
+        }
+
         [Test] public void Thermal_AlwaysExtended_Reasons()
         {
             Assert.AreEqual("[KSP1PartMod] thermal: p: Module_ActiveRadiator always extended (no deploy clip)", RadiatorLines.AlwaysExtended("p", ExtendedReason.NoDeployClip));

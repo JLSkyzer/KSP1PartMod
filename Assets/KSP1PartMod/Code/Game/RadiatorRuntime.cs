@@ -210,7 +210,11 @@ namespace KSP1PartMod.Game
                 if (!Coolers.TryGetValue(__instance, out var c)) return; // not ours
                 if (!IsOurs(c.Part, RadiatorMapping.NativeActiveRadiator)) return;
                 var current = (Data_Deployable)_radDeployable.GetValue(__instance);
-                if (current != null && !ReferenceEquals(current, c.Bridge)) return; // Redux gave the part a deployable: kept
+                if (current != null && !ReferenceEquals(current, c.Bridge)) // Redux gave the part a deployable: kept
+                {
+                    IsruRuntime.LogOnce("kept|" + c.Part + "|" + RadiatorMapping.NativeActiveRadiator, RadiatorLines.KeepsReduxDeployable(c.Part));
+                    return;
+                }
                 var bridge = c.Bridge ?? new Data_Deployable();
                 c.Bridge = bridge;
                 _radDeployable.SetValue(__instance, bridge);

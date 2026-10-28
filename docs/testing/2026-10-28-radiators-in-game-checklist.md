@@ -65,6 +65,11 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
   le rallume).
 - [ ] Un radiateur dépliable sauvegardé allumé et déployé revient allumé et refroidit (pas bloqué sur « inactif » sans
   rien retirer) ; ligne `cooler state repaired: on, OFF -> IDLE` possible.
+- [ ] Un radiateur dépliable dont Redux a gardé son propre `Data_Deployable` n'a pas de pont : ligne `thermal: <pièce>:
+  Module_ActiveRadiator keeps Redux's own Data_Deployable (no deploy bridge)`, une fois par pièce.
+
+> **Note.** Un radiateur déjà déployé dans une sauvegarde de la 0.10.0 démarre éteint : l'allumage automatique ne se fait
+> qu'au passage à « déployé ». Le replier puis le redéployer l'allume, ou l'allumer à la main dans le PAM.
 
 ## 5. Chaleur
 

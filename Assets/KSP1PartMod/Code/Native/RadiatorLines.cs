@@ -63,6 +63,10 @@ namespace KSP1PartMod.Native
             ThermalPrefix + $"{part}: {RadiatorMapping.NativeActiveRadiator} always extended (" +
             (reason == ExtendedReason.NoDeployClip ? "no deploy clip" : reason == ExtendedReason.AnimationsOff ? "animations off" : "entry gated by B9") + ")";
 
+        /// <summary>A radiator of ours to which Redux gave its own <c>Data_Deployable</c>: kept, no bridge (once per part per session).</summary>
+        public static string KeepsReduxDeployable(string part) =>
+            ThermalPrefix + $"{part}: {RadiatorMapping.NativeActiveRadiator} keeps Redux's own Data_Deployable (no deploy bridge)";
+
         public static string TurnedOnWhenExtended(string part) => ThermalPrefix + $"{part}: radiator turned on when extended";
 
         public static string StateRepaired(string part) => StateRepaired(part, true, "OFF", "IDLE");

@@ -220,8 +220,13 @@ namespace KSP1PartMod.Tests.ReduxMu
             var r = Part<Module_ActiveRadiator>("foldingRadLarge", out _, on: false);
             var redux = new Data_Deployable();
             AccessTools.Field(typeof(Module_ActiveRadiator), "_dataDeployable").SetValue(r, redux);
+            _lines.Clear();
             Init(r);
             Assert.AreSame(redux, Deployable(r), "Redux's own deployable kept");
+            const string kept = "[KSP1PartMod] thermal: foldingRadLarge: Module_ActiveRadiator keeps Redux's own Data_Deployable (no deploy bridge)";
+            Assert.AreEqual(1, _lines.Count(l => l == kept), string.Join("\n", _lines));
+            RadiatorRuntime.AfterActiveRadiatorInit(r);
+            Assert.AreEqual(1, _lines.Count(l => l == kept), "once per part per session");
 
             var native = Part<Module_ActiveRadiator>("radiator_2v_radial_1x8", out var nativeCooler, on: false);
             SetState(nativeCooler, CoolerStates.IDLE);
