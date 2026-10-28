@@ -52,7 +52,7 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 - [ ] `science: definitions: read <d> EXPERIMENT_DEFINITION(s) from <f> of <n> cfg file(s) under mods/KSP1 in <ms> ms; 0
   MM edit(s) of EXPERIMENT_DEFINITION not applied; <m> MM edit(s) of science modules not applied`. **Attendu : d = 73**
   avec le fichier de série (55 de BDB + 18 de série) ; **55** sans. **m = 17** sur l'installation actuelle (patchs
-  `@PART` bruts, `NEEDS` non résolus : la plupart visent des mods absents). Noter le temps `<ms>`.
+  `@PART`, `+PART` ou `%PART` bruts, `NEEDS` non résolus : la plupart visent des mods absents). Noter le temps `<ms>`.
 - [ ] `science: localization: <t> term(s) added (…)`. Aucune ligne `localization … failed`.
 - [ ] `science: definitions: <g> queued through Patch Manager; skipped: …`. g = définitions construites : au plus 76 avec
   le fichier (73 + 3 variantes DMagic `KSP1_bd_massSpec_s48_b1`, `KSP1_bd_cosmicRay_s48_b1`, `KSP1_bd_gammaRay_s48_b1`) ;

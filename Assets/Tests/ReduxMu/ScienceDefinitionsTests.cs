@@ -257,6 +257,32 @@ EXPERIMENT_DEFINITION
             }
         }
 
+        /// <summary>Performance plan Task 1: the game's callback runs once even when our part throws (the store's
+        /// <c>AddToStore</c> or check); with an error sink the exception stops there, without one it propagates after the
+        /// game's callback.</summary>
+        [Test] public void CallbackChain_InnerRunsOnce_WhenBeforeThrows()
+        {
+            var calls = 0;
+            Exception seen = null;
+            var wrapped = CallbackChain.Wrap(() => throw new InvalidOperationException("ours"), () => calls++, e => seen = e);
+            Assert.DoesNotThrow(() => wrapped());
+            Assert.AreEqual(1, calls);
+            Assert.IsInstanceOf<InvalidOperationException>(seen);
+
+            calls = 0;
+            var bare = CallbackChain.Wrap(() => throw new InvalidOperationException("ours"), () => calls++);
+            Assert.Throws<InvalidOperationException>(() => bare());
+            Assert.AreEqual(1, calls, "the inner callback ran before the exception left");
+        }
+
+        [Test] public void CallbackChain_OrderAndNulls()
+        {
+            var order = new List<string>();
+            CallbackChain.Wrap(() => order.Add("ours"), () => order.Add("game"))();
+            CollectionAssert.AreEqual(new[] { "ours", "game" }, order);
+            Assert.DoesNotThrow(() => CallbackChain.Wrap(null, null)());
+        }
+
         [Test] public void StoreRoute_NotInitialized_AddsNothing()
         {
             ScienceDefinitions.QueueForTests(new[] { Model() });

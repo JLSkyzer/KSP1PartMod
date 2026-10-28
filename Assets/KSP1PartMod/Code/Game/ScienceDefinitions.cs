@@ -340,13 +340,13 @@ namespace KSP1PartMod.Game
             {
                 var store = __instance;
                 var inner = onInitialized;
-                onInitialized = () =>
+                // The game's own callback runs whatever ours does: a throw here must never stop the campaign load.
+                onInitialized = CallbackChain.Wrap(() =>
                 {
                     if (ViaStore) AddToStore(store);
                     try { Check(store); }
                     catch (Exception e) { Error(ScienceLines.Failed("store check", e.ToString())); }
-                    inner?.Invoke();
-                };
+                }, inner, e => Error(ScienceLines.Failed("store", e.ToString())));
             }
             catch (Exception e)
             {
