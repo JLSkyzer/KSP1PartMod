@@ -214,6 +214,7 @@ EXPERIMENT_DEFINITION
             var b = ScienceDefinitionBuilder.From(CfgText.Parse(Def.Replace("bd_inventedProbe", "bd_inventedOther")).GetNodes("EXPERIMENT_DEFINITION").Single(),
                 null, AnimationSettings.Defaults, null);
             ScienceDefinitions.QueueForTests(new[] { a, b });
+            ScienceDefinitions.ModEnabledSource = () => true;
             WithGameSettings(() =>
             {
                 var store = new ScienceExperimentsDataStore();
@@ -230,6 +231,28 @@ EXPERIMENT_DEFINITION
                 Assert.IsTrue(called);
                 CollectionAssert.AreEquivalent(new[] { "KSP1_bd_inventedProbe", "KSP1_bd_inventedOther" }, store.GetAllExperimentIDs());
             });
+        }
+
+        /// <summary>Route B fails closed: no plugin instance (null), or KSP1PartMod off in the campaign, adds nothing and still
+        /// calls the game.</summary>
+        [Test] public void StoreRoute_NoPluginOrModOff_AddsNothing()
+        {
+            foreach (var enabled in new bool?[] { null, false })
+            {
+                ScienceDefinitions.QueueForTests(new[] { Model() });
+                ScienceDefinitions.ModEnabledSource = () => enabled;
+                WithGameSettings(() =>
+                {
+                    var store = new ScienceExperimentsDataStore();
+                    var called = false;
+                    Action callback = () => called = true;
+                    ScienceDefinitions.BeforeStoreInitialize(store, ref callback);
+                    AccessTools.Field(typeof(ScienceExperimentsDataStore), "_isInitialized").SetValue(store, true);
+                    callback();
+                    Assert.IsTrue(called, "the game's callback still runs");
+                    CollectionAssert.IsEmpty(store.GetAllExperimentIDs(), "enabled = " + (enabled?.ToString() ?? "null"));
+                });
+            }
         }
 
         [Test] public void StoreRoute_NotInitialized_AddsNothing()

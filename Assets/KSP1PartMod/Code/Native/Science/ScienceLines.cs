@@ -62,10 +62,16 @@ namespace KSP1PartMod.Native.Science
 
         public const string LocalizationMissing = Prefix + "localization: ReduxLocalizer not found, generated experiments show no name";
 
-        public static string Store(int present, int generated, IEnumerable<string> ksp2Ids)
+        /// <summary>Route A queued only part of the definitions (or threw): the rest go through route B.</summary>
+        public static string PatchManagerPartial(int queued, int generated) =>
+            Prefix + $"definitions: Patch Manager queued {queued} of {generated}, the rest go to the experiment store";
+
+        /// <param name="modOff">KSP1PartMod is off in the campaign: no KSP1 definition is expected.</param>
+        public static string Store(int present, int generated, IEnumerable<string> ksp2Ids, bool modOff = false)
         {
             var ids = (ksp2Ids ?? Enumerable.Empty<string>()).ToList();
-            return Prefix + $"store: {present} of {generated} KSP1 definition(s) present; KSP2 experiments: {ids.Count} ({string.Join(", ", ids)})";
+            return Prefix + $"store: {present} of {generated} KSP1 definition(s) present{(modOff ? " (KSP1PartMod off in this campaign: expected)" : "")}; " +
+                   $"KSP2 experiments: {ids.Count} ({string.Join(", ", ids)})";
         }
 
         public static string StoreDiffers(IEnumerable<string> added, IEnumerable<string> removed, IEnumerable<string> changed)

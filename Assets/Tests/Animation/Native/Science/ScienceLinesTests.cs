@@ -56,6 +56,17 @@ EXPERIMENT_DEFINITION
             Assert.AreEqual("[KSP1PartMod] science: store: KSP1PartMod is off in this campaign, no KSP1 definition added", ScienceLines.StoreOff);
         }
 
+        [Test] public void PatchManagerPartial_StoreWithTheModOff()
+        {
+            Assert.AreEqual("[KSP1PartMod] science: definitions: Patch Manager queued 12 of 55, the rest go to the experiment store",
+                ScienceLines.PatchManagerPartial(12, 55));
+            Assert.AreEqual("[KSP1PartMod] science: store: 0 of 55 KSP1 definition(s) present (KSP1PartMod off in this campaign: expected); " +
+                            "KSP2 experiments: 1 (CrewObservation)",
+                ScienceLines.Store(0, 55, new[] { "CrewObservation" }, modOff: true));
+            Assert.AreEqual("[KSP1PartMod] science: store: 55 of 55 KSP1 definition(s) present; KSP2 experiments: 0 ()",
+                ScienceLines.Store(55, 55, null, modOff: false));
+        }
+
         // ---- Task 4
 
         [Test] public void ImporterPart_Skipped()

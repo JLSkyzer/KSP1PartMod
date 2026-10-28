@@ -61,6 +61,16 @@ namespace KSP1PartMod.Game
         /// <summary>Whether the definitions go to the experiment store (route B).</summary>
         internal static bool ViaStore { get; private set; }
 
+        /// <summary>Whether KSP1PartMod is on in the campaign; null without a plugin instance. Tests may replace it.</summary>
+        internal static Func<bool?> ModEnabledSource;
+
+        private static bool? ModEnabled()
+        {
+            if (ModEnabledSource != null) return ModEnabledSource();
+            var plugin = KSP1PartModPlugin.Instance;
+            return plugin == null ? (bool?)null : plugin.Enabled;
+        }
+
         private static NativeExperiments _live;
         private static List<ScienceDefinitionModel> _queued = new List<ScienceDefinitionModel>();
         private static readonly Dictionary<string, string> Json = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -108,14 +118,15 @@ namespace KSP1PartMod.Game
                     var queued = 0;
                     try
                     {
-                        queued = QueueThroughPatchManager(modId, built);
+                        QueueThroughPatchManager(modId, built, ref queued);
                         viaPm = queued == built.Count;
                     }
                     catch (Exception e)
                     {
                         Error(ScienceLines.Failed("definitions: Patch Manager queue", e.ToString()));
                     }
-                    if (!viaPm) Warn(ScienceLines.PatchManagerMissing);
+                    // Patch Manager is there: a throw or a partial queue is not its absence.
+                    if (!viaPm) Warn(ScienceLines.PatchManagerPartial(queued, built.Count));
                 }
             }
             if (!viaPm)
@@ -255,12 +266,12 @@ namespace KSP1PartMod.Game
             return duplicate != null && duplicate.IsStatic && full != null && typeof(JToken).IsAssignableFrom(full.FieldType);
         }
 
-        /// <summary>Calls Patch Manager's types directly; kept apart so that a game without them only fails here.</summary>
+        /// <summary>Calls Patch Manager's types directly; kept apart so that a game without them only fails here.
+        /// <paramref name="queued"/> counts the definitions queued, also when a later one throws.</summary>
         [MethodImpl(MethodImplOptions.NoInlining)]
-        private static int QueueThroughPatchManager(string modId, List<ScienceDefinitionModel> built)
+        private static void QueueThroughPatchManager(string modId, List<ScienceDefinitionModel> built, ref int queued)
         {
             var scope = PatchManager.CSharpPatching.Patching.ForMod(modId);
-            var queued = 0;
             foreach (var d in built)
             {
                 var data = Json[d.ExperimentId];
@@ -268,7 +279,6 @@ namespace KSP1PartMod.Game
                     .Do(asset => ReplaceData(asset, data));
                 queued++;
             }
-            return queued;
         }
 
         /// <summary>The <c>.Do</c> of a duplicate: the copy's <c>data</c> becomes the definition; <c>version</c> is kept.</summary>
@@ -304,8 +314,8 @@ namespace KSP1PartMod.Game
             try
             {
                 if (store == null || !store.IsInitialized) return;
-                var plugin = KSP1PartModPlugin.Instance;
-                if (plugin != null && !plugin.Enabled)
+                // No plugin instance: off (never add a definition to a campaign we cannot see is ours).
+                if (ModEnabled() != true)
                 {
                     Info(ScienceLines.StoreOff);
                     return;
@@ -366,7 +376,7 @@ namespace KSP1PartMod.Game
             var present = ids.Count(ours.Contains);
             var ksp2 = ids.Where(i => !i.StartsWith(ScienceDefinitionBuilder.IdPrefix, StringComparison.Ordinal)).ToList();
             _live = Live(store, ksp2);
-            Info(ScienceLines.Store(present, _queued.Count, ksp2));
+            Info(ScienceLines.Store(present, _queued.Count, ksp2, ModEnabled() == false));
             var (added, removed, changed) = NativeExperiments.Diff(NativeExperiments.Redux26w42c, _live);
             if (added.Count + removed.Count + changed.Count > 0) Info(ScienceLines.StoreDiffers(added, removed, changed));
         }
@@ -401,6 +411,7 @@ namespace KSP1PartMod.Game
             Json.Clear();
             Definitions = Empty;
             ViaStore = false;
+            ModEnabledSource = null;
         }
     }
 }
