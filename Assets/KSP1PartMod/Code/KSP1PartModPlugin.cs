@@ -169,6 +169,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // Diagnostic only (0.13.1): the plume objects of KSP1 engines in flight (whatever enabled is).
+                PlumeDiagnostics.TryApply(new Harmony(PlumeDiagnostics.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.PlumeLines.Prefix + "diagnostics not armed: " + e);
+            }
+            try
+            {
                 // After NativeModules, before Redux's import (which builds the tank catalog and the variant sets).
                 B9Overrides.TryApply(new Harmony(B9Overrides.HarmonyId), Animations);
             }
