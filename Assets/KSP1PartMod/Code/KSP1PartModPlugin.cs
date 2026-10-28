@@ -187,7 +187,8 @@ namespace KSP1PartMod
             try
             {
                 // Before Redux's import, which runs after pre-initialization (see ApplyMuReaderFix).
-                Ksp1Textures.TryApply(Animations.ShareKsp1Textures, Animations.Ksp1TexturesFollowQuality, Animations.RaiseStreamingBudget);
+                Ksp1Textures.TryApply(Animations.ShareKsp1Textures, Animations.Ksp1TexturesFollowQuality, Animations.RaiseStreamingBudget,
+                    Animations.PerfMemoryLines);
             }
             catch (Exception e)
             {

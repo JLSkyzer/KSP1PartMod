@@ -73,7 +73,9 @@ namespace KSP1PartMod.Game
         private static bool SharingActive =>
             _sharingArmed && !_broken && TextureShareRule.SharingActive(Ksp1ImportedPartRegistry.IsComplete, _releasing);
 
-        public static void TryApply(bool share, bool followQuality, bool raiseBudget)
+        /// <param name="sourceExtension"><c>perf_memory_lines</c>: the census prints texture names with their source extension,
+        /// read by a postfix on <c>ResolveTexturePath</c>; without the census lines that patch is not made.</param>
+        public static void TryApply(bool share, bool followQuality, bool raiseBudget, bool sourceExtension = true)
         {
             var log = KSP1PartModPlugin.Log;
             _followQuality = followQuality;
@@ -112,7 +114,7 @@ namespace KSP1PartMod.Game
             }
             var complete = ArmImportComplete(measure, completeMethod, m => log.LogWarning(m));
             log.LogInfo(Prefix + "measure armed on Ksp1TextureLoader.LoadTexture" + (complete ? " and Ksp1ImportedPartRegistry.MarkImportComplete" : ""));
-            ArmSourceExtension(loader);
+            if (sourceExtension) ArmSourceExtension(loader);
             log.LogInfo(Prefix + (followQuality
                 ? "quality armed: readable KSP1 textures follow the game's texture quality"
                 : "quality disabled by " + KSP1PartModPlugin.AnimationSettingsFile));

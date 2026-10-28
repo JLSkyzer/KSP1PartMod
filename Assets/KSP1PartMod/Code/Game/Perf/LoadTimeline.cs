@@ -51,6 +51,10 @@ namespace KSP1PartMod.Game.Perf
             public string Prefix, Postfix;
             /// <summary>A <c>void</c> finalizer that only clears a flag the prefix set (the exception passes unchanged).</summary>
             public string Finalizer;
+            /// <summary><see cref="Priority.Last"/> for a timing postfix (it includes our other patches' cost); the end of the
+            /// import, which times nothing of its own, runs first so that every later postfix (the memory moment, the report
+            /// file) already sees the import summary.</summary>
+            public int PostfixPriority = HarmonyLib.Priority.Last;
             public bool Found => Method != null;
         }
 
@@ -67,6 +71,11 @@ namespace KSP1PartMod.Game.Perf
 
         /// <summary>Tests: receives every line instead of the game log.</summary>
         internal static Action<string> Sink;
+
+        /// <summary>Rewrites the perf report (<see cref="PerfReportWriter.Write"/>; tests replace it). Called after the
+        /// <c>ours</c> line, so that the report written at a VAB or flight entry has this load's figures whatever the order in
+        /// which the game delivers its state message to us and to <c>Ksp1Textures</c>.</summary>
+        internal static Action<string> ReportWriter = PerfReportWriter.Write;
 
         private static volatile bool _stopped;
         private static int _stopOnce;
@@ -153,7 +162,8 @@ namespace KSP1PartMod.Game.Perf
                 M("Ksp1ImportedPartRegistry.BeginImport(string)", PerfPhase.ImportWall, registry, "BeginImport", new[] { typeof(string) },
                     nameof(BeforeBeginImport), null),
                 M("Ksp1ImportedPartRegistry.MarkImportComplete(Ksp1EnginePlumeCatalog)", PerfPhase.ImportWall, registry,
-                    "MarkImportComplete", new[] { typeof(Ksp1EnginePlumeCatalog) }, null, nameof(AfterMarkImportComplete)),
+                    "MarkImportComplete", new[] { typeof(Ksp1EnginePlumeCatalog) }, null, nameof(AfterMarkImportComplete),
+                    postfixPriority: Priority.First),
                 M("Ksp1PartTranslator.TryTranslatePart", PerfPhase.Translate, translator, "TryTranslatePart",
                     new[] { typeof(Ksp1ConfigFile), typeof(Ksp1ConfigNode), typeof(Ksp1ImportReport), typeof(PartCore).MakeByRefType(),
                         typeof(string).MakeByRefType() }, nameof(BeforeTranslate), nameof(AfterTranslate), nameof(TranslateDone)),
@@ -185,7 +195,7 @@ namespace KSP1PartMod.Game.Perf
         }
 
         private static Member M(string label, PerfPhase phase, Type owner, string name, Type[] args, string prefix, string postfix,
-            string finalizer = null) =>
+            string finalizer = null, int postfixPriority = Priority.Last) =>
             new Member
             {
                 Label = label,
@@ -194,6 +204,7 @@ namespace KSP1PartMod.Game.Perf
                 Prefix = prefix,
                 Postfix = postfix,
                 Finalizer = finalizer,
+                PostfixPriority = postfixPriority,
             };
 
         /// <summary>The flow-step members and the rebuild part name.</summary>
@@ -261,7 +272,7 @@ namespace KSP1PartMod.Game.Perf
                 {
                     harmony.Patch(m.Method,
                         prefix: m.Prefix == null ? null : new HarmonyMethod(typeof(LoadTimeline), m.Prefix) { priority = Priority.First },
-                        postfix: m.Postfix == null ? null : new HarmonyMethod(typeof(LoadTimeline), m.Postfix) { priority = Priority.Last },
+                        postfix: m.Postfix == null ? null : new HarmonyMethod(typeof(LoadTimeline), m.Postfix) { priority = m.PostfixPriority },
                         finalizer: m.Finalizer == null ? null : new HarmonyMethod(typeof(LoadTimeline), m.Finalizer));
                     timed++;
                 }
@@ -731,6 +742,14 @@ namespace KSP1PartMod.Game.Perf
             Info(PerfLines.Ours(ours));
             LastOurs = ours;
             PerfClock.Clock.Reset(PhaseClock.OurPhases);
+            try
+            {
+                ReportWriter?.Invoke("end of the campaign load");
+            }
+            catch (Exception)
+            {
+                // Write never throws; a replaced writer must not stop the timeline either.
+            }
         }
 
         // ------------------------------------------------------------------ stop and log

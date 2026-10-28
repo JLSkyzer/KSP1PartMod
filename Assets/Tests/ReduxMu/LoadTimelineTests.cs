@@ -25,18 +25,22 @@ namespace KSP1PartMod.Tests.ReduxMu
     public class LoadTimelineTests
     {
         private readonly List<string> _lines = new List<string>();
+        private readonly List<string> _reports = new List<string>();
 
         [SetUp] public void SetUp()
         {
             LoadTimeline.Reset();
             _lines.Clear();
+            _reports.Clear();
             LoadTimeline.Sink = _lines.Add;
+            LoadTimeline.ReportWriter = _reports.Add;
         }
 
         [TearDown] public void TearDown()
         {
             LoadTimeline.Reset();
             LoadTimeline.Sink = null;
+            LoadTimeline.ReportWriter = PerfReportWriter.Write;
             new Harmony(NativeModules.HarmonyId).UnpatchAll(NativeModules.HarmonyId);
             NativeModules.Reset();
             NativeModules.Sink = null;
@@ -103,8 +107,9 @@ namespace KSP1PartMod.Tests.ReduxMu
                     Assert.AreEqual(Priority.First, p.priority, m.Name);
                     Assert.AreEqual(typeof(void), p.PatchMethod.ReturnType, m.Name + ": a timing prefix never skips the original");
                 }
+                // The end of the import times nothing: it runs first, so the memory moment and the report see its summary.
                 foreach (var p in info.Postfixes.Where(p => p.owner == LoadTimeline.HarmonyId))
-                    Assert.AreEqual(Priority.Last, p.priority, m.Name);
+                    Assert.AreEqual(m.Name == "MarkImportComplete" ? Priority.First : Priority.Last, p.priority, m.Name);
                 Assert.IsFalse(info.Transpilers.Any(p => p.owner == LoadTimeline.HarmonyId));
                 foreach (var p in info.Finalizers.Where(p => p.owner == LoadTimeline.HarmonyId))
                     Assert.AreEqual(typeof(void), p.PatchMethod.ReturnType, m.Name + ": a void finalizer leaves the exception as is");
@@ -203,6 +208,65 @@ namespace KSP1PartMod.Tests.ReduxMu
             return null;
         }
 
+        /// <summary>The method of the innermost frame of a trace (<c>at Type.Method (…)</c> → <c>Type.Method</c>).</summary>
+        private static string TopFrame(Exception e)
+        {
+            var first = (e.StackTrace ?? "").Split('\n')[0].Trim();
+            if (first.StartsWith("at ")) first = first.Substring(3);
+            var paren = first.IndexOf(" (", StringComparison.Ordinal);
+            if (paren < 0) paren = first.IndexOf('(');
+            return paren > 0 ? first.Substring(0, paren).Trim() : first;
+        }
+
+        /// <summary>A real import error keeps its origin under the timing finalizer: the innermost frame of the unpatched trace
+        /// is still in the patched one (Harmony must not re-throw with <c>throw ex</c>, which resets the trace on Mono).</summary>
+        private static void AssertTraceKept(Exception before, Exception after, string type)
+        {
+            TestContext.Out.WriteLine("unpatched:\n" + before.StackTrace + "\npatched:\n" + after.StackTrace);
+            StringAssert.Contains(type, before.StackTrace);
+            StringAssert.Contains(type, after.StackTrace);
+            // The patched method is a new dynamic method each time (_Patch0, _Patch3…): compare without that suffix.
+            var top = System.Text.RegularExpressions.Regex.Replace(TopFrame(before), @"_Patch\d+", "");
+            Assert.IsNotEmpty(top);
+            StringAssert.Contains(top, System.Text.RegularExpressions.Regex.Replace(after.StackTrace, @"_Patch\d+", ""),
+                "the original innermost frame is still there");
+        }
+
+        /// <summary>Thrown two calls deep, so that a trace reset by a <c>throw ex</c> re-throw would lose <see cref="Inner"/>.</summary>
+        public static class Thrower
+        {
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public static void Outer() => Inner();
+
+            [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+            public static void Inner() => throw new InvalidOperationException("deep");
+        }
+
+        /// <summary>The timing finalizers' shape (a <c>void</c> finalizer that only clears a flag, as <c>TranslateDone</c> and
+        /// <c>RebuildDone</c>) under the game's Harmony: an exception thrown deeper keeps its innermost frame.</summary>
+        [Test] public void TimingFinalizer_KeepsTheTraceOfADeepException()
+        {
+            const string id = "KSP1PartMod.Tests.TraceKept";
+            var harmony = new Harmony(id);
+            try
+            {
+                var before = Thrown(Thrower.Outer);
+                StringAssert.Contains(nameof(Thrower.Inner), before.StackTrace);
+                harmony.Patch(AccessTools.Method(typeof(Thrower), nameof(Thrower.Outer)),
+                    finalizer: new HarmonyMethod(typeof(LoadTimeline), "TranslateDone"));
+                harmony.Patch(AccessTools.Method(typeof(Thrower), nameof(Thrower.Outer)),
+                    finalizer: new HarmonyMethod(typeof(LoadTimeline), "RebuildDone"));
+                var after = Thrown(Thrower.Outer);
+                TestContext.Out.WriteLine("unpatched:\n" + before.StackTrace + "\npatched:\n" + after.StackTrace);
+                Assert.AreSame(typeof(InvalidOperationException), after.GetType());
+                StringAssert.Contains(nameof(Thrower.Inner), after.StackTrace, "the frame where the exception was thrown is kept");
+            }
+            finally
+            {
+                harmony.UnpatchAll(id);
+            }
+        }
+
         private static void Rebuild(object entry) =>
             AccessTools.Method(typeof(Ksp1ImportedPartRegistry), "RebuildPrefab").Invoke(null, new[] { entry });
 
@@ -215,6 +279,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsNotNull(after);
             Assert.AreEqual(before.GetType(), after.GetType());
             Assert.AreEqual(before.Message, after.Message);
+            AssertTraceKept(before, after, nameof(Ksp1ImportedPartRegistry));
             Assert.IsFalse(PerfClock.InRebuild, "the finalizer clears the flag the prefix set");
             PerfClock.NoteTicks(PerfPhase.AnimationStep, 5);
             Assert.AreEqual(1, PerfClock.Clock.Get(PerfPhase.AnimationStep).Calls, "later notes are not dropped");
@@ -231,6 +296,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             var after = Thrown(call);
             Assert.AreEqual(before.GetType(), after?.GetType());
             Assert.AreEqual(before.Message, after.Message);
+            AssertTraceKept(before, after, nameof(Ksp1PartTranslator));
             Assert.IsFalse(LoadTimeline.InPart);
         }
 
@@ -333,6 +399,8 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual(5, _lines.Count, "the rebuild line belongs to the memory moments of Ksp1Textures");
             Assert.AreEqual(42.0, LoadTimeline.MainMenuAfterSeconds);
             Assert.AreEqual(2, LoadTimeline.CampaignLoads.Count);
+            // The report is rewritten after each ours line: it has this load's figures whatever the message order.
+            CollectionAssert.AreEqual(new[] { "end of the campaign load", "end of the campaign load" }, _reports);
         }
 
         [Test] public void Rebuilds_AreResetAfterTheirLine()
