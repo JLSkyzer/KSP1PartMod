@@ -536,14 +536,14 @@ namespace KSP1PartMod.Tests.Audit
             var gone = Rec("gone"); gone.NativeModules = new[] { "Module_Heatshield:missing", "Module_ToggleCrossfeed:missing" };
             var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Heatshield" };
             var s = AuditSummary.From(new[] { shield, both, bad, gone, control, Rec("plain") }, 1);
-            Assert.AreEqual("audit: native modules: 2 heat shield(s), 1 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), " +
+            Assert.AreEqual("audit: native modules: 2 heat shield(s), 1 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), 0 radiator(s), " +
                             "2 part(s) where one failed to initialize", s.NativeLine());
             StringAssert.Contains("## Native modules\n\n" + s.NativeLine() + "\n", s.Markdown("x"));
         }
 
         [Test] public void Summary_NativeLine_Empty()
         {
-            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), " +
+            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), 0 radiator(s), " +
                             "0 part(s) where one failed to initialize",
                 AuditSummary.From(new AuditRecord[0], 0).NativeLine());
         }
@@ -557,7 +557,7 @@ namespace KSP1PartMod.Tests.Audit
             var bad = Rec("bad"); bad.NativeModules = new[] { "Module_Mine:uninitialized", "Module_ResourceScanner:missing" };
             var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Mine" };
             var s = AuditSummary.From(new[] { isru, drill, scanner, bad, control }, 1);
-            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 2 converter(s), 1 drill(s), 1 scanner(s), " +
+            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 2 converter(s), 1 drill(s), 1 scanner(s), 0 radiator(s), " +
                             "1 part(s) where one failed to initialize", s.NativeLine());
             Assert.AreEqual(AuditNative.Converter, ConverterMapping.NativeModule);
             Assert.AreEqual(AuditNative.Drill, HarvesterMapping.NativeModule);
@@ -565,6 +565,23 @@ namespace KSP1PartMod.Tests.Audit
 
             var rows = ReadCsv(AuditCsv.Document(new[] { drill }));
             Assert.AreEqual("Module_Mine;Module_ResourceConverter", rows[1][AuditCsv.Columns.ToList().IndexOf("native_modules")]);
+        }
+
+        /// <summary>0.11.0: a part counts once as a radiator, whichever of the two modules it runs; a failed one is a failed part.</summary>
+        [Test] public void Summary_NativeLine_Radiators()
+        {
+            var fixedRad = Rec("fixed"); fixedRad.NativeModules = new[] { "Module_Cooler" };
+            var folding = Rec("folding"); folding.NativeModules = new[] { "Module_ActiveRadiator" };
+            var bad = Rec("bad"); bad.NativeModules = new[] { "Module_ActiveRadiator:uninitialized" };
+            var gone = Rec("gone"); gone.NativeModules = new[] { "Module_Cooler:missing" };
+            var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Cooler" };
+            var s = AuditSummary.From(new[] { fixedRad, folding, bad, gone, control }, 1);
+            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), " +
+                            "2 radiator(s), 2 part(s) where one failed to initialize", s.NativeLine());
+            Assert.AreEqual(AuditNative.Cooler, RadiatorMapping.NativeCooler);
+            Assert.AreEqual(AuditNative.ActiveRadiator, RadiatorMapping.NativeActiveRadiator);
+            var rows = ReadCsv(AuditCsv.Document(new[] { folding }));
+            Assert.AreEqual("Module_ActiveRadiator", rows[1][AuditCsv.Columns.ToList().IndexOf("native_modules")]);
         }
 
         [Test] public void Markdown_ModuleManagerLines_AreInTheHeader_OnlyWhenGiven()

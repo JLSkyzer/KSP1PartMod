@@ -14,6 +14,9 @@ namespace KSP1PartMod.Audit
         public const string Converter = "Module_ResourceConverter";
         public const string Drill = "Module_Mine";
         public const string Scanner = "Module_ResourceScanner";
+        /// <summary>Radiators (0.11.0): fixed ones are a cooler, deployable ones an active radiator.</summary>
+        public const string Cooler = "Module_Cooler";
+        public const string ActiveRadiator = "Module_ActiveRadiator";
         public const string UninitializedTag = ":uninitialized";
         public const string MissingTag = ":missing";
 

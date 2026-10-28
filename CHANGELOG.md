@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.11.0 - 2026-10-28
+
+Radiators: the KSP1 `ModuleActiveRadiator` that Redux dropped is imported as KSP2's own cooler. Not run in game yet; checklist (French) in `docs/testing/2026-10-28-radiators-in-game-checklist.md`. Native systems only: no conduction, no core heat, no new resource.
+
+- **Switches** (`animations.json`, applied by Redux's import whatever `enabled` is): `ksp1_radiators`, `radiator_deploy_bridge`, `radiator_auto_on` (default true), `radiator_flux_scale` (default 1, 0.01 to 100), `radiator_ksp1_rates` (default false). Each switch set to `false` gives the behaviour of 0.10.0 for its point.
+- **Two conversions.** A fixed radiator becomes `Module_Cooler` (17 installed parts); a radiator with a `ModuleDeployableRadiator` becomes `Module_ActiveRadiator` (15 installed), a `Data_Cooler` plus a `Data_ActiveRadiator`. A part with several radiator modules gets their kW summed. A resource the game does not have is dropped (0 installed).
+- **Unit.** kW = `maxEnergyTransfer` / 50, from KSP1's public figures (50000 gives 1000 kW): `radPanelLg` 200 kW, `foldingRadLarge` 1000 kW; the installed set spans 2 to 1000 kW. A larger collection has outliers (Sterling radiators up to millions of kW, HeatControl up to 8000 kW): `radiator_flux_scale` tames them. The balance against the 0.10.0 heat of converters and drills is only checked in game.
+- **Electric pace.** EC follows KSP2's native pace, 100 kW per EC/s (read from the game's coolers, fallback 100; line `native: cooler reference:`). A large folding radiator therefore draws about 10 EC/s whenever it is on, where KSP1 drew at most 0.5 EC/s. `radiator_ksp1_rates: true` keeps the cfg rate; other resources (XenonGas) always keep theirs. Each part line logs both EC figures.
+- **Deploy bridge.** A deployable radiator cools only while its KSP1 deploy clip is extended, and switches off and hides its toggle when folded, through Redux's own `Module_ActiveRadiator` retract path (the bridge reads the existing Deploy entry; no entry is added and no saved key moves). `radiator_deploy_bridge: false`: it cools folded and is never switched on automatically. The bridge needs three private members of `Module_ActiveRadiator`; a missing one turns it off with one line.
+- **Auto-on.** Fixed radiators start on; a deployable one turns on when it is extended (line `thermal: ... radiator turned on when extended`). A radiator the player switched off stays off after a reload: only a later extension turns it on again. A new part is told from a reloaded one by `justLaunched`; if that is missed, the only effect is no auto-on.
+- **Start-state repairs.** A save keeps only the cooler switch, and the state comes back from the definition. In flight the mod repairs the mismatch both ways (on with OFF becomes IDLE; off with IDLE becomes OFF, otherwise a switched-off fixed radiator would cool and draw EC while showing off), and again at each extension of a deployable one (lines `thermal: ... cooler state repaired`).
+- **Passive radiators** (`emissiveConstant` >= 0.8, no `ModuleActiveRadiator`: 486 installed) already work through Redux's import of `emissiveConstant`; they are only counted (`native: radiators: passive:`).
+- **Skipped, and why.** KSP2 cools the vessel through one pool and has no conduction between parts, so `parentCoolingOnly` has no meaning; no core heat (`isCoreRadiator`); `overcoolFactor`; electric use proportional to the load (KSP2's cooler draws at a constant pace); panel sun tracking and wind break (no counterpart). The Heat glow of radiator parts (`ModuleAnimateHeat`) stays dark: KSP2 does not heat a radiator.
+- **Audit.** The `native_modules` CSV column carries `Module_Cooler` and `Module_ActiveRadiator`; the `audit: native modules:` line counts `<n> radiator(s)`.
+- **Safety.** Each importer failure leaves the part as 0.10.0 imports it. A missing game member turns its feature off with one line. A runtime throw stops the radiator patches for the session (`thermal: patch failed`).
+- **Clean room.** No KSP1 or Squad code; Redux is called through its own members, resolved by name, never copied.
+- 2147 EditMode tests (2145 passing, 2 explicit and skipped); 2146 before the audit count.
+
 ## 0.10.0 - 2026-10-28
 
 Converters, drills and scanners: the KSP1 ISRU modules that Redux dropped are imported as KSP2's own modules. Not run in game yet; checklist (French) in `docs/testing/2026-10-28-converters-drills-in-game-checklist.md`. Native systems only: no new resource, map, economy or heat model.

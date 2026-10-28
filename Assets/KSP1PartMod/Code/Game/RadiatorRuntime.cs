@@ -296,8 +296,9 @@ namespace KSP1PartMod.Game
                 }
             }
             if (!c.Enabled.GetValue()) return;
-            // On but stuck: switched on while folded (the action group still works then), or saved on with the definition's OFF.
-            // The native radiator only leaves RETRACTED through the switch's change event.
+            // On but stuck: saved on with the definition's OFF (the native radiator leaves OFF only through the switch's
+            // change event). RETRACTED is not stuck, the native path leaves it when the panel extends; that branch is
+            // redundant but harmless.
             var state = c.GetState();
             if (state == CoolerStates.OFF || state == CoolerStates.RETRACTED) Repair(c, CoolerStates.IDLE, "extend|", state);
         }

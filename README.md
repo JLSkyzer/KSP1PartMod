@@ -104,6 +104,11 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "isru_heat_scale": 1,
   "isru_active_animation": true,
   "isru_ksp1_rates": false,
+  "ksp1_radiators": true,
+  "radiator_deploy_bridge": true,
+  "radiator_auto_on": true,
+  "radiator_flux_scale": 1,
+  "radiator_ksp1_rates": false,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissionColor", "_EmissiveColor"],
     "_TintColor": ["_TintColor"],
@@ -147,6 +152,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `ablator_rate_scale` (0.8.0, default `1`, 0.01 to 100): multiplies the burn rate of those shields. `ablator_char` (default `true`): the shield's `shieldChar` colour follows the part's Ablator, white when full, black when empty. It is not used where another colour changer of the part writes the same shader property (the KV pods keep their lights); on the stock and KRE shields (`_BurnColor`) it probably shows nothing, since the KSP2 shader of KSP1 parts is not documented with that property.
 - B9 overrides (0.9.0, all default `true`, see "B9PartSwitch overrides"): `b9_mass`, `b9_resources`, `b9_module_data`, `b9_module_active` (needs `b9_module_data`), `b9_part_scalars`, `b9_new_part_switches`.
 - Converters, drills and scanners (0.10.0, see that section): `ksp1_converters`, `ksp1_drills`, `ksp1_survey_scanners`, `ksp1_resource_scanners`, `ksp1_ore_resource`, `harvest_multiplier`, `isru_heat_scale`, `isru_active_animation`, `isru_ksp1_rates`.
+- Radiators (0.11.0, see that section): `ksp1_radiators`, `radiator_deploy_bridge`, `radiator_auto_on`, `radiator_flux_scale`, `radiator_ksp1_rates`.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
 ### Phase 2a: material, light and glow curves (0.4.0)
@@ -211,6 +217,29 @@ Redux drops the KSP1 ISRU modules. Since 0.10.0 the mod imports them as KSP2's o
 - **Skipped.** Asteroid and comet drills, ocean, atmospheric and exospheric harvesters (no such systems in KSP2); `ModuleCoreHeat` and its thermal efficiency (no core temperature in KSP2); crew bonuses, `FillAmount`, `DumpExcess`, `HarvestThreshold`; scanners with `RequiresUnlock` (BDB magnetometers, OrbitalScanner: KSP2 has no local readout).
 - **Audit.** The `native_modules` column and the `audit: native modules:` line count converters, drills and scanners.
 
+## Radiators (0.11.0)
+
+Redux drops the KSP1 `ModuleActiveRadiator`. Since 0.11.0 the mod imports it as KSP2's own cooler, at Redux's import (whatever `enabled` is): no new heat model. Built, not verified in game. Checklist (French): `docs/testing/2026-10-28-radiators-in-game-checklist.md`.
+
+| Key | Default | Effect | `false` (or the 0.10.0 value) |
+|---|---|---|---|
+| `ksp1_radiators` | `true` | A KSP1 `ModuleActiveRadiator` becomes `Module_Cooler`, or `Module_ActiveRadiator` when the part also has a `ModuleDeployableRadiator`. It removes heat from every hot part of its vessel through KSP2's thermal model. | Redux drops the module: no cooler. |
+| `radiator_deploy_bridge` | `true` | A deployable radiator cools only while its KSP1 deploy clip is extended, and switches off (toggle hidden) when folded. Needs `enabled` to follow the clip. | It cools folded too, and is never switched on automatically. |
+| `radiator_auto_on` | `true` | Fixed radiators start on; a deployable one turns on when it is extended (once per extension: a radiator you switch off stays off). | All radiators start off until you switch them on, as KSP2's own. |
+| `radiator_flux_scale` | `1` (0.01 to 100) | Multiplies the kW a KSP1 radiator removes. | — |
+| `radiator_ksp1_rates` | `false` | `false`: electric charge at KSP2's rate per kW (100 kW per EC/s in 26w42c). `true`: the cfg rate of KSP1. | — |
+
+- **Power.** kW = `maxEnergyTransfer` / 50 (KSP1's public figures: 50000 gives 1000 kW), so `radPanelLg` removes 200 kW and `foldingRadLarge` 1000 kW. The installed set stays within 2 to 1000 kW. Some mods in a larger collection go far beyond (Sterling radiators reach millions of kW): tame them with `radiator_flux_scale`.
+- **Electricity.** KSP2's pace is 100 kW per EC/s by default, so a large folding radiator draws about **10 EC/s** whenever it is on (KSP1: at most 0.5 EC/s). `radiator_ksp1_rates: true` keeps KSP1's rate; `radiator_auto_on: false` stops small craft from being drained at launch. Other resources (XenonGas) always keep their cfg rate.
+- **One pool.** KSP2 has no conduction between parts and cools the vessel through one pool: a radiator removes heat from any hot part of its vessel, wherever it is mounted.
+- **Start state.** Only the cooler switch is saved; the cooler state comes back from the definition. The mod repairs the mismatch in flight, both ways (on with OFF becomes IDLE, off with IDLE becomes OFF), and again when a panel extends (lines `thermal: ... cooler state repaired`).
+- **Auto-on.** It relies on `VesselComponent.justLaunched` to tell a new part from a reloaded one. If that is missed, the only effect is that a radiator extended at the start of a launch is not switched on.
+- **Passive radiators** (`emissiveConstant` >= 0.8, no `ModuleActiveRadiator`) already work through Redux's import; the log counts them (`native: radiators: passive:`).
+- **Skipped.** `parentCoolingOnly` and conduction (no such system), `overcoolFactor`, `isCoreRadiator` and core heat (KSP2 has none), electric use proportional to the load, sun tracking, and wind break.
+- **Heat glow.** KSP2 does not heat a radiator, so the Heat clip of Sterling and HeatControl parts stays dark.
+- **Safety.** Each importer failure leaves the part as 0.10.0 imports it. The bridge reads three private members of `Module_ActiveRadiator`; a missing one turns it off with one line and the radiator then cools folded. A runtime throw stops the radiator patches for the session (`thermal: patch failed`).
+- **Audit.** The `native_modules` column and the `audit: native modules:` line count radiators.
+
 ## Audit mode (0.6.0)
 
 Off by default. With `"audit_on_vab_entry": true` in `animations.json`, the first time you enter the VAB in a game session (mod enabled in the campaign), the mod loads every KSP1 part once, off screen and one at a time, and writes a report of the parts that fail, throw, stay unfinished or log errors. It changes nothing in your craft, the part list or the undo history, and the shared KSP1 textures are not destroyed. Do not build while it runs; leaving the VAB cancels it, and the next entry resumes. Not run in game yet: checklist in `docs/testing/2026-10-28-audit-in-game-checklist.md`.
@@ -242,7 +271,8 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
   - **Parts gaining a selector** (28 installed) have no `Module_PartSwitch` in a vessel saved in 0.8.0: such a vessel in flight keeps its 0.8.0 values until it is saved and reloaded; after that the tank and part values apply, but the mass only after the craft is rebuilt in the VAB.
   - **Gates:** a gate may name a set that was never appended (a switch whose only override has no native form); this is benign, the part keeps its default subtype.
   - The volume formula and the dry-mass product are inferred from B9's public wiki.
-- Converters, drills and scanners (0.10.0): built, not verified in game. The +Z probe direction and the drill yield are to calibrate in game; a full output tank stops a converter (no `DumpExcess`); a B9 subtype that turns a converter off has no native off form; KSP1 parts with core heat get no radiator behaviour.
+- Converters, drills and scanners (0.10.0): built, not verified in game. The +Z probe direction and the drill yield are to calibrate in game; a full output tank stops a converter (no `DumpExcess`); a B9 subtype that turns a converter off has no native off form; KSP1 parts with core heat get no core heat (radiators: see 0.11.0).
+- Radiators (0.11.0): built, not verified in game. The /50 power unit and the balance against the 0.10.0 heat of converters and drills are only checked in game; the cooling is vessel-wide (no conduction, no core heat, no parent-only cooling); panel tracking and wind break are not reproduced; the Heat glow of radiator parts stays dark.
 - Engine shrouds (0.7.0): built, not verified in game. `ignoreNodes` shrouds keep their reentry geometry after a jettison.
 - Animations: phases 1, 2a and 2b (all built; none verified in game yet beyond what the checklists record). The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
