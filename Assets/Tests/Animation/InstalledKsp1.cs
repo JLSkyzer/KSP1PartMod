@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using NUnit.Framework;
 
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.ReduxMu")]
+[assembly: InternalsVisibleTo("KSP1PartMod.Tests.ModuleManager")]
 
 namespace KSP1PartMod.Tests.Animation
 {
@@ -40,6 +41,32 @@ namespace KSP1PartMod.Tests.Animation
             return Directory.EnumerateFiles(root, "*.cfg", SearchOption.AllDirectories)
                 .OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray();
         }
+
+        public const string DefaultGameDataRoot = @"I:\ksp1";
+
+        /// <summary>The user's whole KSP1 GameData (read only, optional), for census tests. Override the location with the
+        /// <c>KSP1_GAMEDATA</c> environment variable.</summary>
+        public static string GameDataRoot
+        {
+            get
+            {
+                var env = Environment.GetEnvironmentVariable("KSP1_GAMEDATA");
+                return string.IsNullOrWhiteSpace(env) ? DefaultGameDataRoot : env;
+            }
+        }
+
+        /// <summary>Every <c>.cfg</c> file under <see cref="GameDataRoot"/>, sorted; ignores the test when it is absent.</summary>
+        public static string[] GameDataCfg()
+        {
+            var root = GameDataRoot;
+            if (!Directory.Exists(root)) Assert.Ignore($"KSP1 GameData not found at {root} (set KSP1_GAMEDATA)");
+            return Directory.EnumerateFiles(root, "*.cfg", SearchOption.AllDirectories)
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToArray();
+        }
+
+        /// <summary>The first folder under <paramref name="root"/>.</summary>
+        public static string TopFolderUnder(string root, string path) =>
+            path.Substring(root.TrimEnd('\\', '/').Length).TrimStart('\\', '/').Split('\\', '/')[0];
 
         /// <summary>The first folder under the root (the KSP1 mod folder, e.g. <c>Squad</c>).</summary>
         public static string TopFolder(string path) =>

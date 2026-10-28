@@ -86,6 +86,37 @@ namespace KSP1PartMod.Animation.Settings
         /// (<c>b9_module_gates</c>).</summary>
         public bool B9ModuleGates => _switches2a.B9ModuleGates;
 
+        /// <summary>ModuleManager safety net: names blocked by the plugin rule (<c>mm_plugin_safety_net</c>, default true).</summary>
+        public bool MmPluginSafetyNet => _mm.SafetyNet;
+        /// <summary>Plugin names always blocked (<c>mm_plugin_folders</c>), trimmed, distinct, case-insensitive.</summary>
+        public IReadOnlyCollection<string> MmPluginFolders => _mm.PluginFolders;
+        /// <summary>Folders with a DLL and no PART are blocked too (<c>mm_plugin_folders_auto</c>, default true).</summary>
+        public bool MmPluginFoldersAuto => _mm.PluginFoldersAuto;
+        /// <summary>Names never blocked (<c>mm_needs_keep</c>), trimmed, distinct, case-insensitive.</summary>
+        public IReadOnlyCollection<string> MmNeedsKeep => _mm.NeedsKeep;
+        /// <summary>A root patch whose BEFORE/AFTER names an absent mod is dropped, as MM does
+        /// (<c>mm_before_after_need_mod</c>, default true).</summary>
+        public bool MmBeforeAfterNeedMod => _mm.BeforeAfterNeedMod;
+        /// <summary>MM's <c>*=</c>, <c>+=</c>, <c>-=</c>, <c>/=</c> (<c>mm_arithmetic</c>, default true).</summary>
+        public bool MmArithmetic => _mm.Arithmetic;
+        /// <summary>MM's <c>,n</c>, <c>,-n</c>, <c>,*</c> on values and child nodes (<c>mm_index_selectors</c>, default true).</summary>
+        public bool MmIndexSelectors => _mm.IndexSelectors;
+        /// <summary>Unindexed edits hit the first match only, as MM does (<c>mm_edit_first_match</c>, default false: every
+        /// match, as Redux does).</summary>
+        public bool MmEditFirstMatch => _mm.EditFirstMatch;
+
+        /// <summary>The ModuleManager keys of 0.8.0, read together.</summary>
+        private sealed class SwitchesMm
+        {
+            public bool SafetyNet = true, PluginFoldersAuto = true, BeforeAfterNeedMod = true, Arithmetic = true, IndexSelectors = true;
+            public bool EditFirstMatch;
+            public IReadOnlyCollection<string> PluginFolders = ReadOnlyNames(ModuleManager.MmPluginRule.DefaultCurated);
+            public IReadOnlyCollection<string> NeedsKeep = ReadOnlyNames(ModuleManager.MmPluginRule.DefaultKeep);
+        }
+
+        private static IReadOnlyCollection<string> ReadOnlyNames(IEnumerable<string> names) =>
+            new ReadOnlyCollection<string>(names.ToList());
+
         /// <summary>The phase 2a and 2b keys, read together.</summary>
         private sealed class Switches2a
         {
@@ -112,6 +143,7 @@ namespace KSP1PartMod.Animation.Settings
         }
 
         private readonly Switches041 _switches041;
+        private readonly SwitchesMm _mm;
         private readonly SwitchesAudit _audit;
 
         private static readonly IReadOnlyCollection<string> NoModules = new ReadOnlyCollection<string>(new string[0]);
@@ -130,13 +162,14 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
-            Switches041 switches041, SwitchesAudit audit)
+            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm)
         {
+            _mm = mm;
             _audit = audit;
             _switches2a = switches2a;
             _switches041 = switches041;
@@ -176,6 +209,7 @@ namespace KSP1PartMod.Animation.Settings
                 var s2a = new Switches2a();
                 var s041 = new Switches041();
                 var audit = new SwitchesAudit();
+                var mm = new SwitchesMm();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -207,6 +241,14 @@ namespace KSP1PartMod.Animation.Settings
                         case "audit_on_vab_entry": ReadBool(p, ref audit.OnVabEntry, problems); break;
                         case "audit_frame_budget_ms": ReadClampedFloat(p, 1, 50, ref audit.FrameBudgetMs, problems); break;
                         case "audit_unload_every": ReadClampedInt(p, 10, 1000, ref audit.UnloadEvery, problems); break;
+                        case "mm_plugin_safety_net": ReadBool(p, ref mm.SafetyNet, problems); break;
+                        case "mm_plugin_folders_auto": ReadBool(p, ref mm.PluginFoldersAuto, problems); break;
+                        case "mm_before_after_need_mod": ReadBool(p, ref mm.BeforeAfterNeedMod, problems); break;
+                        case "mm_arithmetic": ReadBool(p, ref mm.Arithmetic, problems); break;
+                        case "mm_index_selectors": ReadBool(p, ref mm.IndexSelectors, problems); break;
+                        case "mm_edit_first_match": ReadBool(p, ref mm.EditFirstMatch, problems); break;
+                        case "mm_plugin_folders": mm.PluginFolders = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.PluginFolders; break;
+                        case "mm_needs_keep": mm.NeedsKeep = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.NeedsKeep; break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:
@@ -215,7 +257,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm);
             }
             catch (Exception e)
             {
@@ -284,9 +326,9 @@ namespace KSP1PartMod.Animation.Settings
         private static string Inv(double v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
         private static string Inv(long v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
-        /// <summary>Trimmed, distinct names (ordinal); null (default kept) when the value is not a list. Items that are not
-        /// non-empty strings are skipped and reported.</summary>
-        private static IReadOnlyCollection<string> ReadNames(JProperty p, List<string> problems)
+        /// <summary>Trimmed, distinct names (ordinal unless a comparer is given; the first spelling is kept); null (default
+        /// kept) when the value is not a list. Items that are not non-empty strings are skipped and reported.</summary>
+        private static IReadOnlyCollection<string> ReadNames(JProperty p, List<string> problems, StringComparer comparer = null)
         {
             if (!(p.Value is JArray array))
             {
@@ -294,7 +336,7 @@ namespace KSP1PartMod.Animation.Settings
                 return null;
             }
             var names = new List<string>();
-            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var seen = new HashSet<string>(comparer ?? StringComparer.Ordinal);
             foreach (var item in array)
             {
                 if (!IsName(item))
