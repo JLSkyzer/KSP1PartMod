@@ -25,6 +25,9 @@ namespace KSP1PartMod.Animation.Behaviours
 
         public ClipPose Pose => _inEditor ? new ClipPose(_pv, _pvSpeed, 1f, true) : new ClipPose(_t, _speed, 1f, true);
 
+        /// <summary>The editor preview's target (the PAM button's state).</summary>
+        public bool PreviewOn => _previewOn;
+
         /// <summary>The editor preview: forward, then back. Always accepted.</summary>
         public bool TogglePreview()
         {

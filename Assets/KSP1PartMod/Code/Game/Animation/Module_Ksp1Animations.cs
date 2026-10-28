@@ -37,6 +37,10 @@ namespace KSP1PartMod.Game.Animation
         private static bool _loggedHeatOff;
         /// <summary>Kinds planned before their runtime exists (phase 2b): one line per kind per load.</summary>
         private static readonly OncePerLoad LoggedNoBinder = new OncePerLoad();
+        /// <summary>The plugin entries' bind lines: once per part type, entry and scene per load.</summary>
+        private static readonly OncePerLoad LoggedPluginLine = new OncePerLoad();
+        /// <summary>The note of an entry Build disabled for a missing input: its line is already logged.</summary>
+        private const string InputMissingNote = "input missing (logged)";
         private static readonly MethodInfo ActionContextKeySetter =
             typeof(ModuleActionGroupAction).GetProperty("ContextKey", BindingFlags.Instance | BindingFlags.Public)?.GetSetMethod(true);
         private static bool _loggedContextKeyFallback;
@@ -169,6 +173,11 @@ namespace KSP1PartMod.Game.Animation
                     var e = Build(def, saved, tracks, out var note);
                     if (e == null)
                     {
+                        if (ReferenceEquals(note, InputMissingNote))
+                        {
+                            AddClips(failedClips, def);
+                            continue;
+                        }
                         // Pending tracks may still bind it tracks-only: its line waits for them.
                         if (_tracksPending) _retry.Add((def, note));
                         else Log($"{_name} {def.Kind} '{Subject(def)}' not bound: {note}");
@@ -407,6 +416,56 @@ namespace KSP1PartMod.Game.Animation
                     Log($"{_name} follows Redux parachute '{def.Clip}'/'{def.SecondClip}' (Module_Parachute)");
                     break;
                 }
+                case EntryKind.EngineDeploy:
+                {
+                    if (!PluginInput<Func<bool>>(def, PluginInputs.TryAnyEngineIgnited, out e.Ignited, out _, ref note)) return null;
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
+                    e.Machine = e.EngineDeploy = new EngineDeployMachine(def, length);
+                    LogPluginLine(def, PluginRules.EngineDeployLine(_name, def));
+                    break;
+                }
+                case EntryKind.EngineMode:
+                {
+                    if (!PluginInput<Func<string>>(def, PluginInputs.TryActiveMode, out e.ActiveMode, out var field, ref note)) return null;
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
+                    e.Machine = e.EngineMode = new EngineModeMachine(def, length);
+                    LogPluginLine(def, PluginRules.EngineModeLine(_name, def, field));
+                    break;
+                }
+                case EntryKind.DecouplerClip:
+                {
+                    if (!PluginInput<Func<bool>>(def, PluginInputs.TryDecoupled, out e.Decoupled, out _, ref note)) return null;
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
+                    e.Machine = e.Decoupler = new DecouplerClipMachine(def, length);
+                    LogPluginLine(def, PluginRules.DecouplerLine(_name, def));
+                    break;
+                }
+                case EntryKind.ScienceToggle:
+                {
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
+                    // KSP1 editor value 1 (Global Constraints): the editor runs at the setting times animSpeed.
+                    e.Machine = e.Toggle = new ToggleMachine(def, length, EditorSpeed.Multiplier(editorSpeed, 1f),
+                        def.SpeedMultiplier, def.OneWay);
+                    LogPluginLine(def, PluginRules.ScienceLine(_name, def));
+                    break;
+                }
+                case EntryKind.LandingBag:
+                {
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
+                    // The editor multiplier is the setting, else the parser's EditorSpeedMult (KSP1 value 1).
+                    e.Machine = e.Deploy = new DeployMachine(def, length, editorSpeed);
+                    break;
+                }
+                case EntryKind.AccelSpring:
+                {
+                    if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
+                    string field = null;
+                    if (PartBackingMode == PartBackingModes.OAB) field = "editor 1 g";
+                    else if (PluginInputs.TryAcceleration(this, out e.Accel, out var found)) field = found;
+                    e.Machine = e.Spring = new AccelSpring(def, length);
+                    LogPluginLine(def, PluginRules.SpringLine(_name, field));
+                    break;
+                }
                 default:
                     note = "unknown kind";
                     return null;
@@ -418,6 +477,27 @@ namespace KSP1PartMod.Game.Animation
             }
             e.Machine?.Load(saved);
             return e;
+        }
+
+        private delegate bool InputReader<T>(Module_Ksp1Animations m, out T read, out string field);
+
+        /// <summary>A plugin entry's input (<see cref="PluginInputs"/>). A missing input that the kind needs in this scene
+        /// (<see cref="PluginRules.Requires"/>) disables the entry with its line (note <see cref="InputMissingNote"/>);
+        /// one it does not need leaves <paramref name="read"/> null.</summary>
+        private bool PluginInput<T>(AnimEntryDef def, InputReader<T> tryRead, out T read, out string field, ref string note)
+            where T : class
+        {
+            if (tryRead(this, out read, out field)) return true;
+            read = null;
+            if (!PluginRules.Requires(def.Kind, PartBackingMode == PartBackingModes.OAB)) return true;
+            Log(PluginRules.MissingLine(_name, def, field));
+            note = InputMissingNote;
+            return false;
+        }
+
+        private void LogPluginLine(AnimEntryDef def, string line)
+        {
+            if (LoggedPluginLine.First(_name + "|" + def.Key + "|" + PartBackingMode, TrackCache.Generation)) Log(line);
         }
 
         /// <summary>Binds <paramref name="clip"/>'s legacy states (into <c>States</c>, or <c>ActiveStates</c> when
@@ -537,7 +617,7 @@ namespace KSP1PartMod.Game.Animation
             foreach (var e in _entries)
             {
                 var kind = e.Def.Kind;
-                if (e.Disabled || !ControlLabels.HasAction(kind)) continue;
+                if (e.Disabled || !ControlLabels.HasControl(kind)) continue;
                 try
                 {
                     AddControl(e, inEditor, ref buttons, ref actions, ref dynamicLabels);
@@ -571,6 +651,7 @@ namespace KSP1PartMod.Game.Animation
                     data.SetVisible(e.Button, e.ShownVisible);
                     buttons++;
                 }
+                if (!ControlLabels.HasAction(kind)) return; // an editor-only preview: no action-group action
                 e.GroupState = new ModuleProperty<bool>(on);
                 var group = ParseGroup(e.Def.ActionGroup);
                 var action = NewGroupAction(control, group, e.GroupState, key);
@@ -674,11 +755,13 @@ namespace KSP1PartMod.Game.Animation
                 switch (e.Def.Kind)
                 {
                     case EntryKind.Toggle:
+                    case EntryKind.ScienceToggle:
                         e.Toggle.Tick(dt);
                         Show(e.States, e.Tracks, e.Toggle.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
                     case EntryKind.Deploy:
                     case EntryKind.Gear:
+                    case EntryKind.LandingBag:
                         e.Deploy.Tick(dt);
                         Show(e.States, e.Tracks, e.Deploy.Pose, e.Def.Layer, ref e.StatesOn);
                         break;
@@ -731,6 +814,38 @@ namespace KSP1PartMod.Game.Animation
                         Show(e.ActiveStates, e.ActiveTracks, e.Chute.FullPose, e.Def.Layer, ref e.ActiveOn);
                         break;
                     }
+                    case EntryKind.EngineDeploy:
+                    {
+                        var ignited = e.Ignited != null && e.Ignited();
+                        if (PluginRules.StartsNow(inEditor, e.Started))
+                        {
+                            e.EngineDeploy.Start(ignited);
+                            e.Started = true;
+                        }
+                        e.EngineDeploy.Tick(dt, inEditor, ignited, KSP1PartModPlugin.Animations.EditorAnimationSpeed);
+                        Show(e.States, e.Tracks, e.EngineDeploy.Pose, e.Def.Layer, ref e.StatesOn);
+                        break;
+                    }
+                    case EntryKind.EngineMode:
+                    {
+                        var mode = e.ActiveMode?.Invoke();
+                        if (PluginRules.StartsNow(inEditor, e.Started))
+                        {
+                            e.EngineMode.Start(mode);
+                            e.Started = true;
+                        }
+                        e.EngineMode.Tick(dt, inEditor, mode, KSP1PartModPlugin.Animations.EditorAnimationSpeed);
+                        Show(e.States, e.Tracks, e.EngineMode.Pose, e.Def.Layer, ref e.StatesOn);
+                        break;
+                    }
+                    case EntryKind.DecouplerClip:
+                        e.Decoupler.Tick(dt, inEditor, e.Decoupled != null && e.Decoupled(), KSP1PartModPlugin.Animations.EditorAnimationSpeed);
+                        Show(e.States, e.Tracks, e.Decoupler.Pose, e.Def.Layer, ref e.StatesOn);
+                        break;
+                    case EntryKind.AccelSpring:
+                        e.Spring.Tick(dt, PluginRules.SpringAcceleration(inEditor, e.Accel != null, e.Accel != null ? e.Accel() : 0f));
+                        Show(e.States, e.Tracks, e.Spring.Pose, e.Def.Layer, ref e.StatesOn);
+                        break;
                     case EntryKind.AeroGate:
                     {
                         var scalar = e.Controller();
@@ -801,9 +916,9 @@ namespace KSP1PartMod.Game.Animation
 
         private void RefreshControls(Entry e, bool inEditor)
         {
-            if (e.GroupState == null) return;
+            if (e.GroupState == null && e.Button == null) return;
             var on = IsOn(e);
-            if (e.GroupState.GetValue() != on) e.GroupState.SetValue(on);
+            if (e.GroupState != null && e.GroupState.GetValue() != on) e.GroupState.SetValue(on);
             if (e.Button == null) return;
             if (e.ShownOn != on)
             {
@@ -858,9 +973,14 @@ namespace KSP1PartMod.Game.Animation
         {
             switch (e.Def.Kind)
             {
-                case EntryKind.Toggle: return !e.Toggle.Closed;
+                case EntryKind.Toggle:
+                case EntryKind.ScienceToggle: return !e.Toggle.Closed;
                 case EntryKind.Deploy:
-                case EntryKind.Gear: return e.Deploy.State == DeployState.Extended || e.Deploy.State == DeployState.Extending;
+                case EntryKind.Gear:
+                case EntryKind.LandingBag: return e.Deploy.State == DeployState.Extended || e.Deploy.State == DeployState.Extending;
+                case EntryKind.EngineDeploy: return e.EngineDeploy.PreviewOn;
+                case EntryKind.DecouplerClip: return e.Decoupler.PreviewOn;
+                case EntryKind.AccelSpring: return e.Spring.Deployed;
                 case EntryKind.Group: return e.Group.Deployed;
                 case EntryKind.Color: return e.Color.On;
                 case EntryKind.GearBridge: return e.ReduxState != null && e.ReduxState.GetValue();
@@ -873,9 +993,18 @@ namespace KSP1PartMod.Game.Animation
         {
             switch (e.Def.Kind)
             {
-                case EntryKind.Toggle: return !e.Toggle.Closed != on && e.Toggle.Toggle(inEditor);
+                case EntryKind.Toggle:
+                case EntryKind.ScienceToggle: return !e.Toggle.Closed != on && e.Toggle.Toggle(inEditor);
                 case EntryKind.Deploy:
-                case EntryKind.Gear: return on ? e.Deploy.Extend(inEditor) : e.Deploy.Retract(inEditor);
+                case EntryKind.Gear:
+                case EntryKind.LandingBag: return on ? e.Deploy.Extend(inEditor) : e.Deploy.Retract(inEditor);
+                // Editor previews only (ControlLabels.Allowed): visual, the engine and the decoupler are never touched.
+                case EntryKind.EngineDeploy: return e.EngineDeploy.PreviewOn != on && e.EngineDeploy.Toggle(inEditor);
+                case EntryKind.DecouplerClip: return e.Decoupler.PreviewOn != on && e.Decoupler.TogglePreview();
+                case EntryKind.AccelSpring:
+                    if (e.Spring.Deployed == on) return false;
+                    e.Spring.Toggle();
+                    return true;
                 case EntryKind.Group:
                     if (e.Group.Deployed == on) return false;
                     if (on) e.Group.Deploy(inEditor);
@@ -893,7 +1022,7 @@ namespace KSP1PartMod.Game.Animation
             }
         }
 
-        private static bool Allowed(AnimEntryDef def, bool inEditor) => inEditor ? def.ToggleInEditor : def.ToggleInFlight;
+        private static bool Allowed(AnimEntryDef def, bool inEditor) => ControlLabels.Allowed(def, inEditor);
 
         /// <summary>KSP1 hides the event of a fixed one-shot, and the retract of a non-retractable deployable in
         /// flight.</summary>
@@ -1061,6 +1190,16 @@ namespace KSP1PartMod.Game.Animation
             public AeroGate Aero;
             public ReduxFollower Follower;
             public ChuteFollower Chute;
+            public EngineDeployMachine EngineDeploy;
+            public EngineModeMachine EngineMode;
+            public DecouplerClipMachine Decoupler;
+            public AccelSpring Spring;
+            /// <summary>Plugin inputs (<see cref="PluginInputs"/>): null when not found and not needed in this scene.</summary>
+            public Func<bool> Ignited, Decoupled;
+            public Func<string> ActiveMode;
+            public Func<float> Accel;
+            /// <summary>An engine machine took its flight-start pose (<see cref="PluginRules.StartsNow"/>).</summary>
+            public bool Started;
             public Func<ReduxDeployState> ReadDeploy;
             public Func<ReduxChuteState> ReadChute;
             /// <summary>A follower has seen Redux's first state (shown at once, not logged).</summary>

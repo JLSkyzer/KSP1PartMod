@@ -152,5 +152,43 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
             Assert.AreEqual(DeployState.Retracting, g.State); Run(g, 1f);
             Assert.AreEqual((DeployState.Retracted, 0f), (g.State, g.Pose.NormalizedTime));
         }
+    
+        // ---- landing bag (ModuleBdbMercuryLandingBag): forward at 1, retract at RetractSpeed (KSP1 0.2)
+
+        private static DeployMachine Bag(float len = 1f, float editorSetting = 1f) =>
+            new DeployMachine(new AnimEntryDef
+            {
+                Kind = EntryKind.LandingBag, Key = "landingbag:deploy:0", Clip = "deploy", RetractSpeed = 0.2f, EditorSpeedMult = 1f,
+            }, len, editorSetting);
+
+        [Test] public void LandingBag_ExtendsAtOne_RetractsAtPointTwo()
+        {
+            var m = Bag();
+            Assert.IsTrue(m.Extend(false));
+            for (var i = 0; i < 55; i++) m.Tick(0.02f);
+            Assert.AreEqual(DeployState.Extended, m.State);
+            Assert.IsTrue(m.Retract(false), "the bag is retractable");
+            for (var i = 0; i < 245; i++) m.Tick(0.02f);
+            Assert.AreEqual(DeployState.Retracting, m.State, "4.9 s at 0.2 is not yet back");
+            for (var i = 0; i < 10; i++) m.Tick(0.02f);
+            Assert.AreEqual((DeployState.Retracted, 0f), (m.State, m.Pose.NormalizedTime));
+        }
+
+        [Test] public void LandingBag_Editor_Ksp1Setting_FlightSpeed()
+        {
+            var m = Bag(editorSetting: EditorSpeed.Ksp1);
+            m.Extend(true);
+            for (var i = 0; i < 45; i++) m.Tick(0.02f);
+            Assert.AreEqual(DeployState.Extending, m.State, "KSP1 value 1: one clip second per second");
+        }
+
+        [Test] public void Deploy_RetractSpeed_IgnoredForOtherKinds()
+        {
+            var m = new DeployMachine(new AnimEntryDef { Kind = EntryKind.Deploy, Key = DKey, Clip = "dish", RetractSpeed = 0.2f }, 1f);
+            m.Load(SavedValues.Of(DKey, ("state", (float)DeployState.Extended), ("t", 1f)));
+            m.Retract(false);
+            for (var i = 0; i < 55; i++) m.Tick(0.02f);
+            Assert.AreEqual(DeployState.Retracted, m.State);
+        }
     }
 }

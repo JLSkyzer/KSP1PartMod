@@ -7,18 +7,28 @@ namespace KSP1PartMod.Animation.Behaviours
     /// <c>stock/NOTES.md</c> §1). The state is held in pose mode; a move runs at speed ±1 in flight, or
     /// ±<see cref="AnimEntryDef.EditorSpeedMult"/> × clip length in the editor (KSP1 10: 0.1 s), and settles at
     /// the end it was heading for. A one-shot entry (<c>isOneShot</c>, <see cref="AnimEntryDef.Retractable"/>
-    /// false) is fixed once a move has ended open. Saved: <c>.t</c>, <c>.closed</c>, <c>.moving</c>.</summary>
+    /// false) is fixed once a move has ended open. Saved: <c>.t</c>, <c>.closed</c>, <c>.moving</c>.
+    /// <para>DMagic's <c>DMModuleScienceAnimateGeneric</c> (science toggle) uses it with a flight speed
+    /// (<c>animSpeed</c>), an editor speed that multiplies it, and <c>oneWayAnimation</c>: once open, the clip plays
+    /// back to closed by itself.</para></summary>
     public sealed class ToggleMachine : IEntryMachine
     {
         private readonly string _kt, _kClosed, _kMoving;
-        private readonly bool _oneShot;
-        private readonly float _editorSpeedMult, _editorSpeed;
+        private readonly bool _oneShot, _returns;
+        private readonly float _editorSpeedMult, _editorSpeed, _flightSpeed;
         private float _t, _speed;
+        private bool _lastInEditor;
 
         /// <param name="clipLength">Seconds, from the bound <c>AnimationState.length</c>.</param>
         /// <param name="editorSpeed"><see cref="EditorSpeed"/>: positive, the flight speed times it; 0, KSP1's rule.</param>
-        public ToggleMachine(AnimEntryDef def, float clipLength, float editorSpeed = EditorSpeed.Ksp1)
+        /// <param name="flightSpeed">Clip seconds per second in flight (KSP1 1; science toggle <c>animSpeed</c>). A value
+        /// of 0 or less counts as 1.</param>
+        /// <param name="returnsAfterOpen">Once a move has ended open, play back to closed (<c>oneWayAnimation</c>).</param>
+        public ToggleMachine(AnimEntryDef def, float clipLength, float editorSpeed = EditorSpeed.Ksp1,
+            float flightSpeed = 1f, bool returnsAfterOpen = false)
         {
+            _flightSpeed = flightSpeed > 0f ? flightSpeed : 1f;
+            _returns = returnsAfterOpen;
             _kt = def.Key + ".t";
             _kClosed = def.Key + ".closed";
             _kMoving = def.Key + ".moving";
@@ -49,9 +59,8 @@ namespace KSP1PartMod.Animation.Behaviours
         {
             if (IsMoving || IsFixed) return false;
             Closed = !Closed;
-            var speed = !inEditor ? 1f
-                : !EditorSpeed.UsesKsp1(_editorSpeed) ? _editorSpeed
-                : _editorSpeedMult > 0f ? _editorSpeedMult * ClipLength : 1f;
+            _lastInEditor = inEditor;
+            var speed = SpeedFor(inEditor);
             Start(Closed ? -speed : speed);
             return true;
         }
@@ -66,6 +75,11 @@ namespace KSP1PartMod.Animation.Behaviours
                 // KSP1 snaps animTime to the end the switch points at once the clip has stopped.
                 _t = Closed ? 0f : 1f;
                 IsMoving = false;
+                if (_returns && !Closed)
+                {
+                    Closed = true;
+                    Start(-SpeedFor(_lastInEditor));
+                }
             }
         }
 
@@ -74,7 +88,7 @@ namespace KSP1PartMod.Animation.Behaviours
             if (Machine.TryRead(saved, _kt, out var t)) _t = Machine.Clamp01(t);
             if (Machine.TryRead(saved, _kClosed, out var closed)) Closed = Machine.Bool(closed);
             // KSP1 resumes a MOVING state at its saved speed; we do not save the speed, so it resumes at flight speed.
-            if (Machine.TryRead(saved, _kMoving, out var moving) && Machine.Bool(moving)) Start(Closed ? -1f : 1f);
+            if (Machine.TryRead(saved, _kMoving, out var moving) && Machine.Bool(moving)) Start(Closed ? -_flightSpeed : _flightSpeed);
             else IsMoving = false;
             Changed = false;
         }
@@ -86,6 +100,11 @@ namespace KSP1PartMod.Animation.Behaviours
             into[_kMoving] = Machine.Of(IsMoving);
             Changed = false;
         }
+
+        private float SpeedFor(bool inEditor) =>
+            !inEditor ? _flightSpeed
+            : !EditorSpeed.UsesKsp1(_editorSpeed) ? _editorSpeed * _flightSpeed
+            : _editorSpeedMult > 0f ? _editorSpeedMult * ClipLength : _flightSpeed;
 
         private void Start(float speed)
         {

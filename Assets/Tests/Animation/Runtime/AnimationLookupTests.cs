@@ -15,6 +15,12 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         [TestCase(EntryKind.Heat, LookupStrategy.AllMatches)]
         [TestCase(EntryKind.Throttle, LookupStrategy.AllMatches)]
         [TestCase(EntryKind.Gear, LookupStrategy.LastByObjectName)]
+        [TestCase(EntryKind.EngineDeploy, LookupStrategy.FirstMatch)]
+        [TestCase(EntryKind.EngineMode, LookupStrategy.FirstMatch)]
+        [TestCase(EntryKind.DecouplerClip, LookupStrategy.FirstMatch)]
+        [TestCase(EntryKind.ScienceToggle, LookupStrategy.FirstMatch)]
+        [TestCase(EntryKind.AccelSpring, LookupStrategy.FirstMatch)]
+        [TestCase(EntryKind.LandingBag, LookupStrategy.FirstMatch)]
         public void Strategy_PerKind(EntryKind kind, LookupStrategy expected) =>
             Assert.AreEqual(expected, AnimationLookup.For(kind));
 

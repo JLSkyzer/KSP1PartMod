@@ -184,5 +184,20 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
             AxisBlend.Blend(ref x, ref y, ref z, 9, 9, 9, new[] { true, true, true }, null);
             Assert.AreEqual((9f, 9f, 9f), (x, y, z));
         }
+    
+        [Test] public void Decoupler_PreviewOn_FollowsTheToggle()
+        {
+            var m = Dec(); Assert.IsFalse(m.PreviewOn);
+            m.TogglePreview(); Assert.IsTrue(m.PreviewOn);
+            m.TogglePreview(); Assert.IsFalse(m.PreviewOn);
+        }
+
+        [Test] public void EngineDeploy_PreviewOn_EditorToggleOnly()
+        {
+            var m = new EngineDeployMachine(new AnimEntryDef { Kind = EntryKind.EngineDeploy, Key = "enginedeploy:n:0", Clip = "n", Retractable = true }, 1f);
+            Assert.IsFalse(m.PreviewOn);
+            m.Toggle(true); Assert.IsTrue(m.PreviewOn);
+            m.Toggle(false); Assert.IsTrue(m.PreviewOn, "a flight toggle is not the preview");
+        }
     }
 }

@@ -8,26 +8,53 @@ namespace KSP1PartMod.Animation.Runtime
     /// once per kind per load (<see cref="OncePerLoad"/>).</summary>
     public static class RuntimeKinds
     {
-        /// <summary>True for the kinds of 0.4.0 (up to <see cref="EntryKind.ChuteFollower"/>); each phase 2b binder adds
-        /// its kind here.</summary>
-        public static bool HasBinder(EntryKind kind) => kind >= EntryKind.Toggle && kind <= EntryKind.ChuteFollower;
+        /// <summary>True for the kinds of 0.4.0 (up to <see cref="EntryKind.ChuteFollower"/>) and the phase 2b kinds whose
+        /// binder exists; each phase 2b binder adds its kind here.</summary>
+        public static bool HasBinder(EntryKind kind)
+        {
+            if (kind >= EntryKind.Toggle && kind <= EntryKind.ChuteFollower) return true;
+            switch (kind)
+            {
+                case EntryKind.EngineDeploy:
+                case EntryKind.EngineMode:
+                case EntryKind.DecouplerClip:
+                case EntryKind.ScienceToggle:
+                case EntryKind.AccelSpring:
+                case EntryKind.LandingBag:
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
 
-    /// <summary>True the first time a kind is seen in a load generation (<c>TrackCache.Generation</c>): a new load
-    /// forgets the kinds of the previous one. Main thread only.</summary>
+    /// <summary>True the first time a kind (or a string key) is seen in a load generation (<c>TrackCache.Generation</c>):
+    /// a new load forgets the kinds and keys of the previous one. Main thread only.</summary>
     public sealed class OncePerLoad
     {
         private readonly HashSet<EntryKind> _seen = new HashSet<EntryKind>();
+        private readonly HashSet<string> _keys = new HashSet<string>(System.StringComparer.Ordinal);
         private int _generation = int.MinValue;
 
         public bool First(EntryKind kind, int generation)
         {
-            if (generation != _generation)
-            {
-                _seen.Clear();
-                _generation = generation;
-            }
+            NewLoad(generation);
             return _seen.Add(kind);
+        }
+
+        /// <summary>For lines logged once per part type: the key names the part, the entry and the scene.</summary>
+        public bool First(string key, int generation)
+        {
+            NewLoad(generation);
+            return _keys.Add(key ?? "");
+        }
+
+        private void NewLoad(int generation)
+        {
+            if (generation == _generation) return;
+            _seen.Clear();
+            _keys.Clear();
+            _generation = generation;
         }
     }
 }

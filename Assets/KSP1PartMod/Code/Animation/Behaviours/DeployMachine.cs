@@ -19,6 +19,8 @@ namespace KSP1PartMod.Animation.Behaviours
     /// current time; a move can be reversed halfway; it ends within 0.01 of its end, and at once in the editor
     /// (<see cref="AnimEntryDef.EditorSpeedMult"/> ≥ 1000). KSP1 starts a gear retraction from the time that matches
     /// the physics-compressed piston; we start from the current time.</para>
+    /// <para><b>LandingBag</b> (Bluedog_DB ModuleBdbMercuryLandingBag, spec 2b.7): as Deploy, retracting at
+    /// <see cref="AnimEntryDef.RetractSpeed"/> (KSP1 0.2); arming logic out.</para>
     /// Saved: <c>.t</c>, <c>.state</c> (the <see cref="DeployState"/> number).</summary>
     public sealed class DeployMachine : IEntryMachine
     {
@@ -42,7 +44,8 @@ namespace KSP1PartMod.Animation.Behaviours
             _extendedTime = _gear && !def.DeployForward ? 0f : 1f;
             // A factor of 0 or less would never end (or run backward): keep it positive.
             _speedIn = _gear ? Math.Max(MinFactor, def.SpeedFactorIn) : 1f;
-            _speedOut = _gear ? Math.Max(MinFactor, def.SpeedFactorOut) : 1f;
+            _speedOut = _gear ? Math.Max(MinFactor, def.SpeedFactorOut)
+                : def.Kind == EntryKind.LandingBag ? Math.Max(MinFactor, def.RetractSpeed) : 1f;
             _editorSpeedMult = EditorSpeed.Multiplier(editorSpeed, def.EditorSpeedMult);
             ClipLength = Machine.Length(clipLength);
             Settle(DeployState.Retracted);

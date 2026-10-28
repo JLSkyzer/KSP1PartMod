@@ -124,7 +124,7 @@ namespace KSP1PartMod.Game.Animation
                     _entries.Add(e);
                     InitGate(e);
                     e.Writer?.Register(_table, _sink);
-                    if (ControlLabels.HasAction(def.Kind))
+                    if (ControlLabels.HasControl(def.Kind))
                     {
                         int buttons = 0, actions = 0;
                         var dynamicLabels = false;

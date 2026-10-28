@@ -33,6 +33,9 @@ namespace KSP1PartMod.Animation.Behaviours
 
         public ClipPose Pose => new ClipPose(_t, _speed, 1f, true);
 
+        /// <summary>The editor preview's target (the PAM button's state).</summary>
+        public bool PreviewOn => _editorOn;
+
         /// <summary>Flight: the pose is the target from the engine state, nothing moves. A saved deployed state
         /// keeps a non-ignited engine's nozzle out.</summary>
         public void Start(bool ignited)

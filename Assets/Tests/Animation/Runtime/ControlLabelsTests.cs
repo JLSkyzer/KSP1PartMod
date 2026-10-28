@@ -70,6 +70,78 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         [TestCase(EntryKind.Toggle, true)]
         [TestCase(EntryKind.Throttle, false)]
         [TestCase(EntryKind.AeroGate, false)]
+        [TestCase(EntryKind.EngineDeploy, false)]
+        [TestCase(EntryKind.DecouplerClip, false)]
+        [TestCase(EntryKind.ScienceToggle, true)]
+        [TestCase(EntryKind.LandingBag, true)]
+        [TestCase(EntryKind.AccelSpring, true)]
+        [TestCase(EntryKind.EngineMode, false)]
         public void HasAction_PerKind(EntryKind kind, bool expected) => Assert.AreEqual(expected, ControlLabels.HasAction(kind));
+
+        [TestCase(EntryKind.EngineDeploy, true)]
+        [TestCase(EntryKind.DecouplerClip, true)]
+        [TestCase(EntryKind.ScienceToggle, true)]
+        [TestCase(EntryKind.LandingBag, true)]
+        [TestCase(EntryKind.AccelSpring, true)]
+        [TestCase(EntryKind.EngineMode, false)]
+        [TestCase(EntryKind.LookAt, false)]
+        [TestCase(EntryKind.RcsGlow, false)]
+        public void HasButton_PluginKinds(EntryKind kind, bool expected)
+        {
+            Assert.AreEqual(expected, ControlLabels.HasButton(kind));
+            Assert.AreEqual(expected, ControlLabels.HasControl(kind));
+        }
+
+        [TestCase(EntryKind.EngineDeploy, false, "Deploy")]
+        [TestCase(EntryKind.EngineDeploy, true, "Retract")]
+        [TestCase(EntryKind.ScienceToggle, false, "Deploy")]
+        [TestCase(EntryKind.ScienceToggle, true, "Retract")]
+        [TestCase(EntryKind.LandingBag, false, "Deploy")]
+        [TestCase(EntryKind.LandingBag, true, "Retract")]
+        [TestCase(EntryKind.AccelSpring, false, "Deploy")]
+        [TestCase(EntryKind.AccelSpring, true, "Stow")]
+        public void Button_PluginKinds_DefaultLabels(EntryKind kind, bool on, string expected) =>
+            Assert.AreEqual(expected, ControlLabels.Button(E(kind), on));
+
+        [Test] public void Button_ScienceToggle_UsesTheCfgLabels()
+        {
+            var e = E(EntryKind.ScienceToggle, "Extend Magnetometer", "Retract Magnetometer");
+            Assert.AreEqual("Extend Magnetometer", ControlLabels.Button(e, on: false));
+            Assert.AreEqual("Retract Magnetometer", ControlLabels.Button(e, on: true));
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Button_Decoupler_NoEditorGuiName_FixedDefault(bool on) =>
+            Assert.AreEqual(ControlLabels.DecouplerPreview, ControlLabels.Button(E(EntryKind.DecouplerClip), on));
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void Button_Decoupler_EditorGuiName_BothStates(bool on) =>
+            Assert.AreEqual("Test Separation", ControlLabels.Button(E(EntryKind.DecouplerClip, "Test Separation"), on));
+
+        [TestCase(true, true, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        public void Allowed_EngineDeploy_EditorPreviewOnlyWithEditorToggle(bool inEditor, bool editorToggle, bool expected) =>
+            Assert.AreEqual(expected, ControlLabels.Allowed(new AnimEntryDef { Kind = EntryKind.EngineDeploy, EditorToggle = editorToggle }, inEditor));
+
+        [TestCase(true, true)]
+        [TestCase(false, false)]
+        public void Allowed_Decoupler_EditorOnly(bool inEditor, bool expected) =>
+            Assert.AreEqual(expected, ControlLabels.Allowed(new AnimEntryDef { Kind = EntryKind.DecouplerClip }, inEditor));
+
+        [TestCase(EntryKind.ScienceToggle)]
+        [TestCase(EntryKind.Toggle)]
+        [TestCase(EntryKind.AccelSpring)]
+        public void Allowed_OtherKinds_FollowGuiActiveFlags(EntryKind kind)
+        {
+            var noEditor = new AnimEntryDef { Kind = kind, ToggleInEditor = false, ToggleInFlight = true };
+            Assert.IsFalse(ControlLabels.Allowed(noEditor, inEditor: true));
+            Assert.IsTrue(ControlLabels.Allowed(noEditor, inEditor: false));
+            var noFlight = new AnimEntryDef { Kind = kind, ToggleInEditor = true, ToggleInFlight = false };
+            Assert.IsTrue(ControlLabels.Allowed(noFlight, inEditor: true));
+            Assert.IsFalse(ControlLabels.Allowed(noFlight, inEditor: false));
+        }
     }
 }
