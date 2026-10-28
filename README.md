@@ -109,6 +109,17 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "radiator_auto_on": true,
   "radiator_flux_scale": 1,
   "radiator_ksp1_rates": false,
+  "ksp1_science": true,
+  "science_generate_definitions": true,
+  "science_definitions_via_patch_manager": true,
+  "science_report_storage": true,
+  "science_value_scale": 1,
+  "science_transmit_split": true,
+  "science_native_ids": { "crewReport": "CrewObservation" },
+  "science_fallback_ids": { "...": "see the shipped file" },
+  "science_skip_ids": ["evaReport", "evaScience", "surfaceSample", "ROCScience"],
+  "science_deploy_animations": true,
+  "science_wait_for_animation": true,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissionColor", "_EmissiveColor"],
     "_TintColor": ["_TintColor"],
@@ -153,6 +164,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - B9 overrides (0.9.0, all default `true`, see "B9PartSwitch overrides"): `b9_mass`, `b9_resources`, `b9_module_data`, `b9_module_active` (needs `b9_module_data`), `b9_part_scalars`, `b9_new_part_switches`.
 - Converters, drills and scanners (0.10.0, see that section): `ksp1_converters`, `ksp1_drills`, `ksp1_survey_scanners`, `ksp1_resource_scanners`, `ksp1_ore_resource`, `harvest_multiplier`, `isru_heat_scale`, `isru_active_animation`, `isru_ksp1_rates`.
 - Radiators (0.11.0, see that section): `ksp1_radiators`, `radiator_deploy_bridge`, `radiator_auto_on`, `radiator_flux_scale`, `radiator_ksp1_rates`.
+- Science (0.12.0, see that section): `ksp1_science`, `science_generate_definitions`, `science_definitions_via_patch_manager`, `science_report_storage`, `science_value_scale`, `science_transmit_split`, `science_native_ids`, `science_fallback_ids`, `science_skip_ids`, `science_deploy_animations`, `science_wait_for_animation`.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
 ### Phase 2a: material, light and glow curves (0.4.0)
@@ -169,11 +181,11 @@ Not run in game yet: checklist in `docs/testing/2026-10-27-animations-phase2-in-
 
 Not run in game yet: checklist in `docs/testing/2026-10-27-animations-phase2-in-game-checklist.md` (section 2b).
 
-- **Visual only.** The mod reads `Data_Engine`, `Data_Decouple`, `Data_RCS`, `Data_PartSwitch` and `Data_Deployable` and never writes them, and calls no engine, decoupler or staging method. Ignition and separation are not delayed; science is not run.
-- **Plugin modules** (`plugin_modules`): engine nozzle extensions (`ModuleDeployableEngine`, `ModuleBdbAnimatedEngine`) that follow the ignition, the multi-mode nozzle (`ModuleMultiStateEngine`), look-at pistons (`ModuleAdvancedLookAtConstraint`), animated decouplers (`ModuleBdbDecouplerAnimation`), RCS glow and emissive (`FXModuleAnimateRCS`, `ModuleBdbRCSEmissive`), mesh hiders (`ModuleBDBDeployableMeshHider`), DMagic science booms (`DMModuleScienceAnimateGeneric`, animation only), the acceleration spring (`ModuleBdbAccelAnimation`) and the Mercury landing bag.
+- **Visual only.** The mod reads `Data_Engine`, `Data_Decouple`, `Data_RCS`, `Data_PartSwitch` and `Data_Deployable` and never writes them, and calls no engine, decoupler or staging method. Ignition and separation are not delayed. These entries run no science: experiments are `ksp1_science` (0.12.0).
+- **Plugin modules** (`plugin_modules`): engine nozzle extensions (`ModuleDeployableEngine`, `ModuleBdbAnimatedEngine`) that follow the ignition, the multi-mode nozzle (`ModuleMultiStateEngine`), look-at pistons (`ModuleAdvancedLookAtConstraint`), animated decouplers (`ModuleBdbDecouplerAnimation`), RCS glow and emissive (`FXModuleAnimateRCS`, `ModuleBdbRCSEmissive`), mesh hiders (`ModuleBDBDeployableMeshHider`), DMagic science booms (`DMModuleScienceAnimateGeneric`, the clip; since 0.12.0 a running experiment opens it), the acceleration spring (`ModuleBdbAccelAnimation`) and the Mercury landing bag.
 - **B9 gates** (`b9_module_gates`): a B9PartSwitch subtype that switches a module off also switches off that module's animation entries, following the variant picked in the VAB. The gates apply to all our entries, phase 1 kinds included.
 - **Settings.** `plugin_modules` and `b9_module_gates` (default true); `skip_modules` also names plugin modules; `editor_animation_speed` governs the new previews.
-- **Not done yet:** links by module index (cargo bay shielding, docking port gating, science experiments, animation groups with converters), deploy limit and `restrictedNode`, one-shot inflatables, crew capacity when open, radiator and antenna tracking, wheel physics, robotics, Waterfall effects.
+- **Not done yet:** links by module index (cargo bay shielding, docking port gating, animation groups with converters; science experiments: see Science (0.12.0)), deploy limit and `restrictedNode`, one-shot inflatables, crew capacity when open, radiator and antenna tracking, wheel physics, robotics, Waterfall effects.
 
 ## B9PartSwitch overrides (0.9.0)
 
@@ -240,6 +252,36 @@ Redux drops the KSP1 `ModuleActiveRadiator`. Since 0.11.0 the mod imports it as 
 - **Safety.** Each importer failure leaves the part as 0.10.0 imports it. The bridge reads three private members of `Module_ActiveRadiator`; a missing one turns it off with one line and the radiator then cools folded. A runtime throw stops the radiator patches for the session (`thermal: patch failed`).
 - **Audit.** The `native_modules` column and the `audit: native modules:` line count radiators.
 
+## Science (0.12.0)
+
+Redux drops every KSP1 science module. Since 0.12.0 the mod imports `ModuleScienceExperiment`, `DMModuleScienceAnimate` and `DMModuleScienceAnimateGeneric` as KSP2's own science module (`Module_ScienceExperiment`, the one of KSP2's crewed pods), at Redux's import (whatever `enabled` is): no lab, no reset, no diminishing returns, no biome table. Built, not verified in game. Checklist (French): `docs/testing/2026-10-28-science-in-game-checklist.md`. Lines `[KSP1PartMod] science:` and `[KSP1PartMod] native:`.
+
+| Key | Default | Effect | `false` (or the 0.11.0 value) |
+|---|---|---|---|
+| `ksp1_science` | `true` | Every experiment module of a KSP1 part becomes one experiment of a single `Module_ScienceExperiment`, run from the part menu, an action group or the science button. | Redux drops the modules; no definition is generated. |
+| `science_generate_definitions` | `true` | A KSP1 `EXPERIMENT_DEFINITION` found under `mods/KSP1` becomes a KSP2 experiment `KSP1_<id>` (title, situations, value, flavor texts). | Every KSP1 experiment uses the identical or closest KSP2 one. The definitions are still read: the closest rule needs their situations. |
+| `science_definitions_via_patch_manager` | `true` | The generated experiments are Patch Manager duplicates of a KSP2 experiment, so a campaign where the mod is off has none. | They are added to the game's experiment store, only when the mod is on in the campaign. |
+| `science_report_storage` | `true` | A KSP1 part with a `ModuleScienceContainer` or an experiment stores research reports, as KSP2's command parts do. Redux sets this on no KSP1 part. | Only KSP2 parts store, as in 0.11.0. |
+| `science_value_scale` | `1` (0.01 to 100) | Multiplies KSP1's `baseValue` into the KSP2 data and sample values. | — |
+| `science_transmit_split` | `true` | An experiment with `xmitDataScalar` below 1 gives a data report worth that share, to transmit, and a sample worth the rest, to recover. | One data report at full value. |
+| `science_native_ids` | `{"crewReport": "CrewObservation"}` | KSP1 ids that use an identical KSP2 experiment. An object replaces the whole table. | — |
+| `science_fallback_ids` | a table | The KSP2 experiment of a stock KSP1 id with no definition on disk. An object replaces the whole table. | — |
+| `science_skip_ids` | `evaReport`, `evaScience`, `surfaceSample`, `ROCScience` | KSP1 ids that get no experiment. KSP2 kerbals run their own. | — |
+| `science_deploy_animations` | `true` | Running an experiment opens the clip KSP1 played (the `FxModules` of a stock instrument, the DMagic toggle of a BDB one). The clip stays open and closes with its button. Needs `enabled`. | No clip; the experiment completes anyway. |
+| `science_wait_for_animation` | `true` | A DMagic experiment with `experimentWaitForAnimation` completes once its clip is open, through KSP2's own deploy gate. Needs `enabled`. | It completes without waiting; the clip plays alongside. |
+
+- **Three resolutions.** An identical KSP2 experiment (`crewReport` -> `CrewObservation`); otherwise the generated `KSP1_<id>`; with a definition that is not generated, the closest KSP2 experiment to its situations (`CrewReport` excluded); with no KSP1 definition on disk, the KSP2 experiment of `science_fallback_ids`. Both are noted, and counted as "closest". On the author's set, with the stock `ScienceDefs.cfg` in `mods/KSP1`: 286 parts, 310 generated, 48 identical, 0 closest (raw cfgs, counted by the census tests).
+- **Stock `ScienceDefs.cfg`.** KSP1 keeps the stock experiment definitions in `GameData/Squad/Resources/ScienceDefs.cfg`, which a copy of the stock part folders lacks. Without it the stock instruments take the closest KSP2 experiment, and several of them then share one (they score once per location together). Copy it yourself to `mods/KSP1/Squad/Resources/ScienceDefs.cfg`; it is not shipped.
+- **Values.** KSP1's `baseValue` times `science_value_scale` becomes the KSP2 value, which KSP2 then multiplies by its own body, situation and region scalars, once per experiment, location and report type. The balance against KSP2's own experiments is only checked in game.
+- **Situations and regions.** KSP1's situation mask gives KSP2's situations; a biome bit becomes "with region" on that situation. KSP1's flying low and high are one KSP2 atmosphere situation. There is no biome table of ours.
+- **DMagic overrides.** A DMagic module whose `sitMask` or `bioMask` differs from its definition's gets its own definition `KSP1_<id>_s<sit>_b<bio>` (3 on the author's set).
+- **Report storage spreads.** A KSP1 instrument on a KSP2 craft gives it report storage too. KSP2's storage has no capacity, so nothing else changes.
+- **Animator gate.** KSP2 waits for a native deploy animation on any part with an `Animator`, forever on KSP1 parts. The mod clears that gate on the KSP1 parts it converts and drives it from the KSP1 clip instead. One Unity warning `Parameter '' does not exist` may still show when a vessel is loaded with an experiment running.
+- **Saves.** Stored reports and running experiments carry `KSP1_*` ids. In a campaign without the mod (or with `science_generate_definitions` off) the game has no such definition: the mod drops those experiments from loaded parts, with one line each, instead of letting the part break. A vessel saved again there loses them for good, even if the mod is turned back on.
+- **Skipped.** Labs and data processing (`ModuleScienceLab`, `ModuleScienceConverter`: no lab in KSP2), reset and `rerunnable` (no reset in KSP2), diminishing returns and `scienceCap` (a KSP2 report scores once), part tests (`ModuleTestSubject`), Breaking Ground ground science and the ROC scanner, KSP1's kerbal experiments, the specialised DMagic modules (their behaviour is not readable from cfg fields), `keepDeployedMode`, `requireAtmosphere` and the DMagic planet and asteroid filters. Each is counted in the log.
+- **Safety.** Each importer failure leaves the part as 0.11.0 imports it, report storage included. A missing game member turns its feature off with one line. A runtime throw stops the science patches for the session (`science: patch failed`).
+- **Audit.** The `native_modules` column carries `Module_ScienceExperiment` and `report storage`; the `audit: native modules:` line counts science parts.
+
 ## Audit mode (0.6.0)
 
 Off by default. With `"audit_on_vab_entry": true` in `animations.json`, the first time you enter the VAB in a game session (mod enabled in the campaign), the mod loads every KSP1 part once, off screen and one at a time, and writes a report of the parts that fail, throw, stay unfinished or log errors. It changes nothing in your craft, the part list or the undo history, and the shared KSP1 textures are not destroyed. Do not build while it runs; leaving the VAB cancels it, and the next entry resumes. Not run in game yet: checklist in `docs/testing/2026-10-28-audit-in-game-checklist.md`.
@@ -273,6 +315,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
   - The volume formula and the dry-mass product are inferred from B9's public wiki.
 - Converters, drills and scanners (0.10.0): built, not verified in game. The +Z probe direction and the drill yield are to calibrate in game; a full output tank stops a converter (no `DumpExcess`); a B9 subtype that turns a converter off has no native off form; KSP1 parts with core heat get no core heat (radiators: see 0.11.0).
 - Radiators (0.11.0): built, not verified in game. The /50 power unit and the balance against the 0.10.0 heat of converters and drills are only checked in game; the cooling is vessel-wide (no conduction, no core heat, no parent-only cooling); panel tracking and wind break are not reproduced; the Heat glow of radiator parts stays dark.
+- Science (0.12.0): built, not verified in game. Only checked in game: the values against KSP2's own experiments (`science_value_scale`), the Patch Manager route of the generated definitions, their names through Redux's localizer, the clips of Redux followers, and what the R&D archive shows of stored KSP1 reports once the definitions are missing.
 - Engine shrouds (0.7.0): built, not verified in game. `ignoreNodes` shrouds keep their reentry geometry after a jettison.
 - Animations: phases 1, 2a and 2b (all built; none verified in game yet beyond what the checklists record). The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
