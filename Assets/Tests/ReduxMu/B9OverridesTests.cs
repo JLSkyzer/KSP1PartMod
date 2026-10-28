@@ -537,21 +537,148 @@ PART
         private static void Methalox(Variant v, out double capacity) =>
             capacity = v.Transformers.OfType<ResourceContainerAdder>().Single().Containers.Single(c => c.name == "Methalox").capacityUnits;
 
-        [Test] public void TryBuild_ReduxSetMissing_PartFails_ReduxKept()
+        private const string MeshAndMassPart = @"
+PART
+{
+	name = testMixed
+	mass = 1
+	MODULE
+	{
+		name = ModuleB9PartSwitch
+		moduleID = meshSwitch
+		SUBTYPE
+		{
+			name = A
+			transform = meshA
+			addedMass = 0.1
+		}
+		SUBTYPE
+		{
+			name = B
+			addedMass = 0.2
+		}
+	}
+	MODULE
+	{
+		name = ModuleB9PartSwitch
+		moduleID = massSwitch
+		SUBTYPE
+		{
+			name = Light
+		}
+		SUBTYPE
+		{
+			name = Heavy
+			addedMass = 0.5
+		}
+	}
+}
+";
+
+        /// <summary>Redux's own <c>TryBuild</c> with an ignored-transform list, after the tank catalog was read.</summary>
+        private static (bool Result, Data_PartSwitch Data) ImportIgnoring(string partText, string[] ignored)
         {
-            Assert.IsTrue(Arm());
-            // The plan expects Redux's set 'fuelSwitch'; an ignored transform list that drops every visual makes Redux skip it.
             var root = new Ksp1ModRoot("C:/import", "C:/import/GameData");
-            var node = Ksp1ConfigNode.Parse(TankTypes + TankPart);
+            var node = Ksp1ConfigNode.Parse(TankTypes + partText);
             var file = new Ksp1ConfigFile(root, "C:/import/GameData/Test/Parts/test.cfg", "Test", node);
             Ksp1B9TankCatalog.FromConfigFiles(new[] { file });
             var part = node.GetNodes("PART").First();
-            var context = new Ksp1PartImportContext("testTank", new Ksp1ImportReport()) { PartNode = part, PartData = new PartData() };
-            var result = Ksp1B9PartSwitchVariantBuilder.TryBuild(file, part, 1f, context, new[] { "lfoMesh", "monoMesh" }, out var data, out _);
-            Assert.IsFalse(result);
-            Assert.IsNull(data);
-            Assert.IsTrue(_lines.Any(l => l.StartsWith(B9Lines.Prefix + "testTank: failed, Redux's variants kept:") && l.Contains("'fuelSwitch' not found")),
-                string.Join("\n", _lines));
+            var context = new Ksp1PartImportContext(part.GetValue("name"), new Ksp1ImportReport()) { PartNode = part, PartData = new PartData() };
+            var result = Ksp1B9PartSwitchVariantBuilder.TryBuild(file, part, 1f, context, ignored, out var data, out _);
+            return (result, data);
+        }
+
+        /// <summary>The plan expects Redux's set 'fuelSwitch'; an ignored-transform list that drops every visual makes
+        /// Redux skip it. Only that switch is skipped, with a note; it is not a failure, so repeating it never stops the
+        /// feature.</summary>
+        [Test] public void TryBuild_ReduxSetMissing_SwitchSkipped_NotAFailure()
+        {
+            Assert.IsTrue(Arm());
+            for (var i = 0; i < 4; i++)
+            {
+                var (result, data) = ImportIgnoring(TankPart, new[] { "lfoMesh", "monoMesh" });
+                Assert.IsFalse(result);
+                Assert.IsNull(data);
+            }
+            CollectionAssert.Contains(_lines, B9Lines.PartNote("testTank", B9Lines.Notes.ReduxSetMissing("fuelSwitch", new string[0])));
+            Assert.IsFalse(_lines.Any(l => l.Contains("failed") || l == B9Lines.Stopped), string.Join(Environment.NewLine, _lines));
+            Assert.IsTrue(B9Overrides.IsArmed);
+            Assert.IsTrue(Import(MassOnlyPart).Result, "still armed after four mismatches");
+        }
+
+        [Test] public void TryBuild_ReduxSetMissing_OtherSwitchesOfThePartKept()
+        {
+            Assert.IsTrue(Arm());
+            var (result, data) = ImportIgnoring(MeshAndMassPart, new[] { "meshA" });
+            Assert.IsTrue(result, "the mass switch still gets its set, so the part gets a Module_PartSwitch");
+            CollectionAssert.AreEqual(new[] { "massSwitch" }, data.VariantSets.Select(v => v.VariantSetId).ToArray());
+            Assert.AreEqual(0.5f, data.VariantSets[0].Variants[1].Transformers.OfType<MassModifier>().Single().Modifier);
+            CollectionAssert.Contains(_lines, B9Lines.PartNote("testMixed", B9Lines.Notes.ReduxSetMissing("meshSwitch", new string[0])));
+            Assert.IsFalse(_lines.Any(l => l.Contains("failed")), string.Join(Environment.NewLine, _lines));
+        }
+
+        /// <summary>No tank catalog seen (or its postfix failed): one line, tank resources off; mass still applies.</summary>
+        [Test] public void TryBuild_NoTankTypes_ResourcesOff_OneLine_MassKept()
+        {
+            Assert.IsTrue(Arm());
+            for (var i = 0; i < 2; i++)
+            {
+                var node = Ksp1ConfigNode.Parse(TankTypes + TankPart);
+                var file = new Ksp1ConfigFile(new Ksp1ModRoot("C:/i", "C:/i/GameData"), "C:/i/GameData/T/t.cfg", "T", node);
+                var part = node.GetNodes("PART").First();
+                var context = new Ksp1PartImportContext("testTank", new Ksp1ImportReport())
+                {
+                    PartNode = part,
+                    PartData = new PartData { resourceContainers = new List<ContainedResourceDefinition> { new ContainedResourceDefinition(0.5, "Methalox") } },
+                };
+                Assert.IsTrue(Ksp1B9PartSwitchVariantBuilder.TryBuild(file, part, 1f, context, new string[0], out var data, out _));
+                foreach (var v in data.VariantSets[0].Variants)
+                {
+                    Assert.IsFalse(v.Transformers.Any(t => t is ResourceContainerRemover || t is ResourceContainerAdder), v.VariantId);
+                    Assert.IsTrue(v.VariantId != "Mono" || v.Transformers.OfType<MassModifier>().Any(), "addedMass still applies");
+                }
+            }
+            Assert.AreEqual(1, _lines.Count(l => l.StartsWith(B9Lines.Prefix + "tank types not read")), string.Join(Environment.NewLine, _lines));
+            Assert.IsFalse(_lines.Any(l => l.Contains("failed")));
+        }
+
+        /// <summary>The installed BDB Gemini Equipment Module (raw cfg): two tank switches (fuelCellSwitch, volumeSwitch).
+        /// Redux's base holds the default resources of both, so no Remover/Adder is built and Redux's resources stay as
+        /// they are; mass still applies.</summary>
+        [Test] public void TryBuild_RealBdbSecondTankSwitch_ResourcesKept_MassApplied()
+        {
+            var root = InstalledKsp1.Root;
+            var tanks = System.IO.Path.Combine(root, "Bluedog_DB/Compatibility/B9PartSwitch/B9TankTypes.cfg");
+            var partPath = System.IO.Path.Combine(root, "Bluedog_DB/Parts/Gemini/bluedog_Gemini_EquipmentModule.cfg");
+            if (!System.IO.File.Exists(tanks) || !System.IO.File.Exists(partPath)) Assert.Ignore("BDB files not installed at " + root);
+            Assert.IsTrue(Arm());
+
+            var modRoot = new Ksp1ModRoot(root, root);
+            var tankFile = new Ksp1ConfigFile(modRoot, tanks, "Bluedog_DB", Ksp1ConfigNode.ParseFile(tanks));
+            var partFile = new Ksp1ConfigFile(modRoot, partPath, "Bluedog_DB", Ksp1ConfigNode.ParseFile(partPath));
+            var catalog = Ksp1B9TankCatalog.FromConfigFiles(new[] { tankFile, partFile });
+            var part = partFile.Node.GetNodes("PART").First();
+            var name = part.GetValue("name");
+            var context = new Ksp1PartImportContext(name, new Ksp1ImportReport()) { PartNode = part };
+            context.PartData = new PartData
+            {
+                partName = name,
+                resourceContainers = Ksp1ResourceMapper.MapPartResources(part.GetNodes("RESOURCE").Concat(catalog.GetResourceNodes(part, name)),
+                    null, context.Report, name, null),
+            };
+            var before = context.PartData.resourceContainers.Select(c => (c.name, c.capacityUnits, c.initialUnits)).ToList();
+            var result = Ksp1B9PartSwitchVariantBuilder.TryBuild(partFile, part, 1f, context, new string[0], out var data, out _);
+
+            TestContext.WriteLine(string.Join(Environment.NewLine, _lines));
+            Assert.IsTrue(result);
+            var all = data.VariantSets.SelectMany(v => v.Variants).ToList();
+            Assert.IsFalse(all.Any(v => v.Transformers.Any(t => t is ResourceContainerRemover || t is ResourceContainerAdder)),
+                "no Remover/Adder on a part with two tank switches");
+            Assert.IsTrue(all.Any(v => v.Transformers.OfType<MassModifier>().Any()), "mass still applies");
+            CollectionAssert.AreEqual(before, context.PartData.resourceContainers.Select(c => (c.name, c.capacityUnits, c.initialUnits)).ToList(),
+                "Redux's resources unchanged");
+            Assert.IsTrue(_lines.Any(l => l.StartsWith(B9Lines.Prefix + name + ": tank resources of 'fuelCellSwitch' not applied")), "the note names the switch");
+            Assert.IsFalse(_lines.Any(l => l.Contains("failed") || l.Contains("dropped")), string.Join(Environment.NewLine, _lines));
         }
     }
 }

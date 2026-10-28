@@ -53,6 +53,15 @@ namespace KSP1PartMod.B9
 
         public const string Stopped = Prefix + "stopped for this session after 3 failures";
 
+        /// <summary>Redux's result does not match the plan in a way that cannot be skipped per switch: the part keeps
+        /// Redux's sets (not counted as a failure).</summary>
+        public static string PlanMismatch(string part, string reason) =>
+            Prefix + $"{part}: Redux's sets differ from the plan ({reason}), Redux's variants kept for this part";
+
+        /// <summary>Once per session: no tank type could be read, so no tank resource is changed.</summary>
+        public static string TankTypesUnavailable(string reason) =>
+            Prefix + $"tank types not read ({reason}), tank resources off for this session (Redux's resources kept)";
+
         /// <summary>Once at the end of the import.</summary>
         public static string ImportSummary(int parts, int sets, int newSets, int onPartsWithoutSwitch, int massVariants,
             int resourceVariants, int scalarVariants, int costVariants) =>
@@ -128,6 +137,18 @@ namespace KSP1PartMod.B9
             public const string UpgradeRequiredIgnored = "upgradeRequired ignored (no upgrade gate)";
 
             public const string NodeTransformNotApplied = "node/TRANSFORM not applied";
+
+            /// <summary>The part has a second tank switch: Redux's base holds the default resources of both switches, so
+            /// the first switch's Remover/Adder would lose the second's; Redux's resources are kept.</summary>
+            public static string ResourcesKeptSecondTank(string tankSwitch) =>
+                $"tank resources of '{tankSwitch}' not applied: the part has a second tank switch whose default resources " +
+                "are in Redux's base, so Redux's resources are kept (mass and part values still apply)";
+
+            public static string ReduxSetMissing(string set, IEnumerable<string> reduxSets) =>
+                $"Redux's set '{set}' not found (Redux built {List(reduxSets)}), its overrides skipped";
+
+            public static string ReduxVariantMissing(string set, string variant) =>
+                $"variant '{variant}' not found in Redux's set '{set}', the set's overrides skipped";
 
             public const string ResourceCapacitiesAdded =
                 "no resource in the base definition, Module_ResourceCapacities added for the tank subtypes";

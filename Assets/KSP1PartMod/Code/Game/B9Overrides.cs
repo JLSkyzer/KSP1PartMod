@@ -183,7 +183,7 @@ namespace KSP1PartMod.Game
             _switches = null;
             _tankTypes = null;
             _catalogTypes = null;
-            _armed = _stopped = _summaryLogged = false;
+            _armed = _stopped = _summaryLogged = _tankTypesLineLogged = false;
             _failures = 0;
             Tallies.Clear();
             NotesLogged.Clear();
@@ -217,8 +217,25 @@ namespace KSP1PartMod.Game
             catch (Exception e)
             {
                 _tankTypes = null;
-                Error(B9Lines.PartFailed("(tank types)", e.ToString()));
+                TankTypesUnavailableOnce(e.ToString());
             }
+        }
+
+        private static bool _tankTypesLineLogged;
+
+        /// <summary>Without tank types every tank subtype would read as unknown: tank resources are off instead, with one
+        /// line per session; mass, part values and the sets themselves still apply.</summary>
+        private static void TankTypesUnavailableOnce(string reason)
+        {
+            if (_tankTypesLineLogged) return;
+            _tankTypesLineLogged = true;
+            Error(B9Lines.TankTypesUnavailable(reason));
+        }
+
+        /// <summary>Redux's result cannot be matched to the plan for the whole part (not counted as a failure).</summary>
+        internal sealed class PlanMismatchException : Exception
+        {
+            public PlanMismatchException(string message) : base(message) { }
         }
 
         /// <summary>Every type of Redux's catalog as resource-only (only the names no file defines are used: Redux's
@@ -262,6 +279,12 @@ namespace KSP1PartMod.Game
                 Commit(built, __3, ref __result, ref __5, ref __6);
                 Tallies[part] = built.Tally;
             }
+            catch (PlanMismatchException e)
+            {
+                // Deterministic for this part (its cfg against Redux's result): not a failure of the feature.
+                Tallies.Remove(part);
+                Warn(B9Lines.PlanMismatch(part, e.Message));
+            }
             catch (Exception e)
             {
                 Tallies.Remove(part);
@@ -292,7 +315,8 @@ namespace KSP1PartMod.Game
         }
 
         /// <summary>Plans and builds the part's transformers without touching <paramref name="data"/>; null when there is
-        /// nothing to add. Throws when a Redux set or variant the plan names is missing.</summary>
+        /// nothing to add. A Redux set or variant the plan names but Redux did not build skips that switch (noted); an
+        /// appended id Redux already uses throws <see cref="PlanMismatchException"/>.</summary>
         internal static Built Build(string part, Ksp1ConfigNode partNode, float rescaleFactor, Ksp1PartImportContext context,
             Data_PartSwitch data)
         {
@@ -312,17 +336,46 @@ namespace KSP1PartMod.Game
             var database = ResourceDatabase();
             var anyAdder = false;
 
+            // Tank resources are applied only when they can be exact: tank types read, one tank switch on the part.
+            var applyResources = true;
+            if (_tankTypes == null)
+            {
+                applyResources = false;
+                TankTypesUnavailableOnce("Redux's tank catalog was not seen before the first part");
+            }
+            var tankSwitch = plan.Switches.FirstOrDefault(s => s.IsTank && s.Subtypes.Any(st => st.Resources != null));
+            if (applyResources && plan.HasSecondTankSwitch && tankSwitch != null)
+            {
+                applyResources = false;
+                LogNoteOnce(part, B9Lines.Notes.ResourcesKeptSecondTank(
+                    B9Values.FirstNonBlank(tankSwitch.Module.GetValue("moduleID"), tankSwitch.Module.GetValue("switcherDescription"), tankSwitch.SetId)));
+            }
+
             foreach (var sw in plan.Switches)
             {
                 VariantSet reduxSet = null;
                 AppendedSet appended = null;
                 if (!sw.Appended)
                 {
-                    reduxSet = reduxSets.FirstOrDefault(s => string.Equals(s.VariantSetId, sw.SetId, StringComparison.OrdinalIgnoreCase))
-                               ?? throw new InvalidOperationException($"Redux's set '{sw.SetId}' not found among [{string.Join(", ", reduxSets.Select(s => s.VariantSetId))}]");
+                    // A Redux set the plan expected but Redux did not build (or built differently): that switch only is
+                    // skipped, Redux's set stays as it is; the other switches of the part are unaffected.
+                    reduxSet = reduxSets.FirstOrDefault(s => string.Equals(s.VariantSetId, sw.SetId, StringComparison.OrdinalIgnoreCase));
+                    if (reduxSet == null)
+                    {
+                        LogNoteOnce(part, B9Lines.Notes.ReduxSetMissing(sw.SetId, reduxSets.Select(s => s.VariantSetId)));
+                        continue;
+                    }
+                    var missing = sw.Subtypes.Select(st => st.VariantId)
+                        .FirstOrDefault(id => !reduxSet.Variants.Any(v => string.Equals(v.VariantId, id, StringComparison.Ordinal)));
+                    if (missing != null)
+                    {
+                        LogNoteOnce(part, B9Lines.Notes.ReduxVariantMissing(sw.SetId, missing));
+                        continue;
+                    }
                 }
                 else if (!usedIds.Add(sw.SetId))
-                    throw new InvalidOperationException($"appended set id '{sw.SetId}' is already used by Redux");
+                    // Our ids would no longer be those the gates plan with: the whole part keeps Redux's sets.
+                    throw new PlanMismatchException($"appended set id '{sw.SetId}' is already used by Redux");
 
                 var set = sw.Appended
                     ? new VariantSet { VariantSetId = sw.SetId, VariantSetLocalizationKey = SetKey(part, sw.SetId), IsPopout = false }
@@ -347,7 +400,7 @@ namespace KSP1PartMod.Game
                         Add(part, list, new MassModifier { Modifier = (float)st.MassDelta }, () => built.Tally.MassVariants++);
                     masses.Add(list.OfType<MassModifier>().Sum(m => (double)m.Modifier));
 
-                    if (st.Resources != null)
+                    if (st.Resources != null && applyResources)
                     {
                         // Remover then Adder, kept or dropped together: a Remover alone would empty the tank.
                         var mapped = MapResources(part, ownResources, st.Resources, database, context);
@@ -389,8 +442,7 @@ namespace KSP1PartMod.Game
                     }
                     else if (list.Count > 0)
                     {
-                        var target = reduxSet.Variants.FirstOrDefault(v => string.Equals(v.VariantId, st.VariantId, StringComparison.Ordinal))
-                                     ?? throw new InvalidOperationException($"variant '{st.VariantId}' not found in Redux's set '{sw.SetId}'");
+                        var target = reduxSet.Variants.First(v => string.Equals(v.VariantId, st.VariantId, StringComparison.Ordinal));
                         built.ToRedux.Add((target, list));
                     }
                 }
