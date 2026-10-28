@@ -6,6 +6,7 @@ using HarmonyLib;
 using KSP.Sim.Definitions;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Native;
+using KSP1PartMod.Native.Science;
 using Redux.Ksp1Import.Modules;
 
 namespace KSP1PartMod.Game
@@ -133,6 +134,31 @@ namespace KSP1PartMod.Game
                     _settings?.RadiatorAutoOn ?? true),
                 SummaryLines = RadiatorImporter.SummaryLines,
             },
+            Science(ScienceMapping.StockModule),
+            Science(ScienceMapping.DMagicModule),
+            Science(ScienceMapping.DMagicGenericModule),
+            new Converter
+            {
+                Ksp1Module = ScienceMapping.ContainerModule,
+                NativeModule = ScienceImporter.StorageTarget,
+                SwitchKey = ScienceImporter.ContainerSwitches,
+                IsOn = s => s.Ksp1Science && s.ScienceReportStorage,
+                MissingMembers = ScienceImporter.MissingStorageMembers,
+                Create = () => new ScienceImporter(_settings, container: true),
+                SummaryLines = ScienceImporter.SummaryLines, // one science line for the four (the first asks)
+            },
+        };
+
+        /// <summary>A KSP1 experiment module → <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>); the three share one importer type.</summary>
+        private static Converter Science(string ksp1Module) => new Converter
+        {
+            Ksp1Module = ksp1Module,
+            NativeModule = ScienceMapping.NativeModule,
+            SwitchKey = "ksp1_science",
+            IsOn = s => s.Ksp1Science,
+            MissingMembers = ScienceImporter.MissingMembers,
+            Create = () => new ScienceImporter(_settings, container: false),
+            SummaryLines = ScienceImporter.SummaryLines,
         };
 
         private static bool MultiplierIsDefault(AnimationSettings s) =>
@@ -282,6 +308,8 @@ namespace KSP1PartMod.Game
             IsruReference.Reset();
             RadiatorImporter.ResetSession();
             RadiatorAccess.Reset();
+            ScienceImporter.ResetSession();
+            ScienceAccess.Reset();
             RejectedNames.Clear();
             Record.Clear();
             Isru.Clear();

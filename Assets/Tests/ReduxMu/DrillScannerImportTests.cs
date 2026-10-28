@@ -22,6 +22,9 @@ namespace KSP1PartMod.Tests.ReduxMu
     /// Redux's <c>Module_Mine</c> and <c>Module_ResourceScanner</c>, every rate through Redux's own <c>ConvertAmount</c>.</summary>
     public class DrillScannerImportTests
     {
+        /// <summary>The science converters armed after the radiators (0.12.0).</summary>
+        private const string ScienceArmed = ScienceImportTests.ArmedPairs;
+
         private readonly List<string> _lines = new List<string>();
 
         [SetUp] public void SetUp()
@@ -129,7 +132,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed, " +
                                               "ModuleAblator -> Module_Heatshield, ModuleResourceConverter -> Module_ResourceConverter, " +
                                               "ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, " +
-                                              "ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler");
+                                              "ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler" + ScienceArmed);
             var importers = Importers(new Ksp1PartModuleImporterRegistry());
             Assert.IsInstanceOf<HarvesterImporter>(importers["moduleresourceharvester"]);
             Assert.IsInstanceOf<SurveyorImporter>(importers["moduleorbitalsurveyor"]);

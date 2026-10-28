@@ -22,6 +22,9 @@ namespace KSP1PartMod.Tests.ReduxMu
     /// modes, every rate through Redux's own <c>ConvertAmount</c> over a resource database built in the test.</summary>
     public class IsruImportTests
     {
+        /// <summary>The science converters armed after the radiators (0.12.0).</summary>
+        private const string ScienceArmed = ScienceImportTests.ArmedPairs;
+
         private readonly List<string> _lines = new List<string>();
 
         [SetUp] public void SetUp()
@@ -187,7 +190,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         {
             Assert.IsTrue(Arm(Database()));
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed, " +
-                                              "ModuleAblator -> Module_Heatshield, ModuleResourceConverter -> Module_ResourceConverter, ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler");
+                                              "ModuleAblator -> Module_Heatshield, ModuleResourceConverter -> Module_ResourceConverter, ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler" + ScienceArmed);
             Assert.IsInstanceOf<ConverterImporter>(Importers(new Ksp1PartModuleImporterRegistry())["moduleresourceconverter"]);
         }
 

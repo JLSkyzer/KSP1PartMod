@@ -23,6 +23,9 @@ namespace KSP1PartMod.Tests.ReduxMu
     /// which this assembly does not reference: it is read through <see cref="RadiatorAccess"/>.</summary>
     public class RadiatorImportTests
     {
+        /// <summary>The science converters armed after the radiators (0.12.0).</summary>
+        private const string ScienceArmed = ScienceImportTests.ArmedPairs;
+
         private readonly List<string> _lines = new List<string>();
 
         [SetUp] public void SetUp()
@@ -155,7 +158,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed, " +
                                               "ModuleAblator -> Module_Heatshield, ModuleResourceConverter -> Module_ResourceConverter, " +
                                               "ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, " +
-                                              "ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler");
+                                              "ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler" + ScienceArmed);
             var importers = Importers(new Ksp1PartModuleImporterRegistry());
             Assert.IsInstanceOf<RadiatorImporter>(importers["moduleactiveradiator"]);
             Assert.IsFalse(importers.ContainsKey(RadiatorMapping.DeployableModule), "no importer of ours: Redux's unsupported line stays");
