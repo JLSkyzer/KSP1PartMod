@@ -30,6 +30,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         [SetUp] public void SetUp()
         {
             LoadTimeline.Reset();
+            Ksp1ImportedPartRegistry.Clear();
             _lines.Clear();
             _reports.Clear();
             LoadTimeline.Sink = _lines.Add;
@@ -44,6 +45,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             new Harmony(NativeModules.HarmonyId).UnpatchAll(NativeModules.HarmonyId);
             NativeModules.Reset();
             NativeModules.Sink = null;
+            Ksp1ImportedPartRegistry.Clear();
         }
 
         private static AnimationSettings Settings(string json = "{}") => AnimationSettings.Parse(json, out _);
@@ -135,8 +137,13 @@ namespace KSP1PartMod.Tests.ReduxMu
             var node = Ksp1ConfigNode.Parse("PART\n{\nname = perfTimelinePart\nmodule = Part\nmass = 0.1\ncategory = Utility\n}\n");
             var file = new Ksp1ConfigFile(root, "C:/import/GameData/Test/Parts/perf.cfg", "Test", node);
             var part = node.GetNodes("PART").First();
+            // IOProvider's settings come from a RuntimeInitializeOnLoadMethod that EditMode does not run: without them the
+            // translation's JSON round trip fails when this fixture runs alone.
+            var previousJson = Newtonsoft.Json.JsonConvert.DefaultSettings;
             try
             {
+                try { KSP.IO.IOProvider.Init(); }
+                catch (Exception e) { Assert.Ignore("IOProvider cannot initialise in EditMode: " + e.Message); }
                 Ksp1ImportedPartRegistry.BeginImport("perf-timeline-test");
                 var ok = new Ksp1PartTranslator(null, null).TryTranslatePart(file, part, new Ksp1ImportReport(), out var core, out _);
                 Assert.IsTrue(ok);
@@ -161,6 +168,7 @@ namespace KSP1PartMod.Tests.ReduxMu
                 }
                 Ksp1ImportedPartRegistry.Clear();
                 LogAssert.ignoreFailingMessages = false;
+                Newtonsoft.Json.JsonConvert.DefaultSettings = previousJson;
             }
         }
 

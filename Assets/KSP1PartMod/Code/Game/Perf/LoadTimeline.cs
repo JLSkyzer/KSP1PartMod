@@ -26,7 +26,8 @@ namespace KSP1PartMod.Game.Perf
     /// <list type="bullet">
     /// <item>Each Redux member of research (b) is resolved by name; a missing one logs one line and only its phase is not
     /// timed. Its patches are a <c>void</c> prefix that keeps a timestamp in <c>__state</c> (<c>Priority.First</c>) and a
-    /// postfix that adds the elapsed ticks (<c>Priority.Last</c>): no argument, result or control flow changes.</item>
+    /// postfix that adds the elapsed ticks (<c>Priority.Last</c>); some phases also have a <c>void</c> finalizer that only
+    /// clears a flag the prefix set, and the exception passes unchanged: no argument, result or control flow changes.</item>
     /// <item>The worker phases (configuration database, catalogs) add from Redux's <c>Task.Run</c> thread through the
     /// lock-free <see cref="PerfClock"/>, and nothing logs from there: the lines are written at <c>MarkImportComplete</c>.</item>
     /// <item>Main-thread phases count only while an import is open (<c>BeginImport</c> → <c>MarkImportComplete</c>); inside a
