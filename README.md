@@ -89,6 +89,11 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "heat_glow": true,
   "skip_modules": [],
   "perf_counter": false,
+  "perf_load_timeline": true,
+  "perf_memory_lines": true,
+  "perf_report_file": true,
+  "perf_top_n": 10,
+  "perf_window_seconds": 10,
   "fix_fairing_init": true,
   "engine_tooltip_stats": true,
   "subcategory_bar_keeps_grid": true,
@@ -144,7 +149,8 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `throttle_effects`: `FXModuleThrottleEffects` drives the colour changers of its engine with the throttle (Bluedog_DB engine glow).
 - `heat_glow`: play KSP1's heat glow (Heat entries and their curves). Set `false` if KSP2 already makes hot parts glow and you see it doubled.
 - `skip_modules`: list of KSP1 module names the mod never takes, for example `["FXModuleThrottleEffects"]`, to switch one module off if it misbehaves.
-- `perf_counter`: default `false`. `true` logs every 60 s the time spent by the animations (`[KSP1PartMod] anim: perf:` lines), for bug reports.
+- `perf_counter`: default `false`. `true` logs every 60 s the time spent by the animations (`[KSP1PartMod] anim: perf:` lines), and since 0.13.0 the cost per frame of each feature (`[KSP1PartMod] perf: frame:` lines, see "Performance"), for bug reports.
+- Performance (0.13.0, see that section): `perf_load_timeline`, `perf_memory_lines`, `perf_report_file`, `perf_top_n`, `perf_window_seconds`.
 - `fix_fairing_init` (0.4.1): Redux turns the jettison shroud of KSP1 engines into a KSP2 `Module_Fairing` that looks for a transform named `model`, which KSP1 imports lack; it then breaks the part in the VAB (red cylinder left, part that cannot be placed again in the same visit). The mod gives those parts an empty collider array and skips Redux's `OnMaterialLoaded` on KSP1 parts without `Module_Color` (`[KSP1PartMod] fairing:` lines). `false` leaves Redux as it is.
 - `engine_tooltip_stats` (0.4.1): add the max thrust, Isp and propellant lines of KSP1 engines to the VAB tooltip, as the game does for KSP2 engines (`[KSP1PartMod] tooltip:` line).
 - `subcategory_bar_keeps_grid` (0.4.1): while the sub-category bar is shown, widen the parts panel by the bar's width so the third column stays whole; the ship toolbar follows. `false` narrows the grid instead, as in 0.4.0.
@@ -282,6 +288,23 @@ Redux drops every KSP1 science module. Since 0.12.0 the mod imports `ModuleScien
 - **Safety.** Each importer failure leaves the part as 0.11.0 imports it, report storage included. A missing game member turns its feature off with one line. A runtime throw stops the science patches for the session (`science: patch failed`).
 - **Audit.** The `native_modules` column carries `Module_ScienceExperiment` and `report storage`; the `audit: native modules:` line counts science parts.
 
+## Performance (0.13.0)
+
+0.13.0 optimises nothing: it measures, so that one game session gives the numbers that decide every later optimisation. Built, not verified in game. Checklist (French), done during the big in-game test: `docs/testing/2026-10-28-performance-in-game-checklist.md`. Lines `[KSP1PartMod] perf:` and `[KSP1PartMod] textures:`.
+
+| Key | Default | Effect | `false` (or the 0.12.0 value) |
+|---|---|---|---|
+| `perf_load_timeline` | `true` | Times the phases of Redux's KSP1 import that can be observed (cache key, cfg read, ModuleManager finalize, catalogs, translate, Redux's module importers and ours, prefab, `.mu` read, textures, report lines, localization, icons, release), the mod's own load steps and the prefab rebuilds after the import. Lines `perf: import:` at the end of the import, `perf: ours:` at the end of the campaign load, `perf: rebuilds since …` at VAB and flight entry. Timing patches only: no argument, result or control flow changes. | No timing patch, as 0.12.0 (`perf: armed: load timeline off`). |
+| `perf_memory_lines` | `true` | At each memory moment (end of import, after the import released its prefabs, VAB and flight entry and 5 s later, and a new main-menu moment), the process memory (`perf: memory at`) and a census of the live KSP1 textures: format, size class, without mipmaps, uncompressed, not a power of two, readable, the largest (`textures: census at`, `textures: largest at`). The census only reads the textures. | The 0.12.0 `textures: memory/cache` lines only, and no main-menu moment. |
+| `perf_report_file` | `true` | Writes `<mod>/perf/perf-<yyyyMMdd-HHmmss>.md` for the session, rewritten at each memory moment (and after an audit), with every section above and what to send. The 10 newest are kept. Any I/O error turns it off for the session, with one line. | No file. |
+| `perf_top_n` | `10` (1 to 50) | Length of the slowest-parts and largest-textures lists. | — |
+| `perf_counter` | `false` | Adds the per-feature frame lines: every `perf_window_seconds`, and at each change of scene, `perf: frame: <scene> … fps …; ours <avg> ms avg, <p95> ms p95, <max> ms max per frame; timing overhead ~… ms per frame`, then one line per feature that cost something (clips, 2a material, 2b plugins, shrouds, B9 gates, ISRU/radiator bridge, science, save, flush, look-at, radiator patch, drill patch, sub-category bar). Allocates nothing per frame. | One switch read per site, nothing else. |
+| `perf_window_seconds` | `10` (2 to 300) | Window of the `perf: frame:` lines (the 0.4.0 `anim: perf:` line keeps 60 s). | — |
+
+- **What to send.** After a session: the complete `Player.log` (`%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2`), the newest file of `<game>/mods/KSP1PartMod/perf/`, the audit's `audit-<date>.md` if the audit ran, and the "Dedicated GPU memory" of Task Manager (Performance, GPU) noted by hand at each moment. The mod cannot read the real video memory; Unity's profiler figures may also read 0 in the game's release player, and are printed as read.
+- **Honest numbers.** Nested phases are labelled "of which", what our timings do not cover is labelled "other" or "outside our timings", a frame p95 is the upper bound of its histogram bucket (within about 13 %), and the cost of the timestamps themselves is printed (`timer overhead`, `timing overhead`).
+- **Safety.** A timing patch that throws stops the whole load timeline for the session (`perf: load: stopped`), and Redux's code runs as it is. A failure of the frame cost turns it off with one line.
+
 ## Audit mode (0.6.0)
 
 Off by default. With `"audit_on_vab_entry": true` in `animations.json`, the first time you enter the VAB in a game session (mod enabled in the campaign), the mod loads every KSP1 part once, off screen and one at a time, and writes a report of the parts that fail, throw, stay unfinished or log errors. It changes nothing in your craft, the part list or the undo history, and the shared KSP1 textures are not destroyed. Do not build while it runs; leaving the VAB cancels it, and the next entry resumes. Not run in game yet: checklist in `docs/testing/2026-10-28-audit-in-game-checklist.md`.
@@ -292,7 +315,7 @@ Off by default. With `"audit_on_vab_entry": true` in `animations.json`, the firs
 | `audit_frame_budget_ms` | 8 | Time the audit may use per frame (1 to 50). |
 | `audit_unload_every` | 100 | Parts between two unloads of the audit's textures (10 to 1000). |
 
-Output, in `<mod>/audit/`: `audit-<date>.csv` (one row per part), `audit-<date>.md` (summary, including a `pods:` line on KSP1 pods with engines), `skip.txt` (parts that crashed the game, skipped from then on) and a breadcrumb file. Log lines start with `[KSP1PartMod] audit:`.
+Output, in `<mod>/audit/`: `audit-<date>.csv` (one row per part), `audit-<date>.md` (summary, including a `pods:` line on KSP1 pods with engines, and since 0.13.0 a "Timings" table: p50, p95 and max of `prefab_ms` and `finalize_ms`, also logged as `audit: perf:`), `skip.txt` (parts that crashed the game, skipped from then on) and a breadcrumb file. Log lines start with `[KSP1PartMod] audit:`.
 
 ## VAB sub-categories
 
