@@ -47,14 +47,23 @@ Phase 1 (0.2.x à 0.3.2) : `docs/testing/2026-10-25-animations-in-game-checklist
   '<chemin>' x1, <r> renderer(s) via [_EmissionColor], <l> light(s), 0 unbound (...)` puis l'émission ci-dessus.
   Refaire avec `"emission_setup": false` : la lueur doit disparaître (ou rester invisible), ce qui prouve que
   l'émission de KSP2 était éteinte.
-- [ ] **Contrôle du bloc de propriétés** : `anim: <pièce> mpb check '<prop>': wrote <v>, read <v'>` avec `read` = `wrote`.
+- [ ] **Contrôle du bloc de propriétés** : `anim: <pièce> mpb check '<prop>': wrote <v>, read <v'>` avec `read` = `wrote`
+  (à 1e-4 près ; une précision `(the block held <v''> after our write)` signale seulement l'arrondi de l'espace Linear).
   - Si les valeurs diffèrent : un autre écrivain remplace le bloc après notre `LateUpdate`. Recopier la ligne et la
     pièce ; le repli se déclenche seul, avec l'avertissement `anim: <pièce> mpb check read another value: every
     written renderer is flushed again at render time`. La lueur doit alors s'afficher quand même.
   - `mpb check '<prop>': wrote <v>, renderer gone before the render` : le renderer a disparu avant le rendu, sans conséquence.
+- [ ] **Contrôle du bloc en rentrée** (cône ou pièce KSP1 sous une coque de rentrée) : à la première rentrée de chaque
+  type de pièce, `anim: <pièce> reentry hull active on '<chemin>': mpb check armed`, puis
+  `anim: <pièce> mpb check '<prop>' at reentry: wrote <v>, read <v'>`. Recopier les deux lignes.
+  - `read` = `wrote` : notre écriture passe après `ReentryMesh`, `[DefaultExecutionOrder]` est appliqué.
+  - `read` différent : `ReentryMesh` écrit après nous ; l'avertissement `anim: <pièce> mpb check at reentry read another
+    value: the renderers under an active reentry hull are flushed again at render time` suit, et la lueur doit
+    s'afficher quand même. Le noter : la comparaison `heat_glow` ci-dessous n'est lisible qu'avec cette ligne.
 - [ ] **Lignes `rebound` attendues, pas des erreurs** : une ligne `anim: <pièce> renderer '<chemin>' rebound: material
-  changed (<ancien shader> -> <nouveau>)` par renderer surveillé à **chaque activation de la coque de rentrée**
-  (l'écrivain `ReentryMesh` change le matériau). Une ligne `anim: <pièce> <n> renderer(s) rewritten every frame while
+  changed (<ancien shader> -> <nouveau>)` par renderer surveillé à **la première activation de la coque de rentrée**
+  (l'écrivain `ReentryMesh` change le matériau ; Unity rend ensuite les mêmes instances, une absence de la ligne aux
+  activations suivantes est normale). Une ligne `anim: <pièce> <n> renderer(s) rewritten every frame while
   their reentry hull is active` accompagne la pièce concernée. Un déluge de `rebound` en dehors d'une rentrée,
   lui, est un défaut : recopier.
 - [ ] **VAB, variante** : changer la variante d'une pièce KSP1 à variantes ; la lueur continue (un `rebound` est
@@ -68,7 +77,8 @@ Phase 1 (0.2.x à 0.3.2) : `docs/testing/2026-10-25-animations-in-game-checklist
   en vol, s'éteint à la coupure.
 - [ ] **Cône d'avionique en rentrée** (ou autre pièce chauffée) : lueur KSP1 de chaleur. Comparer avec
   `"heat_glow": false` : si KSP2 fait déjà rougir la pièce, la lueur est **doublée** avec `true`. Dans ce cas,
-  laisser `false` et le noter. Avec `false`, le log dit `anim: heat glow off by animations.json` (une fois).
+  laisser `false` et le noter. Avec `false`, le log dit `anim: heat glow off by animations.json` (une fois) et, par pièce,
+  `anim: <pièce> Heat '<clip>' not built: heat_glow off`.
 - [ ] Moteur ionique : la couleur change (courbe de matériau du clip). Bloc RCS : rien de nouveau avant 2b.
 
 ### Lumières
@@ -83,7 +93,9 @@ Phase 1 (0.2.x à 0.3.2) : `docs/testing/2026-10-25-animations-in-game-checklist
 
 - `normalizedOutput` du moteur est lu comme `FinalThrustValue / maxThrust` : la lueur suit-elle bien la poussée
   réelle et pas seulement la manette ?
-- `[DefaultExecutionOrder]` sur un type du mod : non prouvé. Le `mpb check` et son repli au rendu le couvrent.
+- `[DefaultExecutionOrder]` sur un type du mod : non prouvé. Le `mpb check` (par type de pièce) et sa variante en
+  rentrée le détectent, le repli au rendu corrige ; il faut lire les deux lignes, la rentrée étant le seul cas où un
+  écrivain du jeu remplace notre bloc à chaque image.
 - Visibilité de l'émission : la table des propriétés (`_EmissionColor` en premier) est une hypothèse issue des
   shaders vus ; `anim: shader '<nom>': …` (une ligne par shader, diagnostic) liste ce qui existe vraiment.
 - Double lueur avec la chaleur de KSP2 (`heat_glow`).
