@@ -214,6 +214,39 @@ namespace KSP1PartMod.Animation.Tracks
             _targets[s.Target].Dirty = true;
         }
 
+        /// <summary>The channel stops counting in its slot until its next submit (an entry held at rest by a B9 gate). A
+        /// colour channel that held the slot gives it back: to the highest other colour channel that has submitted, else to
+        /// the blend of the track channels (the slot's rest value when none is active). Allocation-free.</summary>
+        public void Withdraw(int channel)
+        {
+            ref var c = ref _channels[channel];
+            if (!c.Submitted) return;
+            c.Submitted = false;
+            ref var s = ref _slots[c.Slot];
+            Value4 shown;
+            if (c.Class == WriterClass.Color)
+            {
+                if (s.ColorWinner != channel) return;
+                var best = -1;
+                for (var i = s.FirstChannel; i >= 0; i = _channels[i].NextInSlot)
+                {
+                    if (i == channel || _channels[i].Class != WriterClass.Color || !_channels[i].Submitted) continue;
+                    if (best < 0 || Outranks(i, best)) best = i;
+                }
+                s.ColorWinner = best;
+                shown = best >= 0 ? _channels[best].Value : Blend(ref s);
+            }
+            else
+            {
+                if (s.ColorWinner >= 0) return;
+                shown = Blend(ref s);
+            }
+            if (!s.Claimed || (s.Written && !s.Dirty && s.Shown.SameAs(shown))) return;
+            s.Shown = shown;
+            s.Dirty = true;
+            _targets[s.Target].Dirty = true;
+        }
+
         private static bool Active(ref Channel c) =>
             c.Submitted && c.Class == WriterClass.Track && c.Weight > 0f && !c.Value.Near(c.Rest, RestTolerance);
 

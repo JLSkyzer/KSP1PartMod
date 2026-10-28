@@ -22,8 +22,8 @@ namespace KSP1PartMod.Game.Animation
     /// <item>Before each write the first slot's material and shader are compared with the bind
     /// (<see cref="WriterPolicy.Rebind"/>): a change rebinds (the only allocating path of the flush), except while the
     /// OAB selection shader is on.</item>
-    /// <item>Copies are destroyed by <see cref="ReleaseAll"/> (shutdown, new table), by <see cref="RebindAll"/> (a variant
-    /// change, which makes them again) and, when no slot holds them any more, by a rebind.</item>
+    /// <item>Copies are destroyed by <see cref="ReleaseAll"/> (shutdown, new table) and, when no slot holds them any
+    /// more, by a rebind (a material change seen by the flush, or a variant change, <see cref="RebindAll"/>).</item>
     /// </list></summary>
     internal sealed class RendererChannels : IChannelSink
     {
@@ -274,24 +274,43 @@ namespace KSP1PartMod.Game.Animation
                 if (b != null) Release(b);
         }
 
-        /// <summary>A variant change (<see cref="RebindScope.Renderers"/>): every owned copy released (the slot gets its
-        /// material of the bind back when it still holds the copy), then the facts and decisions read again per material
-        /// and the copies made again where the decision says so. Instances that were not ours at bind (Redux's texture
-        /// switch instances its targets before our bind, and keeps them as reverter keys) are never destroyed: they are
-        /// decided again in place. Returns the number of renderers decided again.</summary>
+        /// <summary>A variant change (<see cref="RebindScope.Renderers"/>): each bound renderer is rebound as on a material
+        /// change (<see cref="Rebind(Binding, string)"/>): copies no slot holds any more are destroyed; copies still in a
+        /// slot stay (Redux may have instanced them through <c>renderer.materials</c>, written its textures on them and kept
+        /// them as reverter keys, if its switch ran after our bind) and get our keyword and black emission again; the other
+        /// materials are decided again (Redux's pre-bind instances in place, never destroyed). Under the OAB selection shader
+        /// the rebind waits until the shader changes back, as the flush's. Returns the number of renderers rebound now.</summary>
         public int RebindAll()
         {
             var n = 0;
             foreach (var b in _bindings)
             {
                 if (b == null || b.Renderer == null) continue;
-                Release(b);
-                b.DeferredOn = null;
-                Decide(b);
-                Rebinds++;
+                var m = b.Renderer.sharedMaterial;
+                var shader = m != null ? m.shader : null;
+                if (WriterPolicy.Rebind(true, true, shader != null ? shader.name : null) == RebindDecision.Defer)
+                {
+                    // The flush rebinds once the shader leaves the selection shader (First no longer matches).
+                    b.First = null;
+                    b.DeferredOn = shader;
+                    continue;
+                }
+                Rebind(b, shader != null ? shader.name : null, log: false);
                 n++;
             }
             return n;
+        }
+
+        /// <summary>Our copies still in a slot get the emission keyword and a black <c>_EmissionColor</c> again (a texture
+        /// switch's <c>CopyPropertiesFromMaterial</c> may have reset them; the block carries our colour).</summary>
+        private static void RefreshHeldCopies(Binding b, Material[] slots)
+        {
+            foreach (var c in b.Copies)
+            {
+                if (c == null || Array.IndexOf(slots, c) < 0) continue;
+                c.EnableKeyword(EmissionKeyword);
+                c.SetColor(EmissionColorId, Color.black);
+            }
         }
 
         private static void Release(Binding b)
@@ -348,9 +367,10 @@ namespace KSP1PartMod.Game.Animation
             }
         }
 
-        /// <summary>The material or shader changed: copies no slot holds any more are destroyed (those still held stay
-        /// ours), and the emission setup is decided again from the current materials.</summary>
-        private void Rebind(Binding b, string newShader)
+        /// <summary>The material or shader changed (or the variant did): copies no slot holds any more are destroyed (those
+        /// still held stay ours and get their emission setup again), and the emission setup is decided again from the
+        /// current materials.</summary>
+        private void Rebind(Binding b, string newShader, bool log = true)
         {
             var old = b.FirstShaderName ?? "none";
             var slots = b.Renderer.sharedMaterials;
@@ -361,10 +381,11 @@ namespace KSP1PartMod.Game.Animation
                 b.Copies.RemoveAt(k);
                 b.Originals.RemoveAt(k);
             }
+            RefreshHeldCopies(b, slots);
             b.DeferredOn = null;
             Decide(b);
             Rebinds++;
-            Log($"{_part ?? "?"} renderer '{PathOf(b.Renderer)}' rebound: material changed ({old} -> {newShader ?? "none"})");
+            if (log) Log($"{_part ?? "?"} renderer '{PathOf(b.Renderer)}' rebound: material changed ({old} -> {newShader ?? "none"})");
         }
 
         /// <summary>Facts and <see cref="EmissionPolicy"/> decision per material, copies through one

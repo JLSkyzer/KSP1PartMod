@@ -85,12 +85,8 @@ namespace KSP1PartMod.Animation.Behaviours
         private void SetLevel(float level)
         {
             Level = level;
-            Color = ColorAt(level);
+            Color = new Rgba(Eval(_r, level), Eval(_g, level), Eval(_b, level), Eval(_a, level));
         }
-
-        /// <summary>The colour of the curves at <paramref name="level"/>, without changing the state (an entry held at rest
-        /// by a B9 gate shows level 0).</summary>
-        public Rgba ColorAt(float level) => new Rgba(Eval(_r, level), Eval(_g, level), Eval(_b, level), Eval(_a, level));
 
         private static FloatCurve Channel(float[][] curves, int i) =>
             curves != null && i < curves.Length && curves[i] != null && curves[i].Length >= 4 ? new FloatCurve(curves[i]) : null;

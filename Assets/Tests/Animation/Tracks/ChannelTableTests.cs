@@ -87,6 +87,55 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             Assert.AreEqual(0.2f, Sink.Last(P).X);
         }
 
+        /// <summary>Review M1: a colour entry held at rest by a B9 gate withdraws; the active entry of a lower module then
+        /// holds the slot, although the inactive one outranks it.</summary>
+        [Test] public void ChannelTable_WithdrawnColor_GivesSlotToOtherColor()
+        {
+            var active = Reg(t, WriterClass.Color, 2);
+            var inactive = Reg(t, WriterClass.Color, 5);
+            t.Submit(active, V(0.9f));
+            t.Submit(inactive, V(0.2f));
+            t.Flush(Sink);
+            Assert.AreEqual(0.2f, Sink.Last(P).X);
+            t.Withdraw(inactive);
+            t.Flush(Sink);
+            Assert.AreEqual(0.9f, Sink.Last(P).X, "the other colour channel's last value");
+            t.Submit(active, V(0.4f));
+            t.Flush(Sink);
+            Assert.AreEqual(0.4f, Sink.Last(P).X, "its writes win");
+            t.Submit(inactive, V(0.1f));
+            t.Flush(Sink);
+            Assert.AreEqual(0.1f, Sink.Last(P).X, "a submit after the gate opens counts again");
+        }
+
+        [Test] public void ChannelTable_WithdrawnOnlyColor_SlotBackToTracksOrRest()
+        {
+            var tr = Reg(t, WriterClass.Track, 0);
+            var co = Reg(t, WriterClass.Color, 0);
+            t.Submit(co, V(1));
+            t.Flush(Sink);
+            t.Withdraw(co);
+            t.Flush(Sink);
+            Assert.AreEqual(0f, Sink.Last(P).X, "the slot's rest value");
+            t.Submit(tr, V(0.5f));
+            t.Flush(Sink);
+            Assert.AreEqual(0.5f, Sink.Last(P).X, "a track shows again");
+        }
+
+        [Test] public void ChannelTable_WithdrawNotWinner_NoWrite()
+        {
+            var a = Reg(t, WriterClass.Color, 2);
+            var b = Reg(t, WriterClass.Color, 5);
+            t.Submit(a, V(0.9f));
+            t.Submit(b, V(0.2f));
+            t.Flush(Sink);
+            Sink.Clear();
+            t.Withdraw(a);
+            t.Withdraw(a);
+            t.Flush(Sink);
+            Assert.AreEqual(0, Sink.Writes);
+        }
+
         [Test] public void ChannelTable_OneBeginEndPerTargetPerFlush()
         {
             var a = Reg(t, WriterClass.Track, 0, property: 1);

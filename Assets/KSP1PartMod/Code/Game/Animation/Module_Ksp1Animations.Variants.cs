@@ -139,10 +139,20 @@ namespace KSP1PartMod.Game.Animation
                 Log($"{_name} B9 '{SetLabel(_variants.SetId(set))}' -> '{id}': transforms of '{id}' active {active}/{total}");
         }
 
-        /// <summary>Entries whose gates just closed (or whose samplers were bound again) are put at rest, before any entry
-        /// is stepped this frame: an active entry sharing their clip then writes its pose after them.</summary>
+        /// <summary>First the states sampled at rest last frame are disabled again (end of the hold-pose idiom); then the
+        /// entries whose gates just closed (or whose samplers were bound again) are put at rest, before any entry is stepped
+        /// this frame: an active entry sharing their clip then writes its pose after them. Allocation-free when nothing
+        /// changes.</summary>
         private void RestInactive()
         {
+            for (var i = 0; i < _entries.Count; i++)
+            {
+                var held = _entries[i].RestHeld;
+                if (held == null || held.Count == 0) continue;
+                for (var k = 0; k < held.Count; k++)
+                    if (held[k] != null) held[k].enabled = false;
+                held.Clear();
+            }
             for (var i = 0; i < _entries.Count; i++)
             {
                 var e = _entries[i];
@@ -160,27 +170,41 @@ namespace KSP1PartMod.Game.Animation
 
         private static bool Inactive(Entry e) => e.Gate != null && !e.Gate.Active;
 
-        /// <summary>The rest pose of an inactive entry, shown once: its states at time 0 and disabled, its tracks at rest
-        /// (weight 0), a colour entry at level 0. Its machine is left as it is and resumes when the gate opens.</summary>
-        private static void Rest(Entry e)
+        /// <summary>The rest pose of an inactive entry, shown once (spec 2b.1): each of its legacy states that no active
+        /// entry of the part holds (<see cref="RestPlan.Unshared"/>) is sampled at time 0, weight 1, speed 0 for this frame
+        /// and disabled on the next (<see cref="RestInactive"/>); a state an active entry holds is left to it. Its tracks
+        /// at rest (weight 0); a colour entry withdraws its channels, so another colour entry of the renderer wins. Its
+        /// machine is left as it is and resumes when the gate opens.</summary>
+        private void Rest(Entry e)
         {
             e.Rested = true;
-            Hold(e.States);
-            Hold(e.ActiveStates);
+            var active = new List<AnimationState[]>();
+            foreach (var o in _entries)
+            {
+                if (ReferenceEquals(o, e) || o.Disabled || Inactive(o)) continue;
+                active.Add(o.States);
+                active.Add(o.ActiveStates);
+            }
+            HoldAtRest(e, e.States, RestPlan.Unshared(e.States, active), e.Def.Layer);
+            HoldAtRest(e, e.ActiveStates, RestPlan.Unshared(e.ActiveStates, active), e.Group != null ? ActiveLayer : e.Def.Layer);
             e.StatesOn = e.ActiveOn = false;
             TrackSampler.SampleAll(e.Tracks, in RestTrackPose);
             TrackSampler.SampleAll(e.ActiveTracks, in RestTrackPose);
-            if (e.Color != null && e.Writer != null) e.Writer.Write(e.Color.ColorAt(0f));
+            e.Writer?.Withdraw();
         }
 
-        private static void Hold(AnimationState[] states)
+        private static void HoldAtRest(Entry e, AnimationState[] states, bool[] sample, int layer)
         {
             for (var i = 0; i < states.Length; i++)
             {
+                if (!sample[i]) continue;
                 var s = states[i];
-                if (s == null) continue;
+                s.enabled = true;
+                s.layer = layer;
+                s.weight = 1f;
+                s.speed = 0f;
                 s.normalizedTime = 0f;
-                s.enabled = false;
+                (e.RestHeld ??= new List<AnimationState>()).Add(s);
             }
         }
 

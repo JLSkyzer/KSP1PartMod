@@ -80,22 +80,53 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual(1, Sink.CopiesOf(r));
         }
 
-        /// <summary>The slot still holds our copy (the texture switch rewrote properties in place): released, the material
-        /// of the bind back in the slot, then a fresh copy of it.</summary>
-        [Test] public void Sink_RebindAll_SameSlot_NewCopyOfBindMaterial()
+        /// <summary>The slot still holds our copy (the texture switch rewrote its properties in place, possibly keeping it
+        /// as a reverter key if Redux's switch ran after our bind): the copy stays, same reference, and gets our keyword and
+        /// black emission again.</summary>
+        [Test] public void Sink_RebindAll_SameSlot_KeepsCopyAndRefreshesIt()
         {
             var shared = Mat(keywordOn: false);
             var r = Renderer(shared);
-            ExpectInstancing(2);
+            ExpectInstancing(1);
             Sink.AddRenderer(r, Defaults, out _);
-            var first = r.sharedMaterial;
-            Sink.RebindAll();
-            Assert.IsTrue(first == null);
-            Assert.AreNotSame(shared, r.sharedMaterial);
-            Assert.IsTrue(r.sharedMaterial.IsKeywordEnabled("_EMISSION"));
+            var copy = r.sharedMaterial;
+            copy.DisableKeyword("_EMISSION"); // CopyPropertiesFromMaterial from a copy taken before our bind
+            copy.SetColor(Emission, Color.white);
+            Assert.AreEqual(1, Sink.RebindAll());
+            Assert.IsTrue(copy != null, "not destroyed");
+            Assert.AreSame(copy, r.sharedMaterial);
+            Assert.IsTrue(copy.IsKeywordEnabled("_EMISSION"));
+            Assert.AreEqual(Color.black, copy.GetColor(Emission));
             Assert.AreEqual(1, Sink.CopiesOf(r));
             Sink.ReleaseAll();
-            Assert.AreSame(shared, r.sharedMaterial, "the copy made by the rebind is ours too");
+            Assert.AreSame(shared, r.sharedMaterial, "still ours: released at shutdown");
+        }
+
+        /// <summary>The 2a deferral: under the OAB selection shader the rebind waits; the flush does it once the shader
+        /// changes back.</summary>
+        [Test] public void Sink_RebindAll_UnderSelectionShader_Deferred()
+        {
+            var selection = UnityEditor.ShaderUtil.CreateShaderAsset(
+                "Shader \"KSP2/Scenery/Standard_OAB_Selection\" { SubShader { Pass { Color (1,1,1,1) } } }", false);
+            if (selection == null || selection.name != "KSP2/Scenery/Standard_OAB_Selection") Assert.Ignore("no test selection shader");
+            _made.Add(selection);
+            var lit = Mat(keywordOn: true);
+            var r = Renderer(lit);
+            var t = Sink.AddRenderer(r, Defaults, out _);
+            var c = Table.Register(t, Shader.PropertyToID(Emission), ChannelValueType.Color, WriterClass.Color, 0, new Value4(0, 0, 0, 1));
+            lit.shader = selection;
+            Assert.AreEqual(0, Sink.RebindAll(), "deferred");
+            Assert.AreEqual(0, Sink.Rebinds);
+            Table.Submit(c, new Value4(1, 0, 0, 1));
+            ChannelFlush.Register(Table, Sink);
+            ChannelFlush.FlushAll();
+            Assert.AreEqual(0, Sink.Rebinds, "still under the selection shader");
+            lit.shader = _lit; // the shader switch dropped the _EMISSION keyword: the rebind copies the material
+            ExpectInstancing(1);
+            Table.Submit(c, new Value4(0, 1, 0, 1));
+            ChannelFlush.FlushAll();
+            ChannelFlush.Unregister(Table);
+            Assert.AreEqual(1, Sink.Rebinds, "rebound once the shader is back");
         }
 
         [Test] public void Sink_RebindAll_NoCopyNeeded_ReleasesOnly()

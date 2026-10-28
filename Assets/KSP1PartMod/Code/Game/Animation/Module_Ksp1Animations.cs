@@ -1096,6 +1096,8 @@ namespace KSP1PartMod.Game.Animation
             public EntryGate Gate;
             /// <summary>An inactive entry's rest pose was shown (cleared when its gate changes or its samplers are bound again).</summary>
             public bool Rested;
+            /// <summary>States sampled at rest this frame, disabled again on the next (hold-pose idiom).</summary>
+            public List<AnimationState> RestHeld;
 
             public Entry(AnimEntryDef def) => Def = def;
         }

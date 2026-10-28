@@ -94,6 +94,15 @@ namespace KSP1PartMod.Game.Animation
             for (var i = 0; i < _channels.Length; i++) table.Submit(_channels[i], v);
         }
 
+        /// <summary>The entry is held at rest by a B9 gate: its channels leave their slots (<see cref="ChannelTable.Withdraw"/>),
+        /// so another colour entry of the renderer wins, or the material's colour of the bind shows. No allocation.</summary>
+        public void Withdraw()
+        {
+            var table = _table;
+            if (table == null) return;
+            for (var i = 0; i < _channels.Length; i++) table.Withdraw(_channels[i]);
+        }
+
         private static void LogShader(Shader shader)
         {
             if (shader == null || !LoggedShaders.Add(shader.name)) return;
