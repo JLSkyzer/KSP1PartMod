@@ -22,7 +22,9 @@ namespace KSP1PartMod.Game.Ui
     /// <c>categoryButtons</c> (otherwise the picker would treat them as categories), lose their
     /// <c>ObjectAssemblyCategoryButton</c> and listeners, and leave any <c>ToggleGroup</c>.</para>
     /// While the bar is shown, the grid (<c>partContentRT</c>), and the search row when it sits beside the bar, are
-    /// narrowed from the left by the bar's width; they get their offsets back when it hides.</summary>
+    /// narrowed from the left by the bar's width, and the picker panel grows by the same width so the grid keeps its
+    /// columns whole (<c>subcategory_bar_keeps_grid</c>, <see cref="GridWidening"/>); all get their sizes back when it
+    /// hides.</summary>
     internal sealed class Ksp1SubcategoryBar : MonoBehaviour
     {
         private sealed class Shift
@@ -377,6 +379,7 @@ namespace KSP1PartMod.Game.Ui
             var worldWidth = width * Mathf.Abs(parent.lossyScale.x);
             var contentBefore = _picker.partContentRT.offsetMin.x;
             Apply(_contentShift, _picker.partContentRT, worldWidth, true);
+            KeepGrid(worldWidth);
             var search = _picker.SearchFilterSortRT;
             var searchBeside = search != null && OverlapsVertically(search, _root);
             Apply(_searchShift, search, worldWidth, searchBeside);
@@ -434,6 +437,145 @@ namespace KSP1PartMod.Game.Ui
             s.Applied = 0f;
         }
 
+        // ---------------------------------------------------------------- grid width (subcategory_bar_keeps_grid)
+
+        /// <summary>A fixed-width RectTransform grown by the bar's width, left edge kept.</summary>
+        private sealed class Widening
+        {
+            public RectTransform Rt;
+            public bool Active;
+            public float Original, Applied, Before;
+        }
+
+        private readonly Widening _ownerWidening = new Widening(), _backgroundWidening = new Widening();
+        private RectTransform _ownerFor, _owner;
+        private bool _gridLogged;
+
+        /// <summary>Gives back to the panel the width the bar takes from the grid (see <see cref="GridWidening"/>), so the
+        /// grid keeps its fixed-width columns whole. Off (<c>subcategory_bar_keeps_grid</c> false), or without a fixed-width
+        /// ancestor, the grid stays narrowed as in 0.4.0.</summary>
+        private void KeepGrid(float worldWidth)
+        {
+            var content = _picker.partContentRT;
+            if (!KSP1PartModPlugin.Animations.SubcategoryBarKeepsGrid)
+            {
+                LogGridOnce("[KSP1PartMod] ui: grid narrowed by the bar, panel left as it is (subcategory_bar_keeps_grid false)");
+                return;
+            }
+            if (_ownerFor != content)
+            {
+                _ownerFor = content;
+                _owner = FindWidthOwner(content);
+            }
+            if (_owner == null)
+            {
+                LogGridOnce("[KSP1PartMod] ui: grid narrowed by the bar: no fixed-width panel found above " +
+                            $"'{(content.parent != null ? content.parent.name : "-")}' up to '{_picker.name}'");
+                return;
+            }
+            Widen(_ownerWidening, _owner, worldWidth, true);
+            var background = _picker.partsPickerBGPanelRT;
+            var widenBackground = background != null && background != _owner && !_owner.IsChildOf(background)
+                && !background.IsChildOf(content) && IsFixedWidth(background);
+            Widen(_backgroundWidening, widenBackground ? background : null, worldWidth, widenBackground);
+            if (_gridLogged) return;
+            LogGridOnce(GridWidening.Line(_owner.name, _ownerWidening.Before, _owner.sizeDelta.x,
+                widenBackground ? background.name : null, _backgroundWidening.Before, widenBackground ? background.sizeDelta.x : 0f,
+                content.rect.width, DescribeGrid()));
+        }
+
+        private void LogGridOnce(string line)
+        {
+            if (_gridLogged) return;
+            _gridLogged = true;
+            KSP1PartModPlugin.Log?.LogInfo(line);
+        }
+
+        private RectTransform FindWidthOwner(RectTransform content)
+        {
+            var chain = new List<GridWidening.Node>();
+            var nodes = new List<RectTransform>();
+            var top = _picker.transform;
+            for (var t = content.parent as RectTransform; t != null; t = t.parent as RectTransform)
+            {
+                chain.Add(new GridWidening.Node(t.anchorMin.x, t.anchorMax.x));
+                nodes.Add(t);
+                if (t == top) break;
+            }
+            if (nodes.Count == 0 || nodes[nodes.Count - 1] != top) return null; // the grid is not under the picker
+            var i = GridWidening.WidthOwner(chain);
+            return i < 0 ? null : nodes[i];
+        }
+
+        private static bool IsFixedWidth(RectTransform rt) => new GridWidening.Node(rt.anchorMin.x, rt.anchorMax.x).FixedWidth;
+
+        /// <summary>Grows rt's <c>sizeDelta.x</c> by worldWidth (in its parent's units) while wanted, the left edge kept; a
+        /// width someone else wrote in between becomes the new original (as <see cref="Apply"/> does for offsets).</summary>
+        private static void Widen(Widening w, RectTransform rt, float worldWidth, bool want)
+        {
+            if (w.Rt != rt)
+            {
+                Unwiden(w);
+                w.Rt = rt;
+                w.Active = false;
+            }
+            if (rt == null) return;
+            var parent = rt.parent as RectTransform;
+            var scale = parent != null ? Mathf.Abs(parent.lossyScale.x) : 1f;
+            var local = want ? worldWidth / (scale > 1e-6f ? scale : 1f) : 0f;
+            var current = rt.sizeDelta.x;
+            if (!w.Active)
+            {
+                if (local <= 0f) return;
+                w.Original = w.Before = current;
+                w.Applied = 0f;
+                w.Active = true;
+            }
+            else if (Mathf.Abs(current - (w.Original + w.Applied)) > 0.01f)
+            {
+                w.Original = current;
+                w.Applied = 0f;
+            }
+            if (Mathf.Abs(w.Applied - local) <= 0.01f) return;
+            GridWidening.Widen(rt.anchoredPosition.x, w.Original, rt.pivot.x, local - w.Applied, out var x, out _);
+            rt.sizeDelta = new Vector2(w.Original + local, rt.sizeDelta.y);
+            rt.anchoredPosition = new Vector2(x, rt.anchoredPosition.y);
+            w.Applied = local;
+        }
+
+        private static void Unwiden(Widening w)
+        {
+            if (!w.Active || w.Rt == null)
+            {
+                w.Active = false;
+                return;
+            }
+            var rt = w.Rt;
+            if (Mathf.Abs(rt.sizeDelta.x - (w.Original + w.Applied)) <= 0.01f)
+            {
+                GridWidening.Widen(rt.anchoredPosition.x, rt.sizeDelta.x, rt.pivot.x, -w.Applied, out var x, out _);
+                rt.sizeDelta = new Vector2(w.Original, rt.sizeDelta.y);
+                rt.anchoredPosition = new Vector2(x, rt.anchoredPosition.y);
+            }
+            w.Active = false;
+            w.Applied = 0f;
+        }
+
+        /// <summary>The first grid of the part list, for the log: cell, spacing, constraint and the columns that fit.</summary>
+        private string DescribeGrid()
+        {
+            var scroll = _picker.partsPickerScrollRect;
+            var root = scroll != null && scroll.content != null ? scroll.content : _picker.partContentRT;
+            var grid = root != null ? root.GetComponentInChildren<GridLayoutGroup>(true) : null;
+            if (grid == null) return null;
+            var width = ((RectTransform)grid.transform).rect.width;
+            return string.Format(CultureInfo.InvariantCulture,
+                "grid '{0}' {1:0.#} wide, cell {2:0.#}x{3:0.#}, spacing {4:0.#}, padding {5}/{6}, constraint {7} {8}, {9} column(s) fit",
+                grid.name, width, grid.cellSize.x, grid.cellSize.y, grid.spacing.x, grid.padding.left, grid.padding.right,
+                grid.constraint, grid.constraintCount,
+                GridWidening.Columns(width, grid.padding.left, grid.padding.right, grid.cellSize.x, grid.spacing.x));
+        }
+
         private static readonly Vector3[] Corners = new Vector3[4];
 
         private static void LocalBounds(RectTransform rt, RectTransform space, out float xMin, out float xMax, out float yMin, out float yMax)
@@ -469,6 +611,8 @@ namespace KSP1PartMod.Game.Ui
         {
             Restore(_contentShift);
             Restore(_searchShift);
+            Unwiden(_ownerWidening);
+            Unwiden(_backgroundWidening);
         }
 
         private void OnDisable()
@@ -480,8 +624,7 @@ namespace KSP1PartMod.Game.Ui
         private void Hide()
         {
             if (_root != null && _root.gameObject.activeSelf) _root.gameObject.SetActive(false);
-            Restore(_contentShift);
-            Restore(_searchShift);
+            RestoreNow();
         }
 
         private void SafeHide()

@@ -50,6 +50,14 @@ namespace KSP1PartMod.Animation.Settings
         public bool PerfCounter => _switches2a.PerfCounter;
         /// <summary>KSP1 module names never taken (<c>skip_modules</c>), trimmed, distinct, ordinal.</summary>
         public IReadOnlyCollection<string> SkipModules => _switches2a.SkipModules;
+        /// <summary>Let Redux's <c>Module_Fairing</c> finish its initialization on KSP1 parts (<c>fix_fairing_init</c>):
+        /// empty base colliders instead of null, and no <c>OnMaterialLoaded</c> on a part without <c>Module_Color</c>.</summary>
+        public bool FixFairingInit => _switches041.FixFairingInit;
+        /// <summary>Max thrust, Isp and propellant in the VAB tooltip of KSP1 engines (<c>engine_tooltip_stats</c>).</summary>
+        public bool EngineTooltipStats => _switches041.EngineTooltipStats;
+        /// <summary>The picker panel grows by the sub-category bar's width so the grid keeps whole columns
+        /// (<c>subcategory_bar_keeps_grid</c>).</summary>
+        public bool SubcategoryBarKeepsGrid => _switches041.SubcategoryBarKeepsGrid;
 
         /// <summary>The phase 2a keys, read together.</summary>
         private sealed class Switches2a
@@ -58,6 +66,14 @@ namespace KSP1PartMod.Animation.Settings
             public bool PerfCounter;
             public IReadOnlyCollection<string> SkipModules = NoModules;
         }
+
+        /// <summary>The 0.4.1 fix switches, read together.</summary>
+        private sealed class Switches041
+        {
+            public bool FixFairingInit = true, EngineTooltipStats = true, SubcategoryBarKeepsGrid = true;
+        }
+
+        private readonly Switches041 _switches041;
 
         private static readonly IReadOnlyCollection<string> NoModules = new ReadOnlyCollection<string>(new string[0]);
         private readonly Switches2a _switches2a;
@@ -75,13 +91,15 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a());
+                new Switches2a(), new Switches041());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
-            bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a)
+            bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
+            Switches041 switches041)
         {
             _switches2a = switches2a;
+            _switches041 = switches041;
             EditorAnimationSpeed = editorAnimationSpeed;
             SubcategoryBar = subcategoryBar;
             FollowReduxDeployables = followRedux;
@@ -116,6 +134,7 @@ namespace KSP1PartMod.Animation.Settings
                 var editorSpeed = Defaults.EditorAnimationSpeed;
                 IReadOnlyDictionary<string, string[]> map = null;
                 var s2a = new Switches2a();
+                var s041 = new Switches041();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -135,6 +154,9 @@ namespace KSP1PartMod.Animation.Settings
                         case "throttle_effects": ReadBool(p, ref s2a.ThrottleEffects, problems); break;
                         case "heat_glow": ReadBool(p, ref s2a.HeatGlow, problems); break;
                         case "perf_counter": ReadBool(p, ref s2a.PerfCounter, problems); break;
+                        case "fix_fairing_init": ReadBool(p, ref s041.FixFairingInit, problems); break;
+                        case "engine_tooltip_stats": ReadBool(p, ref s041.EngineTooltipStats, problems); break;
+                        case "subcategory_bar_keeps_grid": ReadBool(p, ref s041.SubcategoryBarKeepsGrid, problems); break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:
@@ -143,7 +165,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041);
             }
             catch (Exception e)
             {

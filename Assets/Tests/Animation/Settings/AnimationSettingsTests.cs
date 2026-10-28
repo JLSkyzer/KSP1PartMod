@@ -129,6 +129,42 @@ namespace KSP1PartMod.Tests.Animation.Settings
         [Test] public void Settings_SkipModules_NotMutableThroughCast() =>
             Assert.IsFalse(AnimationSettings.Parse("{\"skip_modules\": [\"A\"]}", out _).SkipModules is ICollection<string> c && !c.IsReadOnly);
 
+        [Test] public void Settings_041Switches_DefaultTrue()
+        {
+            var d = AnimationSettings.Defaults;
+            Assert.IsTrue(d.FixFairingInit && d.EngineTooltipStats && d.SubcategoryBarKeepsGrid);
+            var s = AnimationSettings.Parse(File.ReadAllText(ShippedPath), out var e);
+            Assert.IsNull(e);
+            Assert.IsTrue(s.FixFairingInit && s.EngineTooltipStats && s.SubcategoryBarKeepsGrid);
+        }
+
+        [Test] public void Settings_041Switches_AreRead()
+        {
+            var s = AnimationSettings.Parse("{\"fix_fairing_init\": false, \"engine_tooltip_stats\": false, \"subcategory_bar_keeps_grid\": false}", out var e);
+            Assert.IsNull(e);
+            Assert.IsFalse(s.FixFairingInit);
+            Assert.IsFalse(s.EngineTooltipStats);
+            Assert.IsFalse(s.SubcategoryBarKeepsGrid);
+        }
+
+        [Test] public void Settings_041Switches_WrongType_KeepDefaultAndReport()
+        {
+            var s = AnimationSettings.Parse("{\"fix_fairing_init\": 0, \"subcategory_bar_keeps_grid\": \"no\"}", out var e);
+            StringAssert.Contains("fix_fairing_init", e);
+            StringAssert.Contains("subcategory_bar_keeps_grid", e);
+            Assert.IsTrue(s.FixFairingInit && s.SubcategoryBarKeepsGrid);
+        }
+
+        [Test] public void Settings_ShippedFile_Documents041Keys()
+        {
+            var text = File.ReadAllText(ShippedPath);
+            foreach (var key in new[] { "fix_fairing_init", "engine_tooltip_stats", "subcategory_bar_keeps_grid" })
+            {
+                StringAssert.Contains($"\"{key}\":", text);
+                StringAssert.Contains($"{key}:", text.Substring(0, text.IndexOf("\"enabled\"", System.StringComparison.Ordinal)), key + " in _note");
+            }
+        }
+
         [Test] public void Settings_ShippedFile_DocumentsEveryNewKey()
         {
             var text = File.ReadAllText(ShippedPath);

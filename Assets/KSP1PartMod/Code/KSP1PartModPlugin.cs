@@ -63,6 +63,26 @@ namespace KSP1PartMod
             {
                 Log.LogError("[KSP1PartMod] ui: sub-category bar not armed: " + e);
             }
+            try
+            {
+                FairingFixes.TryApply(new Harmony(FairingFixes.HarmonyId), Animations.FixFairingInit);
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] fairing: fix not applied: " + e);
+            }
+            try
+            {
+                EngineTooltipStats.TryApply(new Harmony(EngineTooltipStats.HarmonyId), Animations.EngineTooltipStats);
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] tooltip: engine stats not applied: " + e);
+            }
+            if (Animations.SubcategoryBar)
+                Log.LogInfo("[KSP1PartMod] ui: grid width " + (Animations.SubcategoryBarKeepsGrid
+                    ? "kept: the parts panel widens by the sub-category bar's width while it is shown"
+                    : "not kept: the sub-category bar narrows the grid (subcategory_bar_keeps_grid false)"));
             if (Animations.Diagnostics) MaterialDiagnostics.Apply(new Harmony(MaterialDiagnostics.HarmonyId));
             else Log.LogInfo("[KSP1PartMod] diag: material dump disabled by " + AnimationSettingsFile);
             try
