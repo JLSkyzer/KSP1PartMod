@@ -89,6 +89,7 @@ namespace KSP1PartMod.Game.Animation
             {
                 ShroudImport.LogImportSummaryOnce();
                 NativeModules.LogImportSummaryOnce();
+                B9Overrides.LogImportSummaryOnce();
             }
             if (!complete)
             {

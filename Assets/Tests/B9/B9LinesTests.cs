@@ -21,8 +21,10 @@ namespace KSP1PartMod.Tests.B9
                 B9Lines.SetSummary("p", "s", 2, -0.5, 1.25, null, new[] { "maxTemp", "CoMOffset" }));
             Assert.AreEqual(P + "p: new set 'B9Switch0' for B9 #0 (2 subtypes, default 'Light')",
                 B9Lines.NewSet("p", "B9Switch0", "B9 #0", 2, "Light"));
-            Assert.AreEqual(P + "p: second tank switch 'mono' not applied (one tank switch per part)",
-                B9Lines.PartNote("p", B9Lines.Notes.SecondTankSwitch("mono")));
+            Assert.AreEqual(P + "p: second tank switch 'mono' not applied (one tank switch per part): its dry mass, 0..0.005 t, left out",
+                B9Lines.PartNote("p", B9Lines.Notes.SecondTankSwitch("mono", 0, 0.005)));
+            Assert.AreEqual(P + "p: second tank switch 'mono' not applied (one tank switch per part): its dry mass, unknown (volume not readable), left out",
+                B9Lines.PartNote("p", B9Lines.Notes.SecondTankSwitch("mono", null, null)));
             Assert.AreEqual(P + "p: transformer MassModifier dropped: boom", B9Lines.TransformerDropped("p", "MassModifier", "boom"));
             Assert.AreEqual(P + "p: failed, Redux's variants kept: System.Exception: x",
                 B9Lines.PartFailed("p", new Exception("x").ToString()));

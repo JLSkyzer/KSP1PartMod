@@ -102,6 +102,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // After NativeModules, before Redux's import (which builds the tank catalog and the variant sets).
+                B9Overrides.TryApply(new Harmony(B9Overrides.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.B9.B9Lines.PartFailed("(arming)", e.ToString()));
+            }
+            try
+            {
                 EngineTooltipStats.TryApply(new Harmony(EngineTooltipStats.HarmonyId), Animations.EngineTooltipStats);
             }
             catch (Exception e)

@@ -163,6 +163,7 @@ namespace KSP1PartMod.Game
                         {
                             // The import is complete even though the tree is not: the native summary still holds.
                             NativeModules.LogImportSummaryOnce();
+                            B9Overrides.LogImportSummaryOnce();
                         }
                         catch (Exception e)
                         {
@@ -179,6 +180,7 @@ namespace KSP1PartMod.Game
             {
                 // Redux's import is complete: once per session, independent of the animation switch.
                 NativeModules.LogImportSummaryOnce();
+                B9Overrides.LogImportSummaryOnce();
             }
             catch (Exception e)
             {

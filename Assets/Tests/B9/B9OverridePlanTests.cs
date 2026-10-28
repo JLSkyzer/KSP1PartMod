@@ -223,7 +223,8 @@ PART
             Assert.AreEqual(0, second.Subtypes[1].MassDelta);
             Assert.IsTrue(second.Appended);
             Assert.IsFalse(plan.Switches.Contains(null));
-            CollectionAssert.Contains(plan.Notes, B9Lines.Notes.SecondTankSwitch("monoSwitch"));
+            CollectionAssert.Contains(plan.Notes, B9Lines.Notes.SecondTankSwitch("monoSwitch", 0, 0.005),
+                "Structural 0 t, Mono 0.0005 x 10 = 0.005 t");
             Assert.IsTrue(plan.HasSecondTankSwitch);
         }
 

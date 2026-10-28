@@ -27,6 +27,12 @@ namespace KSP1PartMod.B9
         public static string MemberNotFound(string member) =>
             Prefix + member + " not found, B9 overrides off (Redux's variants left as is)";
 
+        /// <summary>Every switch that Task 2 applies (mass, resources, part scalars) is off: nothing is armed.</summary>
+        public const string AllOff = Prefix + "mass, resources and part scalars off, nothing armed (Redux's variants left as is)";
+
+        public static string BuiltInTankTypesNotFound(string member) =>
+            Prefix + member + " not found, Redux's built-in tank types unknown (their subtypes get no tank resources)";
+
         /// <summary>Once per set.</summary>
         public static string SetSummary(string part, string set, int variants, double massMin, double massMax,
             IEnumerable<string> resources, IEnumerable<string> scalars) =>
@@ -97,8 +103,12 @@ namespace KSP1PartMod.B9
         /// <summary>The notes of <see cref="B9OverridePlan.Notes"/>, written after <c>b9: &lt;part&gt;: </c>.</summary>
         public static class Notes
         {
-            public static string SecondTankSwitch(string switchLabel) =>
-                $"second tank switch '{switchLabel}' not applied (one tank switch per part)";
+            /// <param name="dryMin">The smallest dry mass (<c>tankMass × volume</c>) of its subtypes, in tonnes, or null when
+            /// none can be computed (unreadable volume).</param>
+            public static string SecondTankSwitch(string switchLabel, double? dryMin, double? dryMax) =>
+                $"second tank switch '{switchLabel}' not applied (one tank switch per part): its dry mass, " +
+                (dryMin.HasValue && dryMax.HasValue ? $"{Inv(dryMin.Value)}..{Inv(dryMax.Value)} t" : "unknown (volume not readable)") +
+                ", left out";
 
             public static string ChildVolumeAtDefault(string child, string parent, string childDefault) =>
                 $"volume of '{parent}' takes '{child}' at its default subtype '{childDefault}' (the choice of '{child}' is not followed)";
@@ -118,6 +128,9 @@ namespace KSP1PartMod.B9
             public const string UpgradeRequiredIgnored = "upgradeRequired ignored (no upgrade gate)";
 
             public const string NodeTransformNotApplied = "node/TRANSFORM not applied";
+
+            public const string ResourceCapacitiesAdded =
+                "no resource in the base definition, Module_ResourceCapacities added for the tank subtypes";
 
             public static string Unparseable(string subtype, string key, string raw) =>
                 $"subtype '{subtype}': {key} '{raw}' cannot be read, ignored";

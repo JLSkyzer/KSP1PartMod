@@ -51,7 +51,7 @@ namespace KSP1PartMod.Tests.B9
             var notes = new List<string>();
             var st = B9Text.Subtype("SUBTYPE\n{\nname = LFO\ntankType = bdbLFOX\naddedMass = 0.2\n}");
             Assert.AreEqual(0.2, B9MassRule.Delta(st, Types.Find("bdbLFOX"), null, notes), 1e-12);
-            Assert.AreEqual(1, notes.Count);
+            CollectionAssert.AreEqual(new[] { B9Lines.Notes.NoVolumeForDryMass("LFO", "bdbLFOX") }, notes);
         }
 
         [Test] public void Mass_UnparseableAddedMass_Zero_Noted()

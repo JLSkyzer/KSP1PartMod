@@ -114,7 +114,9 @@ namespace KSP1PartMod.B9
                 else
                 {
                     plan.HasSecondTankSwitch = true;
-                    plan.Note(B9Lines.Notes.SecondTankSwitch(Label(sw)));
+                    var dry = DryMasses(sw, b9Modules, tankTypes);
+                    plan.Note(B9Lines.Notes.SecondTankSwitch(Label(sw), dry.Count == 0 ? (double?)null : dry.Min(),
+                        dry.Count == 0 ? (double?)null : dry.Max()));
                 }
             }
 
@@ -263,6 +265,22 @@ namespace KSP1PartMod.B9
                     double.TryParse(parts[i], NumberStyles.Float, CultureInfo.InvariantCulture, out values[i])))
                 sp.Scalars.Add(new B9PartScalar { Key = "CoMOffset", Values = values });
             else notes.Add(B9Lines.Notes.Unparseable(id, "CoMOffset", com.Trim()));
+        }
+
+        /// <summary>The dry mass (<c>tankMass × volume</c>, tonnes) of each subtype of a tank switch that is not applied,
+        /// for its note; subtypes whose volume cannot be read are left out, a tank type without <c>tankMass</c> counts 0.</summary>
+        private static List<double> DryMasses(VariantSwitch sw, List<IKsp1Node> b9Modules, B9TankTypes tankTypes)
+        {
+            var result = new List<double>();
+            foreach (var st in sw.Subtypes)
+            {
+                var volume = B9Volume.Of(sw.Module, st, b9Modules);
+                if (volume == null) continue;
+                var tankName = B9Values.Trim(st.GetValue("tankType"));
+                var tank = tankTypes.Find(string.IsNullOrEmpty(tankName) ? B9TankTypes.StructuralName : tankName);
+                result.Add((tank?.TankMass ?? 0) * volume.Value);
+            }
+            return result;
         }
 
         private void Note(string note) => B9Values.Add(Notes, note);

@@ -182,6 +182,8 @@ namespace KSP1PartMod.Tests.B9
             public Dictionary<string, int> OffForms = new Dictionary<string, int>();
             public Dictionary<string, int> NoOffForm = new Dictionary<string, int>();
             public Dictionary<string, int> Notes = new Dictionary<string, int>();
+            /// <summary>"IDENTIFIER not unique" notes by (0 matches | more than 1) and (part | patch).</summary>
+            public Dictionary<string, int> IdentifierSplit = new Dictionary<string, int>();
             public int LfoxSubtypes, LfoxResolved;
             public double CostMin = double.MaxValue, CostMax = double.MinValue;
         }
@@ -206,7 +208,12 @@ namespace KSP1PartMod.Tests.B9
                 if (plan.HasSecondTankSwitch) c.TwoTankParts++;
                 if (plan.ParentChildPairs > 0) { c.PairParts++; c.Pairs += plan.ParentChildPairs; }
                 if (plan.HasUnparseableVolume) c.UnparseableParts++;
-                foreach (var n in plan.Notes) Bump(c.Notes, NoteKind(n));
+                foreach (var n in plan.Notes)
+                {
+                    var kind = NoteKind(n);
+                    Bump(c.Notes, kind);
+                    if (kind == "IDENTIFIER not unique") Bump(c.IdentifierSplit, IdentifierKind(n, part.IsPatch));
+                }
                 foreach (var sw in plan.Switches)
                     for (var i = 0; i < sw.Subtypes.Count; i++)
                     {
@@ -249,6 +256,18 @@ namespace KSP1PartMod.Tests.B9
             return "other";
         }
 
+        private static readonly System.Text.RegularExpressions.Regex MatchCount =
+            new System.Text.RegularExpressions.Regex(@"matches (\d+) module\(s\)");
+
+        /// <summary>"0 matches" or "more than 1 match", then "part" or "patch".</summary>
+        private static string IdentifierKind(string note, bool isPatch)
+        {
+            var m = MatchCount.Match(note);
+            var count = m.Success ? int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture) : -1;
+            var matches = count == 0 ? "0 matches" : count > 1 ? "more than 1 match" : "count unread";
+            return matches + " in " + (isPatch ? "patch" : "part");
+        }
+
         private static void PrintPlan(string label, PlanCensus c)
         {
             var deltas = c.Deltas.Select(d => d.Delta).OrderBy(d => d).ToList();
@@ -266,6 +285,7 @@ namespace KSP1PartMod.Tests.B9
             TestContext.WriteLine($"  module edits by (KSP1 module, DATA key): {Format(c.Edits)}");
             TestContext.WriteLine($"  moduleActive = false: off form {Format(c.OffForms)}; no off form {Format(c.NoOffForm)}");
             TestContext.WriteLine($"  notes: {Format(c.Notes)}");
+            TestContext.WriteLine($"  IDENTIFIER not unique, split: {Format(c.IdentifierSplit)}");
             TestContext.WriteLine($"  bdbLFOX subtypes {c.LfoxSubtypes}, resolved on the tank switch {c.LfoxResolved}");
         }
 
@@ -285,6 +305,7 @@ namespace KSP1PartMod.Tests.B9
             Assert.IsEmpty(c.Insane, "no delta above 20 x the part's mass without a tank");
             Assert.IsNotNull(types.Find("bdbLFOX"), "BDB's LFOX tank type is read");
             Assert.Greater(c.LfoxSubtypes, 0);
+            Assert.AreEqual(c.LfoxSubtypes, c.LfoxResolved, "every bdbLFOX subtype resolves its resources on the tank switch");
         }
 
         [Test] public void Census_Installed_BdbLfoxResolves()
