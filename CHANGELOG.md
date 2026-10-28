@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 - 2026-10-28
+
+Animations phase 2b: KSP1 plugin modules and B9PartSwitch gates. Not run in game yet; checklist (French) in `docs/testing/2026-10-27-animations-phase2-in-game-checklist.md` (section 2b, after 2a; the single in-game test starts with the 0.4.1 checklist, then 2a, then 2b).
+
+- **Visual only.** The mod reads `Data_Engine`, `Data_Decouple`, `Data_RCS`, `Data_PartSwitch` and `Data_Deployable` and never writes them; it calls no engine, decoupler or staging method. Ignition and separation are not delayed (the KSP1 delay is only shown in the log); science is not run.
+- **B9 gates** (`b9_module_gates`). A B9PartSwitch subtype that switches a module off (`moduleActive = false`) also switches off the animation entries of that module, following the variant picked on the part (polled each frame, by reference). The gates apply to all our entries, phase 1 kinds included. Set ids and variant ids follow Redux's (`Ksp1B9PartSwitchVariantBuilder`). A variant change rebinds the renderers once (`rebind Renderers after variant …`) without a `rebound` line per renderer. Lines: `gated by B9 …`, `variants at bind: …`, `B9 '<set>' -> '<id>': <entry> active|inactive`, `transforms of '<id>' active <n>/<m>`.
+- **Plugin modules** (`plugin_modules`): engine nozzle extensions (`ModuleDeployableEngine`, `ModuleBdbAnimatedEngine`) following `EngineIgnited`, the multi-mode nozzle (`ModuleMultiStateEngine`) following the engine mode, look-at pistons (`ModuleAdvancedLookAtConstraint`, left to Redux for rotators it already reads), animated decouplers (`ModuleBdbDecouplerAnimation`, first `Module_Decouple` only), RCS glow and emissive (`FXModuleAnimateRCS`, `ModuleBdbRCSEmissive`), mesh hiders (`ModuleBDBDeployableMeshHider`), DMagic science booms (visual only, one owner per clip), the acceleration spring (`ModuleBdbAccelAnimation`, our own spring model) and the Mercury landing bag.
+- **Clip ownership.** One owner per clip, unless the B9 gates keep two entries apart. `skip_modules` is applied before that rule.
+- New `animations.json` keys: `plugin_modules`, `b9_module_gates` (default true). `skip_modules` also names plugin modules.
+- **Not verified in game:** see section 2b of the checklist. The main ones: the B9 set and variant ids against Redux's, `ActiveVariants` changing on a VAB pick, whether Redux's `TransformActivator` really toggles the variant transforms (it looks objects up by direct child), `EngineIgnited` and `isDecoupled` timing, the unit and scale of the RCS force (kN), the host-to-thruster pairing, and the cost on a 1000-part craft.
+- 1280 EditMode tests (1278 passing, 2 explicit and skipped).
+
 ## 0.4.1 - 2026-10-28
 
 Fixes from the 2026-10-28 in-game test of 0.4.0. Not run in game yet; checklist (French) in `docs/testing/2026-10-28-fixes-041-in-game-checklist.md`.

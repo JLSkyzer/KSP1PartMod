@@ -50,7 +50,7 @@ Located in `mods/KSP1PartMod/`. Both maps are optional and win over `tech_mappin
 
 An id missing from the game's tree is ignored, the part falls through to the next rule, and the log gets a line `[KSP1PartMod] note: <part> (<mod>): …` naming the missing id. Edit the file and restart the game.
 
-## Animations (phases 1 and 2a)
+## Animations (phases 1, 2a and 2b)
 
 Redux imports KSP1 parts but loses most of their animations. This mod does two things, at each campaign load, without editing your KSP1 files.
 
@@ -138,14 +138,15 @@ Not run in game yet: checklist in `docs/testing/2026-10-27-animations-phase2-in-
 - **Emission.** A glow written to a material whose emission is off gets an own material copy with `_EMISSION` on, plus a white `_EmissionMap` where the shader has none (`emission_setup`).
 - **Not verified in game:** `normalizedOutput` read as thrust over max thrust, `[DefaultExecutionOrder]` on a mod type, the visibility of the emission, a doubled glow with KSP2's own heat (`heat_glow`).
 
-### Phase 2b and later (not done yet)
+### Phase 2b: plugin modules and B9 gates (0.5.0)
 
-1. `FXModuleAnimateRCS` (per-nozzle glow).
-2. Bluedog_DB modules (`ModuleBdbAnimatedEngine`, `ModuleBdbDecouplerAnimation`, `ModuleBdbAccelAnimation`, `ModuleBdbMercuryLandingBag`, `ModuleBDBDeployableMeshHider`), `ModuleDeployableEngine`, `ModuleMultiStateEngine`, DMagic `DMModuleScienceAnimateGeneric`.
-3. B9PartSwitch `SUBTYPE` overrides that pick which clip a module uses.
-4. Links by module index: cargo bay shielding, docking port gating, science experiments, animation groups with converters.
-5. Deploy limit (cargo bays), `restrictedNode`, one-shot inflatables, crew capacity when open.
-6. Radiator and antenna tracking and breakage, wheel physics, robotics, Waterfall effects.
+Not run in game yet: checklist in `docs/testing/2026-10-27-animations-phase2-in-game-checklist.md` (section 2b).
+
+- **Visual only.** The mod reads `Data_Engine`, `Data_Decouple`, `Data_RCS`, `Data_PartSwitch` and `Data_Deployable` and never writes them, and calls no engine, decoupler or staging method. Ignition and separation are not delayed; science is not run.
+- **Plugin modules** (`plugin_modules`): engine nozzle extensions (`ModuleDeployableEngine`, `ModuleBdbAnimatedEngine`) that follow the ignition, the multi-mode nozzle (`ModuleMultiStateEngine`), look-at pistons (`ModuleAdvancedLookAtConstraint`), animated decouplers (`ModuleBdbDecouplerAnimation`), RCS glow and emissive (`FXModuleAnimateRCS`, `ModuleBdbRCSEmissive`), mesh hiders (`ModuleBDBDeployableMeshHider`), DMagic science booms (`DMModuleScienceAnimateGeneric`, animation only), the acceleration spring (`ModuleBdbAccelAnimation`) and the Mercury landing bag.
+- **B9 gates** (`b9_module_gates`): a B9PartSwitch subtype that switches a module off also switches off that module's animation entries, following the variant picked in the VAB. The gates apply to all our entries, phase 1 kinds included.
+- **Settings.** `plugin_modules` and `b9_module_gates` (default true); `skip_modules` also names plugin modules; `editor_animation_speed` governs the new previews.
+- **Not done yet:** links by module index (cargo bay shielding, docking port gating, science experiments, animation groups with converters), deploy limit and `restrictedNode`, one-shot inflatables, crew capacity when open, radiator and antenna tracking, wheel physics, robotics, Waterfall effects.
 
 ## VAB sub-categories
 
@@ -159,7 +160,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
 ## Known limits
 
 - Robotics parts of KSP1 are spread over several KSP1 nodes, so only those of `actuators` land in the new robotics node.
-- Animations: phases 1 and 2a only. The modules listed under phase 2b and later are not played yet.
+- Animations: phases 1, 2a and 2b. The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
 - Stock KSP1 parts titled `#autoLOC_…`: Redux reads every `Localization` node under `mods/KSP1`, but a copy of the stock part folders alone carries no dictionary. Copy `GameData/Squad/Localization` and `GameData/SquadExpansion/Serenity/Localization` from your KSP1 install to the same paths under `mods/KSP1` (Making History's keys are in the Squad dictionary). Redux keeps one text per key, English when present, else the first language it reads: a KSP1 installed in French gives French titles in every game language.
 

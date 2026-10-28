@@ -1,8 +1,8 @@
-# KSP1PartMod 0.4.0 : liste de tests en jeu des animations KSP1, phase 2 (2026-10-27)
+# KSP1PartMod 0.4.0 et 0.5.0 : liste de tests en jeu des animations KSP1, phase 2 (2026-10-27)
 
 Cette liste couvre la **section 2a** : courbes de matériau et de lumière des clips KSP1, lueur des
-moteurs et de la chaleur, activation de l'émission. La **section 2b** (RCS, modules BDB, etc.) sera
-ajoutée en bas par le plan 2b. Rien de cela n'a encore été lancé dans le jeu : 888 tests EditMode
+moteurs et de la chaleur, activation de l'émission. La **section 2b** (0.5.0, en bas : modules de plugin et portes B9) est
+ajoutée à la fin. Rien de cela n'a encore été lancé dans le jeu : 888 tests EditMode
 passent (1 explicite ignoré), mais aucune ligne ci-dessous n'est vérifiée en jeu.
 
 Phase 1 (0.2.x à 0.3.2) : `docs/testing/2026-10-25-animations-in-game-checklist.md`.
@@ -116,3 +116,129 @@ Dans `animations.json`, un à un :
 - `"heat_glow": false` : plus de lueur de chaleur ;
 - `"skip_modules": ["FXModuleThrottleEffects"]` : écarte un module KSP1 qui se comporte mal ;
 - `"editor_animation_speed"` à 1, 1000, 0 : comportement de 0.3.2 inchangé (à vérifier aussi).
+
+---
+
+# Section 2b (0.5.0) : modules de plugin et portes B9
+
+**Un seul test en jeu pour tout** : on commence par la liste de 0.4.1
+(`docs/testing/2026-10-28-fixes-041-in-game-checklist.md`), puis la section 2a ci-dessus, puis cette section 2b.
+Rien de la 2b n'a encore été lancé dans le jeu : les tests EditMode passent, mais chaque ligne ci-dessous reste
+à vérifier. Toutes les lignes de log commencent par `[KSP1PartMod] anim:`.
+
+Règle de la 2b : **purement visuelle**. Le mod lit `Data_Engine`, `Data_Decouple`, `Data_RCS`, `Data_PartSwitch`
+et `Data_Deployable`, il ne les écrit jamais, et n'appelle aucune méthode de moteur, de découpleur ni d'étagement.
+L'allumage et la séparation ne sont pas retardés (le délai KSP1 est seulement affiché dans la ligne de log) ; la
+science n'est pas lancée. Si un moteur s'allume ou un étage se sépare différemment d'avant, c'est un défaut.
+
+## 2b.1 Portes B9 (VAB, RL10 de Bluedog_DB)
+
+- [ ] Au bind : `<pièce> <entrée> gated by B9 '<jeu>' (Data_PartSwitch set <k>), inactive in [<ids>]`. Le
+  `(Data_PartSwitch set <k>)` doit être présent, **pas** `(default '<id>')` : sinon l'identifiant du jeu de
+  variantes ne correspond pas à celui de Redux. Recopier aussi `<pièce> variants at bind: [<jeu>=<id>, …],
+  Module_PartSwitch initialized <true|false>` (règle l'ordre d'initialisation des modules).
+- [ ] Changer le **sous-type** du RL10 dans le VAB : à chaque choix `<pièce> B9 '<jeu>' -> '<id>': <entrée>
+  active|inactive` (une ligne par entrée gardée, aussi écrite une fois au bind avec la sélection de départ), et
+  **une seule tuyère active** (certains sous-types n'en ont aucune : tuyère fixe, attendu). Ligne jumelle :
+  `B9 '<jeu>' -> '<id>': transforms of '<id>' active <n>/<m>` (aussi au bind) : si `n` < `m` alors que le
+  sous-type est choisi, le `TransformActivator` de Redux ne trouve pas les objets (recherche directe sous la
+  racine, constatée dans le log du 2026-10-25 avec `[VSwift] Could not find child of …`) et la tuyère visible ne
+  suit pas la variante : à signaler.
+- [ ] `<pièce> rebind Renderers after variant '<jeu>' -> '<id>'` quand la variante change. **Changement en 0.5.0** :
+  un rebind de variante n'écrit plus de ligne `rebound` par renderer (la lueur de 2a continue après le choix) ;
+  s'il y en a un déluge, recopier.
+- [ ] Le **bouton d'aperçu** de la tuyère (PAM du VAB) joue à la vitesse `editor_animation_speed` (1 : réelle).
+- [ ] Une pièce **symétrique** : chaque exemplaire garde sa propre porte (données copiées).
+- [ ] Lignes d'erreur, aucune attendue : `variant watch failed, B9 gates on their default subtype`,
+  `variant watch stopped for this session, B9 gates frozen`, `rebind <portée> after <raison> failed`.
+
+## 2b.2 Tuyères qui sortent (vol, RL10 et XLR129)
+
+- [ ] RL10 : `<pièce> engine deploy '<clip>' follows Module_Engine.EngineIgnited; ignition not delayed (KSP1 waits
+  until <s>)`. À l'allumage la tuyère **sort** ; à l'extinction elle rentre si elle est rétractable (sinon elle
+  reste dehors). Le moteur s'allume sans délai : c'est voulu.
+- [ ] XLR129 (multi-mode) : `<pièce> engine mode '<clip>' follows Data_Engine.currentEngineModeData.engineID,
+  time-zero mode '<id>'`. Changer de mode : la tuyère suit, aussi dans le VAB (pose immédiate au bind).
+- [ ] Une partie **chargée avec le moteur déjà allumé** montre la tuyère sortie, sans rejouer l'animation.
+- [ ] Si une entrée est écartée : `<pièce> EngineDeploy '<clip>' disabled: Module_Engine with Data_Engine not found`.
+
+## 2b.3 Vérins qui suivent la tuyère
+
+- [ ] Un moteur à vérins (J-2 ou autre moteur à cardan avec `ModuleAdvancedLookAtConstraint`) :
+  `<pièce> advanced look-at: <n> constraint(s), 0 missing transform(s)` (`missing` = **0**). Les vérins
+  **suivent la tuyère** quand elle bascule au cardan, sans dériver image après image (la rotation en cours sert
+  de base à chaque image, comme KSP1).
+- [ ] `<pièce> look-at '<rotateur>' left to Redux` : le rotateur appartient aussi à un `FXModuleLookAtConstraint`
+  que Redux lit déjà ; il est laissé à Redux, pas de double commande.
+
+## 2b.4 Découpleurs animés
+
+- [ ] Découpleur Apollo (BDB) : `<pièce> decoupler '<clip>' plays on Data_Decouple.isDecoupled; separation not
+  delayed (KSP1 waits until <s>)`. À l'étagement l'ombilical **tourne** à la séparation ; après rechargement de
+  la sauvegarde, il est dans sa **pose finale** (pas rejoué).
+- [ ] **Premier `Module_Decouple` seulement** (`decouplerNodeID` n'est pas lu) : vérifier sur une pièce BDB à
+  **deux découpleurs** que l'animation suit le bon ; sinon noter la pièce.
+- [ ] Étiquette par défaut du bouton du VAB (seul 1 jeu BDB sur 13 a un `editorGUIName`) : lisible ?
+
+## 2b.5 Modules petits et DMagic
+
+- [ ] Bras DMagic : `<pièce> science toggle '<clip>' (visual only)`. Boutons de la PAM et aperçu du VAB ;
+  **aucune science** n'est lancée ni enregistrée. Un bras à plusieurs modules : seul le **premier** module
+  anime le clip (98 entrées planifiées sur 111), les autres n'ont pas de bouton propre.
+- [ ] Ressort d'accélération : `<pièce> accel spring from VesselComponent.AccelerationOrbital-graviticAcceleration`
+  en vol, `… from editor 1 g` dans le VAB, `… from none, held` sinon. En poussée la pièce **bouge** puis se
+  recentre ; son bouton bascule l'ancre. Le modèle du ressort est de nous (formule dans le plan), à comparer à KSP1.
+- [ ] Sac Mercury : bouton de PAM ; le sac se déploie, la rentrée n'est pas perturbée.
+
+## 2b.6 Lueur et émission des RCS
+
+- [ ] ERCS et bloc RCS de série : `<pièce> rcs glow: <n> thruster(s), <h> host(s) matched` (pas `count
+  mismatch`). À l'impulsion les tuyères s'allument (clip de matériau seul : `bound tracks-only`).
+- [ ] `<pièce> rcs glow first values: force <f>, maxThrust <m>, scalar <s>` : `RCSForce.RelativeForce` est lue en
+  **kN** ; `scalar` doit monter jusqu'à ~1 à la poussée pleine, pas saturer ni rester à 0. Recopier la ligne.
+- [ ] `<pièce> rcs emissive -> <n> renderer(s) via [<propriétés>]` (bloc `ModuleBdbRCSEmissive`), ou `rcs emissive
+  no renderer of <n> found has any of [...]` : alors vérifier `shader_property_map`. Le premier `MeshRenderer` sous
+  la tuyère est supposé être le maillage émissif (les maillages frères ne sont pas cherchés) ; la plume de poussée
+  de Redux reste **hors** de la lueur : si elle brille, le noter. `<n>` peut surestimer.
+- [ ] Sous warp sur rails la poussée RCS est zéro : la lueur s'éteint (attendu).
+
+## 2b.7 Cache-maillages
+
+- [ ] Pièce à `ModuleBDBDeployableMeshHider` : `<pièce> mesh hider: <n> object(s) follow our entry '<clé>'` (ou
+  `follow Redux Data_Deployable`). Objets **masqués rentrée**, **visibles sortie**.
+- [ ] Le cache **laisse en paix les objets masqués par B9** : on ne rend visible que ce qu'il a lui-même masqué.
+  Changer le sous-type d'une pièce à cache-maillage : aucun objet de l'autre variante ne réapparaît.
+- [ ] Objets introuvables : `<pièce> MeshHider '<clé>' disabled: transform(s) '<noms>' not found`.
+
+## 2b.8 Propriété des clips et coût
+
+- [ ] `anim: <Kind> entries planned but not driven yet in this version, left at rest (first: …)` ne doit **plus**
+  apparaître pour aucun des dix genres de la 2b (sinon un genre n'a pas son moteur).
+- [ ] Un clip n'est jamais joué par deux entrées : sur un bras DMagic à plusieurs modules, un seul propriétaire.
+- [ ] **Grande fusée BDB (≥ 1000 pièces)** : activer `"perf_counter": true` et lire `anim: perf: <n> module(s),
+  <e> entr(ies), <w> write(s), <ms> ms over 60 s` (cible : ≤ 0,3 ms par image à moteur constant ; non mesuré).
+  Les chargements ne doivent pas être plus longs qu'en 0.4.1.
+- [ ] `editor_animation_speed` à 1, 1000 puis 0 sur les **nouveaux aperçus** (tuyères, découpleur, bras DMagic,
+  sac Mercury) : 1000 = instantané, 0 = valeurs de KSP1 (tuyère et découpleur 1, mode moteur 2).
+
+## 2b. Non vérifié, à observer et à signaler
+
+- Identifiants de jeu et de variantes B9 = ceux de Redux (`(Data_PartSwitch set <k>)`, `B9 '<jeu>' -> '<id>'`).
+- `Data_PartSwitch.ActiveVariants` change à chaque choix du VAB, y compris sur les exemplaires symétriques (relu
+  par sondage à chaque image, par référence).
+- Redux bascule-t-il vraiment les transformations des variantes B9 (`transforms of '<id>' active n/m`) ?
+- `EngineIgnited` suit l'étagement et la coupure ; `Data_Decouple.isDecoupled` passe à vrai à la séparation.
+- Unité de `RCSForce.RelativeForce` (kN), appariement des hôtes aux tuyères par ordre de hiérarchie.
+- Champ d'accélération du vaisseau (`accel spring from …`) et son coût.
+- Le modèle du ressort d'accélération (formule à nous, non issue de KSP1).
+
+## 2b. En cas de régression
+
+Dans `animations.json`, jeu fermé, un à un :
+
+- [ ] `"plugin_modules": false` : plus aucune entrée de plugin (retour à 0.4.1 pour ces modules) ;
+- [ ] `"b9_module_gates": false` : les entrées s'animent quelle que soit la variante B9 (les portes valent pour
+  toutes nos entrées, phase 1 comprise) ;
+- [ ] `"skip_modules": ["<module>"]` : écarte un module précis, plugin compris (par exemple `ModuleDeployableEngine`) ;
+- [ ] `"editor_animation_speed"`, `"material_curves"`, `"emission_setup"` comme dans la section 2a ;
+- [ ] puis les points reportés de la spec : icônes noires et rectangle gris du VAB (hors animations).
