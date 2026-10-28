@@ -37,6 +37,15 @@ namespace KSP1PartMod.Tests.Animation.Perf
             Assert.AreEqual(22, Enum.GetValues(typeof(EntryKind)).Length);
         }
 
+        /// <summary>The runtime's form (resolved once per entry at bind): every kind as <see cref="PerfFeatures.Of"/>, and an
+        /// unclassified kind in the fallback instead of a throw.</summary>
+        [Test] public void OfOrDefault_NeverThrows()
+        {
+            foreach (EntryKind k in Enum.GetValues(typeof(EntryKind)))
+                Assert.AreEqual(PerfFeatures.Of(k), PerfFeatures.OfOrDefault(k, PerfFeature.Save), k.ToString());
+            Assert.AreEqual(PerfFeature.Plugins, PerfFeatures.OfOrDefault((EntryKind)9999, PerfFeature.Plugins));
+        }
+
         [Test] public void Labels_DistinctAndNamed()
         {
             var labels = ((PerfFeature[])Enum.GetValues(typeof(PerfFeature))).Select(PerfFeatures.Label).ToList();

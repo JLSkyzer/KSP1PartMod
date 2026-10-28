@@ -1,4 +1,5 @@
 using KSP1PartMod.Animation.Behaviours;
+using KSP1PartMod.Perf;
 using UnityEngine;
 
 namespace KSP1PartMod.Game.Animation
@@ -32,7 +33,22 @@ namespace KSP1PartMod.Game.Animation
                 for (var i = 0; i < constrained.Length && i < 3; i++) _anyConstrained |= constrained[i];
         }
 
-        private void LateUpdate() => Apply();
+        /// <summary>With <c>perf_counter</c>, timed as <see cref="PerfFeature.LookAt"/> (one part per component).</summary>
+        private void LateUpdate()
+        {
+            if (!ChannelFlush.PerfOn)
+            {
+                Apply();
+                return;
+            }
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            Apply();
+            ChannelFlush.AddSince(PerfFeature.LookAt, start);
+            var window = ChannelFlush.FrameWindow;
+            if (window == null) return;
+            window.NotePart(PerfFeature.LookAt);
+            window.NoteEntries(PerfFeature.LookAt, _rotators.Length < _targets.Length ? _rotators.Length : _targets.Length);
+        }
 
         /// <summary>One frame of the constraint (internal for tests: <c>LateUpdate</c> does not run in EditMode).</summary>
         internal void Apply()

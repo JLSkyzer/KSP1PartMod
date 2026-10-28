@@ -84,8 +84,9 @@ namespace KSP1PartMod.Perf
 
         public double WindowSeconds { get; }
         public long Frequency => _frequency;
-        /// <summary>The median cost of one timestamp pair (<see cref="TimerOverhead.Estimate"/>), in ticks.</summary>
-        public long TimerOverheadTicks { get; set; }
+        /// <summary>The cost of one timing (one timestamp, <see cref="TimerOverhead.Mean"/>), in ticks: fractional, since a
+        /// timestamp costs less than one tick of a 10 MHz counter.</summary>
+        public double TimerOverheadTicks { get; set; }
         /// <summary>Frames ended in the open window.</summary>
         public long Frames => _frames;
 
@@ -203,7 +204,7 @@ namespace KSP1PartMod.Perf
                 OursAvgMs = AvgMs(Features),
                 OursP95Ms = P95Ms(_hist, Features * Buckets, _max[Features]),
                 OursMaxMs = PhaseClock.Ms(_max[Features], _frequency),
-                OverheadMs = PhaseClock.Ms(TimerOverheadTicks, _frequency) * _timings / _frames,
+                OverheadMs = TimerOverheadTicks * 1000.0 / _frequency * _timings / _frames,
             };
             for (var f = 0; f < Features; f++)
             {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.Tracks;
+using KSP1PartMod.Perf;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -17,7 +18,7 @@ namespace KSP1PartMod.Game.Animation
     /// table after a part-type check, the targets rewritten every frame (active reentry hulls) after a reentry check. The
     /// flush allocates nothing.</summary>
     [DefaultExecutionOrder(32000)]
-    internal sealed class ChannelFlush : MonoBehaviour
+    internal sealed partial class ChannelFlush : MonoBehaviour
     {
         private static ChannelTable[] _tables = new ChannelTable[64];
         private static RendererChannels[] _sinks = new RendererChannels[64];
@@ -62,13 +63,18 @@ namespace KSP1PartMod.Game.Animation
             _driveEntries += entries;
         }
 
-        private void LateUpdate() => FlushAll();
+        /// <summary>The flush, then (with <c>perf_counter</c>) the end of the frame cost's frame.</summary>
+        private void LateUpdate()
+        {
+            FlushAll();
+            if (PerfOn) EndFrame(Time.unscaledDeltaTime);
+        }
 
         /// <summary>Every registered table, in registration order (swap-removal aside). A table whose part is gone, or
         /// whose flush throws, is dropped (the throw logged once with its stack).</summary>
         internal static void FlushAll()
         {
-            var perf = KSP1PartModPlugin.Animations?.PerfCounter ?? false;
+            var perf = PerfOn;
             var start = perf ? Stopwatch.GetTimestamp() : 0L;
             var writes = 0;
             for (var i = 0; i < _count; i++)
@@ -101,6 +107,7 @@ namespace KSP1PartMod.Game.Animation
             }
             if (!perf) return;
             var now = Stopwatch.GetTimestamp();
+            FrameWindowOrCreate()?.Add(PerfFeature.Flush, now - start);
             if (_perf == null)
             {
                 _perf = new PerfCounter(Stopwatch.Frequency);
@@ -147,7 +154,17 @@ namespace KSP1PartMod.Game.Animation
         /// <summary>Tests only: the render-time flush is on, and whether it rewrites every written target.</summary>
         internal static (bool on, bool everyTarget) RenderTimeFlushState => (_renderTimeFlush, _renderRewriteAll);
 
-        private static void OnRender(ScriptableRenderContext context, List<Camera> cameras) => FlushAtRender();
+        private static void OnRender(ScriptableRenderContext context, List<Camera> cameras)
+        {
+            if (!PerfOn)
+            {
+                FlushAtRender();
+                return;
+            }
+            var start = Stopwatch.GetTimestamp();
+            FlushAtRender();
+            AddSince(PerfFeature.Flush, start);
+        }
 
         /// <summary>The render-time flush: all the values of every written target of every table, or, after a reentry
         /// check only, of the targets rewritten every frame (and of any target with a change still pending).</summary>

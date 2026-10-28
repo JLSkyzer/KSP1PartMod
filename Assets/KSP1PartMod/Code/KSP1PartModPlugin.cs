@@ -264,6 +264,7 @@ namespace KSP1PartMod
             // The timeline first: its campaign load and ours lines are then in the report written at the same VAB or flight entry.
             global::KSP1PartMod.Game.Perf.LoadTimeline.SubscribeToGameStates(Game);
             Ksp1Textures.SubscribeToGameStates(Game);
+            ChannelFlush.SubscribeToGameStates(Game); // perf_counter only: the scene of the frame lines
             try
             {
                 global::KSP1PartMod.Game.Audit.AuditRunner.Arm(Game, Animations);

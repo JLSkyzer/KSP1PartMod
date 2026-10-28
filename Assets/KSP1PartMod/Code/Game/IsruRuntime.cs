@@ -8,6 +8,7 @@ using KSP1PartMod.Animation.Behaviours;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Game.Animation;
 using KSP1PartMod.Native;
+using KSP1PartMod.Perf;
 using Redux.Modules;
 using UnityEngine;
 
@@ -206,7 +207,18 @@ namespace KSP1PartMod.Game
         }
 
         /// <summary>False skips Redux's method (<paramref name="__result"/> false: no ground).</summary>
+        /// <remarks>With <c>perf_counter</c>, our own body is timed as <see cref="PerfFeature.DrillPatch"/> (not the native
+        /// method).</remarks>
         internal static bool BeforeCheckCollisions(Module_Mine __instance, ref bool __result)
+        {
+            if (!ChannelFlush.PerfOn) return CheckCollisions(__instance, ref __result);
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            var run = CheckCollisions(__instance, ref __result);
+            ChannelFlush.AddSince(PerfFeature.DrillPatch, start);
+            return run;
+        }
+
+        private static bool CheckCollisions(Module_Mine __instance, ref bool __result)
         {
             if (_broken) return true;
             try

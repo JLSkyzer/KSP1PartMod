@@ -12,6 +12,7 @@ using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.State;
 using KSP1PartMod.Animation.Tracks;
+using KSP1PartMod.Perf;
 using Redux.Ksp1Import.Modules;
 using UnityEngine;
 
@@ -59,6 +60,8 @@ namespace KSP1PartMod.Game.Animation
         private bool _urgent;
         /// <summary>A tick of the module ran (<see cref="Drive"/>): the bind-time step is over (<see cref="PluginRules.StartsNow"/>).</summary>
         private bool _ticking;
+        /// <summary>Entries per perf feature this frame (<see cref="PerfCounts"/>); null until the first timed frame.</summary>
+        private int[] _perfCounts;
         /// <summary><see cref="AddDataModules"/> found no data and runs on an empty one it made.</summary>
         private bool _synthesised;
         private string _name;
@@ -768,22 +771,42 @@ namespace KSP1PartMod.Game.Animation
 
         // ---------------------------------------------------------------- per frame
 
+        /// <summary>With <c>perf_counter</c>, a timestamp between each block (performance plan Task 5): the time of each block
+        /// goes to its feature in <see cref="ChannelFlush"/>'s frame window, and the whole <c>Drive</c> to the 0.4.0
+        /// <c>anim: perf:</c> counter as before. A throw skips the remaining timestamps and leaves as it did.</summary>
         private void Drive(float dt, bool inEditor)
         {
             if (!_ready) return;
             _ticking = true;
-            var perf = KSP1PartModPlugin.Animations.PerfCounter;
-            var start = perf ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
+            var perf = ChannelFlush.PerfOn;
+            FrameCostWindow window = null;
+            int[] counts = null;
+            var start = 0L;
+            if (perf)
+            {
+                window = ChannelFlush.FrameWindowOrCreate();
+                counts = PerfCounts();
+                start = System.Diagnostics.Stopwatch.GetTimestamp();
+            }
+            var t = start;
             PollTracks(inEditor);
+            if (perf) t = ChannelFlush.Lap(window, PerfFeature.Material, t);
             PollVariants(inEditor);
             RestInactive();
+            if (perf) t = ChannelFlush.Lap(window, PerfFeature.Variants, t);
             for (var i = 0; i < _entries.Count; i++)
             {
                 var e = _entries[i];
-                if (!e.Disabled) Step(e, dt, inEditor, catchErrors: true);
+                if (e.Disabled) continue;
+                Step(e, dt, inEditor, catchErrors: true);
+                if (!perf) continue;
+                t = ChannelFlush.Lap(window, e.Feature, t);
+                counts[(int)e.Feature]++;
             }
             StepBridge();
+            if (perf) t = ChannelFlush.Lap(window, PerfFeature.Bridge, t);
             StepScience();
+            if (perf) t = ChannelFlush.Lap(window, PerfFeature.Science, t);
             try
             {
                 DriveReduxTracks();
@@ -793,8 +816,43 @@ namespace KSP1PartMod.Game.Animation
                 _reduxTracks.Clear();
                 Error($"{_name} tracks of Redux's clips stopped for this session: {ex}");
             }
+            if (perf) t = ChannelFlush.Lap(window, PerfFeature.Material, t);
             SaveIfChanged();
-            if (perf) ChannelFlush.NoteDrive(System.Diagnostics.Stopwatch.GetTimestamp() - start, _entries.Count);
+            if (!perf) return;
+            t = ChannelFlush.Lap(window, PerfFeature.Save, t);
+            NotePerfParts(window, counts);
+            ChannelFlush.NoteDrive(t - start, _entries.Count);
+        }
+
+        /// <summary>The entries of this frame per feature (<see cref="Drive"/> with <c>perf_counter</c>), zeroed: allocated once
+        /// per module.</summary>
+        private int[] PerfCounts()
+        {
+            _perfCounts ??= new int[PerfFeatures.Count];
+            Array.Clear(_perfCounts, 0, _perfCounts.Length);
+            return _perfCounts;
+        }
+
+        /// <summary>This part, once in each feature it fed this frame, with its entries per feature.</summary>
+        private void NotePerfParts(FrameCostWindow window, int[] counts)
+        {
+            if (window == null) return;
+            for (var f = 0; f < counts.Length; f++)
+            {
+                if (counts[f] == 0 || f == (int)PerfFeature.Material) continue;
+                window.NotePart((PerfFeature)f);
+                window.NoteEntries((PerfFeature)f, counts[f]);
+            }
+            var material = counts[(int)PerfFeature.Material];
+            if (material > 0 || _table != null)
+            {
+                window.NotePart(PerfFeature.Material);
+                window.NoteEntries(PerfFeature.Material, material);
+            }
+            if (_variants != null) window.NotePart(PerfFeature.Variants);
+            if (_bridgeEntry != null) window.NotePart(PerfFeature.Bridge);
+            if (_science != null) window.NotePart(PerfFeature.Science);
+            window.NotePart(PerfFeature.Save);
         }
 
         private void Step(Entry e, float dt, bool inEditor, bool catchErrors)
@@ -1350,7 +1408,15 @@ namespace KSP1PartMod.Game.Animation
             /// <summary>The frame <see cref="RestHeld"/> was filled (<see cref="RestPlan.ReleaseNow"/>).</summary>
             public int RestHeldFrame;
 
-            public Entry(AnimEntryDef def) => Def = def;
+            /// <summary>The perf feature its <c>Step</c> counts in, resolved once here (never per frame: an unclassified kind
+            /// counts in <see cref="PerfFeature.Plugins"/>).</summary>
+            public readonly PerfFeature Feature;
+
+            public Entry(AnimEntryDef def)
+            {
+                Def = def;
+                Feature = def == null ? PerfFeature.Plugins : PerfFeatures.OfOrDefault(def.Kind, PerfFeature.Plugins);
+            }
         }
     }
 }

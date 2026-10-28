@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using KSP1PartMod.Animation.Tracks;
+using KSP1PartMod.Perf;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -81,7 +82,18 @@ namespace KSP1PartMod.Game.Animation
         /// <paramref name="reference"/>.</summary>
         public static bool Kept(in Value4 reference, in Value4 read) => read.Near(reference, Tolerance);
 
-        private static void OnRender(ScriptableRenderContext context, List<Camera> cameras) => RunNow();
+        /// <summary>With <c>perf_counter</c>, timed as <see cref="PerfFeature.Flush"/>.</summary>
+        private static void OnRender(ScriptableRenderContext context, List<Camera> cameras)
+        {
+            if (!ChannelFlush.PerfOn)
+            {
+                RunNow();
+                return;
+            }
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            RunNow();
+            ChannelFlush.AddSince(PerfFeature.Flush, start);
+        }
 
         /// <summary>The render-time half of the check (tests call it directly: EditMode does not render). Null when no
         /// check is pending or the renderer is gone, else whether the block kept our value.</summary>

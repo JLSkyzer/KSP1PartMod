@@ -11,6 +11,7 @@ using KSP1PartMod.Animation.Behaviours;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Game.Animation;
 using KSP1PartMod.Native;
+using KSP1PartMod.Perf;
 
 namespace KSP1PartMod.Game
 {
@@ -239,8 +240,21 @@ namespace KSP1PartMod.Game
             }
         }
 
-        /// <summary>The cooling line, once per part instance, at its first <c>REMOVING</c>. No allocation until then.</summary>
+        /// <summary>The cooling line, once per part instance, at its first <c>REMOVING</c>. No allocation until then. With
+        /// <c>perf_counter</c>, our own body is timed as <see cref="PerfFeature.RadiatorPatch"/> (not the native method).</summary>
         internal static void AfterCoolerFixedUpdate(PartBehaviourModule __instance)
+        {
+            if (!ChannelFlush.PerfOn)
+            {
+                CoolerFixedUpdate(__instance);
+                return;
+            }
+            var start = System.Diagnostics.Stopwatch.GetTimestamp();
+            CoolerFixedUpdate(__instance);
+            ChannelFlush.AddSince(PerfFeature.RadiatorPatch, start);
+        }
+
+        private static void CoolerFixedUpdate(PartBehaviourModule __instance)
         {
             if (_broken || !_coolingOn || __instance == null) return;
             try

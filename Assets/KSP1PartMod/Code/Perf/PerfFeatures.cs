@@ -72,5 +72,19 @@ namespace KSP1PartMod.Perf
                     throw new ArgumentOutOfRangeException(nameof(kind), kind, "entry kind without a perf feature");
             }
         }
+
+        /// <summary><see cref="Of"/> for the runtime, resolved once when an entry is bound: never throws, a kind not classified
+        /// here counts in <paramref name="fallback"/>.</summary>
+        public static PerfFeature OfOrDefault(EntryKind kind, PerfFeature fallback)
+        {
+            try
+            {
+                return Of(kind);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return fallback;
+            }
+        }
     }
 }

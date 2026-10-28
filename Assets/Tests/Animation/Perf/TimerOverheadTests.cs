@@ -13,6 +13,15 @@ namespace KSP1PartMod.Tests.Animation.Perf
             return () => q.Dequeue();
         }
 
+        /// <summary>Timestamps 0, 1, 1, 2, 2 (a counter coarser than the call): 2 ticks over 4 gaps, 0.5 per timestamp.</summary>
+        [Test] public void Mean_KeepsTheFraction()
+        {
+            Assert.AreEqual(0.5, TimerOverhead.Mean(Counter(0, 1, 1, 2, 2), 5), 1e-12);
+            Assert.AreEqual(0, TimerOverhead.Mean(Counter(7, 7), 2));
+            Assert.Throws<ArgumentNullException>(() => TimerOverhead.Mean(null, 3));
+            Assert.Throws<ArgumentOutOfRangeException>(() => TimerOverhead.Mean(() => 0, 1));
+        }
+
         [Test] public void Median_OddPairs()
         {
             // Gaps 5, 1, 3, 100, 2: the median is 3, whatever the outlier.

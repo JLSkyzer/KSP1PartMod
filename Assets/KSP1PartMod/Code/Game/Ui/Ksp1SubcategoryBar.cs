@@ -7,6 +7,8 @@ using KSP.Api.CoreTypes;
 using KSP.OAB;
 using KSP.UI;
 using KSP.UI.Binding;
+using KSP1PartMod.Game.Animation;
+using KSP1PartMod.Perf;
 using KSP1PartMod.Ui;
 using Redux.Ksp1Import.Assets;
 using UnityEngine;
@@ -84,9 +86,12 @@ namespace KSP1PartMod.Game.Ui
 
         private void Awake() => _picker = GetComponent<AssemblyPartsPicker>();
 
+        /// <summary>With <c>perf_counter</c>, timed as <see cref="PerfFeature.SubcategoryBar"/>.</summary>
         private void LateUpdate()
         {
             if (_failed) return;
+            var perf = ChannelFlush.PerfOn;
+            var start = perf ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             try
             {
                 Tick();
@@ -97,6 +102,7 @@ namespace KSP1PartMod.Game.Ui
                 OabSubcategories.Break("the bar", e);
                 SafeHide();
             }
+            if (perf) ChannelFlush.AddSince(PerfFeature.SubcategoryBar, start);
         }
 
         private void Tick()
