@@ -22,8 +22,8 @@ namespace KSP1PartMod.Game.Animation
     /// <item>Before each write the first slot's material and shader are compared with the bind
     /// (<see cref="WriterPolicy.Rebind"/>): a change rebinds (the only allocating path of the flush), except while the
     /// OAB selection shader is on.</item>
-    /// <item>Copies are destroyed by <see cref="ReleaseAll"/> (shutdown, new table) and, when no slot holds them any
-    /// more, by a rebind.</item>
+    /// <item>Copies are destroyed by <see cref="ReleaseAll"/> (shutdown, new table), by <see cref="RebindAll"/> (a variant
+    /// change, which makes them again) and, when no slot holds them any more, by a rebind.</item>
     /// </list></summary>
     internal sealed class RendererChannels : IChannelSink
     {
@@ -272,6 +272,26 @@ namespace KSP1PartMod.Game.Animation
         {
             foreach (var b in _bindings)
                 if (b != null) Release(b);
+        }
+
+        /// <summary>A variant change (<see cref="RebindScope.Renderers"/>): every owned copy released (the slot gets its
+        /// material of the bind back when it still holds the copy), then the facts and decisions read again per material
+        /// and the copies made again where the decision says so. Instances that were not ours at bind (Redux's texture
+        /// switch instances its targets before our bind, and keeps them as reverter keys) are never destroyed: they are
+        /// decided again in place. Returns the number of renderers decided again.</summary>
+        public int RebindAll()
+        {
+            var n = 0;
+            foreach (var b in _bindings)
+            {
+                if (b == null || b.Renderer == null) continue;
+                Release(b);
+                b.DeferredOn = null;
+                Decide(b);
+                Rebinds++;
+                n++;
+            }
+            return n;
         }
 
         private static void Release(Binding b)

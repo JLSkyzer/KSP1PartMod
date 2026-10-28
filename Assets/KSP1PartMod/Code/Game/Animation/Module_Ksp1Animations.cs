@@ -118,6 +118,7 @@ namespace KSP1PartMod.Game.Animation
             }
             _ready = false;
             _entries.Clear();
+            _variants = null;
             ResetTracks();
         }
 
@@ -197,6 +198,8 @@ namespace KSP1PartMod.Game.Animation
             }
 
             ResolveAeroGates();
+            // Gates before controls and before any entry is driven: an inactive entry never shows its button or its pose.
+            BindVariants();
             try
             {
                 if (_tracksWanted && !_tracksPending) BindTracks(tracks, generation, inEditor, late: false);
@@ -218,6 +221,7 @@ namespace KSP1PartMod.Game.Animation
             Log($"{_name} data #{RuntimeHelpers.GetHashCode(data)} entries {data.Entries.Count} bound {_entries.Count} " +
                 $"({PartBackingMode}; definition data {DefinitionNote()})");
 
+            RestInactive();
             // Aero gates are applied on the first update: Module_ControlSurface's own init may still overwrite them.
             foreach (var e in _entries)
                 if (!e.Disabled && e.Aero == null) Step(e, 0f, inEditor, catchErrors: true);
@@ -636,6 +640,8 @@ namespace KSP1PartMod.Game.Animation
             var perf = KSP1PartModPlugin.Animations.PerfCounter;
             var start = perf ? System.Diagnostics.Stopwatch.GetTimestamp() : 0L;
             PollTracks(inEditor);
+            PollVariants(inEditor);
+            RestInactive();
             for (var i = 0; i < _entries.Count; i++)
             {
                 var e = _entries[i];
@@ -658,6 +664,13 @@ namespace KSP1PartMod.Game.Animation
         {
             try
             {
+                if (Inactive(e))
+                {
+                    // B9 gate closed: the rest pose once (RestInactive did it before the other entries), no machine tick.
+                    if (!e.Rested) Rest(e);
+                    RefreshControls(e, inEditor);
+                    return;
+                }
                 switch (e.Def.Kind)
                 {
                     case EntryKind.Toggle:
@@ -886,7 +899,7 @@ namespace KSP1PartMod.Game.Animation
         /// flight.</summary>
         private static bool ButtonVisible(Entry e, bool inEditor)
         {
-            if (!Allowed(e.Def, inEditor)) return false;
+            if (Inactive(e) || !Allowed(e.Def, inEditor)) return false;
             if (e.Toggle != null && e.Toggle.IsFixed) return false;
             if (e.Def.Kind == EntryKind.Deploy && !inEditor && !e.Def.Retractable && e.Deploy.State == DeployState.Extended) return false;
             return true;
@@ -898,7 +911,7 @@ namespace KSP1PartMod.Game.Animation
             try
             {
                 var inEditor = PartBackingMode == PartBackingModes.OAB;
-                if (e.Disabled || !_ready || !Allowed(e.Def, inEditor)) return;
+                if (e.Disabled || !_ready || Inactive(e) || !Allowed(e.Def, inEditor)) return;
                 var on = !IsOn(e);
                 if (!SetOn(e, on, inEditor)) return;
                 _urgent = true;
@@ -916,7 +929,7 @@ namespace KSP1PartMod.Game.Animation
             try
             {
                 var inEditor = PartBackingMode == PartBackingModes.OAB;
-                if (e.Disabled || !_ready || !Allowed(e.Def, inEditor)) return;
+                if (e.Disabled || !_ready || Inactive(e) || !Allowed(e.Def, inEditor)) return;
                 if (SetOn(e, on, inEditor)) _urgent = true;
             }
             catch (Exception ex)
@@ -932,6 +945,7 @@ namespace KSP1PartMod.Game.Animation
             foreach (var e in _entries)
             {
                 if (e.Disabled || e.Def.Key != key) continue;
+                if (Inactive(e)) return false; // this part's own variant keeps the entry off
                 try
                 {
                     if (!SetOn(e, on, PartBackingMode == PartBackingModes.OAB)) return false;
@@ -1078,6 +1092,10 @@ namespace KSP1PartMod.Game.Animation
             public bool? ShownOn;
             public bool ShownVisible;
             public bool Disabled;
+            /// <summary>The entry's B9 gates, null when it has none (always active).</summary>
+            public EntryGate Gate;
+            /// <summary>An inactive entry's rest pose was shown (cleared when its gate changes or its samplers are bound again).</summary>
+            public bool Rested;
 
             public Entry(AnimEntryDef def) => Def = def;
         }

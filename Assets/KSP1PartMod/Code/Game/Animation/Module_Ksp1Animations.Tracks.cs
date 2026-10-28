@@ -64,7 +64,11 @@ namespace KSP1PartMod.Game.Animation
         {
             _tracksPending = false;
             _tracksGeneration = generation;
-            foreach (var e in _entries) e.Tracks = e.ActiveTracks = NoSamplers;
+            foreach (var e in _entries)
+            {
+                e.Tracks = e.ActiveTracks = NoSamplers;
+                e.Rested = false; // an inactive entry submits its rest on the new samplers
+            }
             _reduxTracks.Clear();
             NewChannels();
             if (tracks != null && tracks.Failed) tracks = null; // logged by the worker; phase 1 for this part
@@ -118,6 +122,7 @@ namespace KSP1PartMod.Game.Animation
                         continue;
                     }
                     _entries.Add(e);
+                    InitGate(e);
                     e.Writer?.Register(_table, _sink);
                     if (ControlLabels.HasAction(def.Kind))
                     {
