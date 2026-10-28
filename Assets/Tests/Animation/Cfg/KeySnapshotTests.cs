@@ -18,12 +18,15 @@ namespace KSP1PartMod.Tests.Animation.Cfg
     public class KeySnapshotTests
     {
         private const string SnapshotName = "KeySnapshot-0.3.2.txt";
+        /// <summary>Written by <see cref="Write_KeySnapshot040"/> from the 0.4.0 planner (phase 2a and the 0.4.1 fixes,
+        /// before phase 2b plans any plugin module), same format.</summary>
+        private const string Snapshot040Name = "KeySnapshot-0.4.0.txt";
 
         /// <summary>The entry kinds of 0.3.2: later kinds are appended after the last one.</summary>
         private const EntryKind Last032Kind = EntryKind.ChuteFollower;
 
-        private static string SnapshotPath([CallerFilePath] string here = "") =>
-            Path.Combine(Path.GetDirectoryName(here) ?? "", SnapshotName);
+        private static string SnapshotPath(string name = SnapshotName, [CallerFilePath] string here = "") =>
+            Path.Combine(Path.GetDirectoryName(here) ?? "", name);
 
         private static List<(string Name, IReadOnlyList<IKsp1Node> Modules)> _parts;
 
@@ -70,9 +73,9 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             RealParts().Select(p => Hex(p.Name, 12) + " " + Hex(KeysOf(p.Modules, lastKind), 16))
                 .OrderBy(l => l, StringComparer.Ordinal).ToList();
 
-        private static List<string> Snapshot()
+        private static List<string> Snapshot(string name = SnapshotName)
         {
-            var path = SnapshotPath();
+            var path = SnapshotPath(name);
             Assert.That(File.Exists(path), Is.True, "snapshot missing: " + path);
             return File.ReadAllLines(path).Where(l => l.Length > 0).ToList();
         }
@@ -90,6 +93,22 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             var lines = CurrentKeysOfKinds(Last032Kind);
             File.WriteAllText(SnapshotPath(), string.Join("\n", lines) + "\n");
             TestContext.WriteLine($"{lines.Count} part line(s) written to {SnapshotPath()}");
+        }
+
+        /// <summary>No entry of a kind of 0.4.0 changes key on any real part once phase 2b plans the plugin modules.</summary>
+        [Test] public void Plan_EntryKeysOf040_Unchanged_AllRealParts() =>
+            CollectionAssert.AreEqual(Snapshot(Snapshot040Name), CurrentKeysOfKinds(Last032Kind),
+                "KSP1 content under mods/KSP1 changed? Regenerate with Write_KeySnapshot040 from the 0.4.0 planner (4695d2b) " +
+                "only if no planner change is involved");
+
+        /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0
+        /// snapshot. 0.4.0 adds no entry kind: its kinds are those of 0.3.2.</summary>
+        [Test, Explicit("writes the 0.4.0 key snapshot")]
+        public void Write_KeySnapshot040()
+        {
+            var lines = CurrentKeysOfKinds(Last032Kind);
+            File.WriteAllText(SnapshotPath(Snapshot040Name), string.Join("\n", lines) + "\n");
+            TestContext.WriteLine($"{lines.Count} part line(s) written to {SnapshotPath(Snapshot040Name)}");
         }
     }
 }
