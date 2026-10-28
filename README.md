@@ -94,6 +94,9 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "perf_report_file": true,
   "perf_top_n": 10,
   "perf_window_seconds": 10,
+  "fix_engine_emissive_curve": true,
+  "chute_canopy_reset": true,
+  "plume_diagnostics": true,
   "fix_fairing_init": true,
   "engine_tooltip_stats": true,
   "subcategory_bar_keeps_grid": true,
@@ -151,6 +154,9 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `skip_modules`: list of KSP1 module names the mod never takes, for example `["FXModuleThrottleEffects"]`, to switch one module off if it misbehaves.
 - `perf_counter`: default `false`. `true` logs every 60 s the time spent by the animations (`[KSP1PartMod] anim: perf:` lines), and since 0.13.0 the cost per frame of each feature (`[KSP1PartMod] perf: frame:` lines, see "Performance"), for bug reports.
 - Performance (0.13.0, see that section): `perf_load_timeline`, `perf_memory_lines`, `perf_report_file`, `perf_top_n`, `perf_window_seconds`.
+- `fix_engine_emissive_curve` (0.13.1): Redux's KSP1 engine import leaves the engine's emissive temperature curve empty; a saved vessel with a KSP1 engine then fails to load and the game skips it as corrupted. The mod gives those engines Redux's own flat zero curve before the part is stored (`[KSP1PartMod] engines:` line). `false` leaves Redux as it is.
+- `chute_canopy_reset` (0.13.1): Redux turns a parachute canopy towards the airflow relative to its current rotation, and nothing puts the canopy of a KSP1 radial chute back each frame, so the canopies spread out and spin. The mod puts the canopy bone back before Redux turns it (`[KSP1PartMod] chute:` line). `false` leaves Redux as it is.
+- `plume_diagnostics` (0.13.1, diagnostic only): logs the plume objects of KSP1 engines in flight, when the engine loads and 3 s after it first runs, at most twice per part type (`[KSP1PartMod] plume:` lines).
 - `fix_fairing_init` (0.4.1): Redux turns the jettison shroud of KSP1 engines into a KSP2 `Module_Fairing` that looks for a transform named `model`, which KSP1 imports lack; it then breaks the part in the VAB (red cylinder left, part that cannot be placed again in the same visit). The mod gives those parts an empty collider array and skips Redux's `OnMaterialLoaded` on KSP1 parts without `Module_Color` (`[KSP1PartMod] fairing:` lines). `false` leaves Redux as it is.
 - `engine_tooltip_stats` (0.4.1): add the max thrust, Isp and propellant lines of KSP1 engines to the VAB tooltip, as the game does for KSP2 engines (`[KSP1PartMod] tooltip:` line).
 - `subcategory_bar_keeps_grid` (0.4.1): while the sub-category bar is shown, widen the parts panel by the bar's width so the third column stays whole; the ship toolbar follows. `false` narrows the grid instead, as in 0.4.0.

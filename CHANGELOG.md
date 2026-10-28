@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.13.1 - 2026-10-28
+
+Fixes after the first in-game test of 0.13.0. Not run in game yet.
+
+- **Saved vessels with KSP1 engines are no longer skipped as corrupted at load** (`fix_engine_emissive_curve`, default true). Redux's KSP1 engine import never sets the engine's emissive temperature curve; a vessel loaded from a save rebuilds its engine from the stored part, where that curve is empty, and Redux's engine setup throws on it, so the game skipped the whole vessel ("Skipping corrupted vessel"). The mod now gives each KSP1 engine Redux's own flat zero curve before the part is stored, so new and existing saves load. It also counts, without changing them, the other curves Redux's module setup reads that a KSP1 part leaves empty (RCS, lit parts, convectors, engine modes). Line: `[KSP1PartMod] engines: emissive curve filled on <n> engine module(s) of <p> part(s); other null curves: <list or none>`.
+- **KSP1 radial parachutes open in place** (`chute_canopy_reset`, default true). Redux turns a canopy towards the airflow relative to its current rotation, expecting an animation to put it back each frame; a KSP1 radial canopy has none, so the rotation added up every frame and the canopies spread out and spun. The mod puts the canopy bone back to its parent's rotation before Redux turns it (only while Redux turns it, never when Redux's animator sits on the canopy itself). Line: `[KSP1PartMod] chute: <part>: canopy reset on '<bone>' (animator on '<holder>')`.
+- **VAB sub-category buttons no longer stay highlighted.** The buttons were switched off silently, which the game's button visual never sees; they now switch off normally, and the visual is subscribed again after the copy of the button is made.
+- **Plume diagnostic** (`plume_diagnostics`, default true for this test). KSP1 engines show no plume and the cause is not found yet. For the first KSP1 engine of each type in flight, the mod logs its plume objects and the game's throttle effect manager, when the engine loads and 3 s after it first runs (`[KSP1PartMod] plume: <part>: …`, and `plume: <part>: ThrottleVFXManager not initialized` if that is the case). It changes nothing.
+- The pure code of a later feature (wheels) is included but not active.
+- 2525 EditMode tests (2523 passing, 2 explicit and skipped).
+
 ## 0.13.0 - 2026-10-28
 
 Performance measuring tools (roadmap 8b, first half). Nothing is optimised in this version: one game session must give the numbers that decide every later optimisation. Not run in game yet; checklist (French), done during the big in-game test: `docs/testing/2026-10-28-performance-in-game-checklist.md`.
