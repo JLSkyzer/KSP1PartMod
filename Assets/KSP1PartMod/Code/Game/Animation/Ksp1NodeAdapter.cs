@@ -19,6 +19,15 @@ namespace KSP1PartMod.Game.Animation
         public IEnumerable<IKsp1Node> GetNodes(string name) =>
             (_node.GetNodes(name) ?? Enumerable.Empty<Ksp1ConfigNode>()).Where(n => n != null).Select(n => (IKsp1Node)new Ksp1NodeAdapter(n));
 
+        public string Name => _node.Name;
+
+        public IEnumerable<KeyValuePair<string, string>> AllValues =>
+            (_node.Values ?? (IReadOnlyList<Ksp1ConfigNode.Value>)new Ksp1ConfigNode.Value[0])
+            .Select(v => new KeyValuePair<string, string>(v.Name, v.RawValue));
+
+        public IEnumerable<IKsp1Node> AllNodes =>
+            (_node.Nodes ?? (IReadOnlyList<Ksp1ConfigNode>)new Ksp1ConfigNode[0]).Where(n => n != null).Select(n => (IKsp1Node)new Ksp1NodeAdapter(n));
+
         /// <summary>The part's MODULE nodes in cfg order.</summary>
         public static IReadOnlyList<IKsp1Node> Modules(Ksp1ConfigNode part) =>
             part == null ? new IKsp1Node[0] : new Ksp1NodeAdapter(part).GetNodes("MODULE").ToList();

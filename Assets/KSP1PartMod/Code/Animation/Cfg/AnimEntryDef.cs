@@ -110,5 +110,9 @@ namespace KSP1PartMod.Animation.Cfg
         public bool OneWay;
         /// <summary>LandingBag: speed of the backward play (KSP1: 0.2).</summary>
         public float RetractSpeed = 1;
+
+        /// <summary>The B9PartSwitch subtypes that switch this entry's module off (<c>moduleActive = false</c>), one
+        /// gate per switch (<see cref="B9GatePlanner"/>); null when no switch does. Any kind.</summary>
+        public B9Gate[] Gates;
     }
 }

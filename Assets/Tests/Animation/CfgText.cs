@@ -64,7 +64,7 @@ namespace KSP1PartMod.Tests.Animation
 
         private sealed class Node : IKsp1Node
         {
-            public readonly string Name;
+            public string Name { get; }
             public readonly List<KeyValuePair<string, string>> Values = new List<KeyValuePair<string, string>>();
             public readonly List<Node> Children = new List<Node>();
 
@@ -76,6 +76,10 @@ namespace KSP1PartMod.Tests.Animation
                 Values.Where(v => v.Key == key).Select(v => v.Value);
 
             public IEnumerable<IKsp1Node> GetNodes(string name) => Children.Where(c => c.Name == name);
+
+            public IEnumerable<KeyValuePair<string, string>> AllValues => Values;
+
+            public IEnumerable<IKsp1Node> AllNodes => Children;
 
             public override string ToString() => Name;
         }

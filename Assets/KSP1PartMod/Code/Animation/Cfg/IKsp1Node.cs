@@ -9,5 +9,11 @@ namespace KSP1PartMod.Animation.Cfg
         string GetValue(string key);
         IEnumerable<string> GetValues(string key);
         IEnumerable<IKsp1Node> GetNodes(string name);
+        /// <summary>The node's name (<c>MODULE</c>, <c>TEXTURE:emissive</c>…).</summary>
+        string Name { get; }
+        /// <summary>Every <c>key = value</c> of the node, in order.</summary>
+        IEnumerable<KeyValuePair<string, string>> AllValues { get; }
+        /// <summary>Every child node, in order.</summary>
+        IEnumerable<IKsp1Node> AllNodes { get; }
     }
 }
