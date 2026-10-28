@@ -15,6 +15,17 @@ namespace KSP1PartMod.Animation.Tracks
 
         /// <summary>Component-wise ==: a NaN component always counts as a change.</summary>
         public bool SameAs(in Value4 o) => X == o.X && Y == o.Y && Z == o.Z && W == o.W;
+
+        /// <summary>Every component within <paramref name="tolerance"/> (absolute) of <paramref name="o"/>'s; a NaN
+        /// component is never near.</summary>
+        public bool Near(in Value4 o, float tolerance) =>
+            Close(X, o.X, tolerance) && Close(Y, o.Y, tolerance) && Close(Z, o.Z, tolerance) && Close(W, o.W, tolerance);
+
+        private static bool Close(float a, float b, float tolerance)
+        {
+            var d = a - b;
+            return d <= tolerance && d >= -tolerance;
+        }
     }
 
     /// <summary>What a channel holds: a material property (<see cref="Color"/>, <see cref="Vector"/>,
@@ -40,17 +51,25 @@ namespace KSP1PartMod.Animation.Tracks
     /// <summary>The values every writer of one part instance submits, per channel, and the one write per target and
     /// frame that results (spec 2a.5).
     /// <list type="bullet">
-    /// <item>A slot is one (target, property). Its shown value is that of its highest (class, module index) writer
-    /// that has submitted at least once, the later registration on a tie. The choice is latched: a colour entry
-    /// that went idle still beats a track, as KSP1's property block beats the animated material.</item>
-    /// <item>A channel keeps its last submitted value until the next <see cref="Submit"/>: an unchanged pose submits
-    /// nothing, and the shown value stays. Nothing is ever reset to the rest value by the table.</item>
-    /// <item><see cref="Flush"/> writes a target when one of its slots shows a new value (only those slots), or every
-    /// flush, all its shown slots, when the target was added with <c>rewriteEveryFrame</c> (a renderer whose block
-    /// another writer replaces). An excluded target never reaches the sink. A slot nobody submitted is never
-    /// written.</item>
+    /// <item>A slot is one (target, property). Once a colour entry (<see cref="WriterClass.Color"/>) has submitted on
+    /// it, the slot shows its highest-module colour channel, the later registration on a tie. That choice is latched: a
+    /// colour entry that went idle still beats a track, as KSP1's property block beats the animated material.</item>
+    /// <item>Without a colour channel, the slot shows the blend of its <b>active</b> track channels, as Unity's legacy
+    /// <c>Animation</c> blends the states animating one property: higher layer first, each layer taking up to the weight
+    /// still free (its weights normalised when they sum above 1), the weight left over going to the rest value. A track
+    /// channel is active when it has submitted with a weight above 0 and a value off its rest value
+    /// (<see cref="RestTolerance"/>): a clip at rest or at weight 0 never hides another clip of the slot. Deliberate
+    /// difference from Unity, where a weight-1 state sampled at its rest value still takes its weight. With one active
+    /// channel the slot shows that channel's value; with none, the slot's rest value (the first registered channel's).
+    /// A channel's own value is <c>lerp(rest, raw, weight)</c>, as <see cref="Submitted(int)"/> gives it.</item>
+    /// <item>A channel keeps its last submitted value until its next submit: an unchanged pose submits nothing, and
+    /// the shown value stays. Nothing is ever reset to the rest value by the table.</item>
+    /// <item><see cref="Flush(IChannelSink)"/> writes a target when one of its slots shows a new value (only those
+    /// slots), or every flush, all its shown slots, when the target was added with <c>rewriteEveryFrame</c> (a renderer
+    /// whose block another writer replaces). An excluded target never reaches the sink. A slot nobody submitted is
+    /// never written.</item>
     /// </list>
-    /// Arrays grow at registration only; <see cref="Submit"/> and <see cref="Flush"/> allocate nothing.</summary>
+    /// Arrays grow at registration only; submits and flushes allocate nothing.</summary>
     public sealed class ChannelTable
     {
         private struct Target
@@ -67,8 +86,14 @@ namespace KSP1PartMod.Animation.Tracks
         {
             public int Target, Property, NextInTarget;
             public ChannelValueType Type;
-            /// <summary>The channel shown, -1 while nobody has submitted.</summary>
-            public int Winner;
+            /// <summary>The colour channel shown, -1 while no colour channel has submitted.</summary>
+            public int ColorWinner;
+            /// <summary>Somebody submitted: the slot is written.</summary>
+            public bool Claimed;
+            /// <summary>First channel of the slot, then <see cref="Channel.NextInSlot"/>; -1 ends the list.</summary>
+            public int FirstChannel, LastChannel;
+            /// <summary>The rest value of the first channel registered.</summary>
+            public Value4 Rest;
             /// <summary>The value last given to the sink (or pending for it when <see cref="Dirty"/>).</summary>
             public Value4 Shown;
             public bool Written, Dirty;
@@ -76,11 +101,16 @@ namespace KSP1PartMod.Animation.Tracks
 
         private struct Channel
         {
-            public int Slot, ModuleIndex;
+            public int Slot, ModuleIndex, Layer, NextInSlot;
             public WriterClass Class;
-            public Value4 Rest, Value;
+            /// <summary><see cref="Value"/> is <c>lerp(Rest, Raw, Weight)</c>.</summary>
+            public Value4 Rest, Raw, Value;
+            public float Weight;
             public bool Submitted;
         }
+
+        /// <summary>A track channel whose value is within this of its rest value (every component) is at rest.</summary>
+        public const float RestTolerance = 1e-5f;
 
         private Target[] _targets = new Target[4];
         private Slot[] _slots = new Slot[8];
@@ -105,40 +135,146 @@ namespace KSP1PartMod.Animation.Tracks
 
         /// <summary>A channel of <paramref name="target"/>'s <paramref name="property"/> (a shader property id, or a
         /// light field); its value is <paramref name="rest"/> until submitted. Channels of the same (target, property)
-        /// share one slot and must give its type.</summary>
+        /// share one slot and must give its type. <paramref name="layer"/>: the legacy animation layer of a track's clip
+        /// (the <c>layer</c> of the KSP1 module that plays it), for the blend of several tracks on one slot.</summary>
         /// <exception cref="System.ArgumentException">The slot exists with another <paramref name="type"/>.</exception>
-        public int Register(int target, int property, ChannelValueType type, WriterClass cls, int moduleIndex, in Value4 rest)
+        public int Register(int target, int property, ChannelValueType type, WriterClass cls, int moduleIndex, in Value4 rest,
+            int layer = 0)
         {
             if (target < 0 || target >= _targetCount) throw new System.ArgumentOutOfRangeException(nameof(target));
             var slot = FindSlot(target, property);
-            if (slot < 0) slot = AddSlot(target, property, type);
+            if (slot < 0) slot = AddSlot(target, property, type, rest);
             else if (_slots[slot].Type != type)
                 throw new System.ArgumentException(
                     $"property {property} of target {target} is registered as {_slots[slot].Type}, not {type}", nameof(type));
             if (_count == _channels.Length) System.Array.Resize(ref _channels, _count * 2);
-            _channels[_count] = new Channel { Slot = slot, Class = cls, ModuleIndex = moduleIndex, Rest = rest, Value = rest };
-            return _count++;
+            var channel = _count++;
+            _channels[channel] = new Channel
+            {
+                Slot = slot, Class = cls, ModuleIndex = moduleIndex, Layer = layer, Rest = rest, Raw = rest, Value = rest,
+                NextInSlot = -1,
+            };
+            ref var s = ref _slots[slot];
+            if (s.LastChannel < 0) s.FirstChannel = channel;
+            else _channels[s.LastChannel].NextInSlot = channel;
+            s.LastChannel = channel;
+            return channel;
         }
 
         /// <summary>The value read at bind time.</summary>
         public Value4 Rest(int channel) => _channels[channel].Rest;
 
+        /// <summary>The channel's value is <paramref name="v"/> (weight 1).</summary>
         public void Submit(int channel, in Value4 v)
         {
-            SubmitCount++;
             ref var c = ref _channels[channel];
+            c.Raw = v;
+            c.Weight = 1f;
             c.Value = v;
+            OnSubmit(channel, ref c);
+        }
+
+        /// <summary>A track's value at <paramref name="weight"/>: <paramref name="raw"/> is the curve's value (the rest
+        /// value for a component without curve), the channel's value <c>rest + (raw - rest) * weight</c>.</summary>
+        public void Submit(int channel, in Value4 raw, float weight)
+        {
+            ref var c = ref _channels[channel];
+            c.Raw = raw;
+            c.Weight = weight;
+            var r = c.Rest;
+            c.Value = new Value4(
+                r.X + (raw.X - r.X) * weight,
+                r.Y + (raw.Y - r.Y) * weight,
+                r.Z + (raw.Z - r.Z) * weight,
+                r.W + (raw.W - r.W) * weight);
+            OnSubmit(channel, ref c);
+        }
+
+        private void OnSubmit(int channel, ref Channel c)
+        {
+            SubmitCount++;
             c.Submitted = true;
             ref var s = ref _slots[c.Slot];
-            if (s.Winner != channel)
+            Value4 shown;
+            if (c.Class == WriterClass.Color)
             {
-                if (s.Winner >= 0 && Outranks(s.Winner, channel)) return;
-                s.Winner = channel;
+                if (s.ColorWinner >= 0 && s.ColorWinner != channel && Outranks(s.ColorWinner, channel)) return;
+                s.ColorWinner = channel;
+                shown = c.Value;
             }
-            if (s.Written && !s.Dirty && s.Shown.SameAs(v)) return;
-            s.Shown = v;
+            else
+            {
+                if (s.ColorWinner >= 0) return;
+                shown = Blend(ref s);
+            }
+            s.Claimed = true;
+            if (s.Written && !s.Dirty && s.Shown.SameAs(shown)) return;
+            s.Shown = shown;
             s.Dirty = true;
             _targets[s.Target].Dirty = true;
+        }
+
+        private static bool Active(ref Channel c) =>
+            c.Submitted && c.Class == WriterClass.Track && c.Weight > 0f && !c.Value.Near(c.Rest, RestTolerance);
+
+        /// <summary>The value of a slot without colour channel (see the class summary). Allocation-free.</summary>
+        private Value4 Blend(ref Slot s)
+        {
+            int active = 0, only = -1;
+            for (var i = s.FirstChannel; i >= 0; i = _channels[i].NextInSlot)
+            {
+                if (!Active(ref _channels[i])) continue;
+                active++;
+                only = i;
+            }
+            if (active == 0) return s.Rest;
+            if (active == 1) return _channels[only].Value;
+
+            float x = 0f, y = 0f, z = 0f, w = 0f, free = 1f;
+            var above = int.MaxValue;
+            while (free > 0f)
+            {
+                // The highest layer below the last one taken.
+                var layer = int.MinValue;
+                var found = false;
+                for (var i = s.FirstChannel; i >= 0; i = _channels[i].NextInSlot)
+                {
+                    ref var c = ref _channels[i];
+                    if (c.Layer >= above || !Active(ref c)) continue;
+                    if (!found || c.Layer > layer) layer = c.Layer;
+                    found = true;
+                }
+                if (!found) break;
+                var sum = 0f;
+                for (var i = s.FirstChannel; i >= 0; i = _channels[i].NextInSlot)
+                {
+                    ref var c = ref _channels[i];
+                    if (c.Layer == layer && Active(ref c)) sum += c.Weight;
+                }
+                var taken = sum < free ? sum : free;
+                var k = taken / sum;
+                for (var i = s.FirstChannel; i >= 0; i = _channels[i].NextInSlot)
+                {
+                    ref var c = ref _channels[i];
+                    if (c.Layer != layer || !Active(ref c)) continue;
+                    var cw = c.Weight * k;
+                    x += c.Raw.X * cw;
+                    y += c.Raw.Y * cw;
+                    z += c.Raw.Z * cw;
+                    w += c.Raw.W * cw;
+                }
+                free -= taken;
+                above = layer;
+            }
+            if (free > 0f)
+            {
+                var r = s.Rest;
+                x += r.X * free;
+                y += r.Y * free;
+                z += r.Z * free;
+                w += r.W * free;
+            }
+            return new Value4(x, y, z, w);
         }
 
         public void Flush(IChannelSink sink) => Flush(sink, false);
@@ -163,7 +299,7 @@ namespace KSP1PartMod.Animation.Tracks
                 for (var i = target.FirstSlot; i >= 0; i = _slots[i].NextInTarget)
                 {
                     ref var s = ref _slots[i];
-                    if (s.Winner < 0 || !(s.Dirty || every)) continue;
+                    if (!s.Claimed || !(s.Dirty || every)) continue;
                     if (!begun)
                     {
                         sink.Begin(t, target.Kind);
@@ -197,13 +333,12 @@ namespace KSP1PartMod.Animation.Tracks
         /// <summary>The last value submitted on <paramref name="channel"/>, its rest value if none.</summary>
         internal Value4 Submitted(int channel) => _channels[channel].Value;
 
-        /// <summary>Whether <paramref name="a"/> keeps the slot against <paramref name="b"/>: higher class, then
-        /// higher module index, then the later registration.</summary>
+        /// <summary>Whether colour channel <paramref name="a"/> keeps the slot against colour channel
+        /// <paramref name="b"/>: higher module index, then the later registration.</summary>
         private bool Outranks(int a, int b)
         {
             ref var ca = ref _channels[a];
             ref var cb = ref _channels[b];
-            if (ca.Class != cb.Class) return ca.Class > cb.Class;
             if (ca.ModuleIndex != cb.ModuleIndex) return ca.ModuleIndex > cb.ModuleIndex;
             return a > b;
         }
@@ -215,11 +350,15 @@ namespace KSP1PartMod.Animation.Tracks
             return -1;
         }
 
-        private int AddSlot(int target, int property, ChannelValueType type)
+        private int AddSlot(int target, int property, ChannelValueType type, in Value4 rest)
         {
             if (_slotCount == _slots.Length) System.Array.Resize(ref _slots, _slotCount * 2);
             var slot = _slotCount++;
-            _slots[slot] = new Slot { Target = target, Property = property, Type = type, NextInTarget = -1, Winner = -1 };
+            _slots[slot] = new Slot
+            {
+                Target = target, Property = property, Type = type, NextInTarget = -1, ColorWinner = -1, FirstChannel = -1,
+                LastChannel = -1, Rest = rest,
+            };
             ref var t = ref _targets[target];
             if (t.LastSlot < 0) t.FirstSlot = slot;
             else _slots[t.LastSlot].NextInTarget = slot;

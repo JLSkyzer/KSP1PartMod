@@ -320,6 +320,139 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             Assert.AreEqual(0, t.SubmitCount);
         }
 
+        // --- several clips on one slot (review I3): rest and weight 0 never hide another clip; active clips blend
+
+        private int Track(int module, int layer = 0, float rest = 0f) =>
+            t.Register(Renderer, P, ChannelValueType.Color, WriterClass.Track, module, V(rest), layer);
+
+        [Test] public void Shared_UpperClipAtRest_LowerShows()
+        {
+            var lower = Track(1);
+            var upper = Track(5);
+            t.Submit(lower, V(0f), 1f);
+            t.Submit(upper, V(0f), 1f); // Setup's rest pose of the later module
+            t.Submit(lower, V(0.8f), 1f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.8f, Sink.Last(P).X, 1e-6f);
+        }
+
+        [Test] public void Shared_UpperClipAtWeightZero_LowerShows()
+        {
+            var lower = Track(1);
+            var upper = Track(5);
+            t.Submit(upper, V(1f), 0f);
+            t.Submit(lower, V(0.6f), 1f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.6f, Sink.Last(P).X, 1e-6f);
+        }
+
+        [Test] public void Shared_ActiveClipBackToRest_ReleasesTheSlot()
+        {
+            var lower = Track(1);
+            var upper = Track(5);
+            t.Submit(lower, V(0.4f), 1f);
+            t.Submit(upper, V(0.9f), 1f);
+            t.Submit(upper, V(0f), 1f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.4f, Sink.Last(P).X, 1e-6f);
+        }
+
+        [Test] public void Shared_AllAtRest_ShowsRest()
+        {
+            var a = Track(1, rest: 0.2f);
+            var b = Track(5, rest: 0.2f);
+            t.Submit(a, V(0.7f), 1f);
+            t.Flush(Sink);
+            t.Submit(a, V(0.2f), 1f);
+            t.Submit(b, V(0.9f), 0f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.2f, Sink.Last(P).X, 1e-6f);
+        }
+
+        [Test] public void Shared_SameLayer_WeightsAbove1_Normalised()
+        {
+            var a = Track(1);
+            var b = Track(5);
+            t.Submit(a, V(1f), 1f);
+            t.Submit(b, V(0.5f), 1f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.75f, Sink.Last(P).X, 1e-6f); // Unity legacy: same layer, weights 1 + 1 -> 0.5 each
+        }
+
+        [Test] public void Shared_SameLayer_WeightsBelow1_RestTakesTheRemainder()
+        {
+            var a = Track(1, rest: 0.1f);
+            var b = Track(5, rest: 0.1f);
+            t.Submit(a, V(1f), 0.25f);
+            t.Submit(b, V(0.5f), 0.25f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.25f * 1f + 0.25f * 0.5f + 0.5f * 0.1f, Sink.Last(P).X, 1e-6f);
+        }
+
+        [Test] public void Shared_HigherLayerTakesItsWeightFirst()
+        {
+            var low = Track(9, layer: 0);
+            var high = Track(1, layer: 2);
+            t.Submit(low, V(1f), 1f);
+            t.Submit(high, V(0.5f), 0.75f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.75f * 0.5f + 0.25f * 1f, Sink.Last(P).X, 1e-6f); // higher layer first, whatever the module
+        }
+
+        [Test] public void Shared_HigherLayerAtFullWeight_HidesLower()
+        {
+            var low = Track(1, layer: 0);
+            var high = Track(5, layer: 1);
+            t.Submit(low, V(1f), 1f);
+            t.Submit(high, V(0.5f), 1f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.5f, Sink.Last(P).X, 1e-6f);
+        }
+
+        [Test] public void Shared_OneActiveClip_ShowsItsBlendWithRest()
+        {
+            var a = Track(1, rest: 0.4f);
+            Track(5, rest: 0.4f);
+            t.Submit(a, V(1f), 0.5f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.7f, Sink.Last(P).X, 1e-6f);
+            Assert.AreEqual(0.7f, t.Submitted(a).X, 1e-6f);
+        }
+
+        [Test] public void Shared_ColorStillBeatsActiveTracks()
+        {
+            var a = Track(1);
+            var b = Track(2);
+            var co = Reg(t, WriterClass.Color, 0);
+            t.Submit(a, V(1f), 1f);
+            t.Submit(co, V(0.3f));
+            t.Submit(b, V(0.9f), 1f);
+            t.Flush(Sink);
+            Assert.AreEqual(0.3f, Sink.Last(P).X, 1e-6f);
+        }
+
+        [Test] public void Shared_Blend10000Frames_NoGcAlloc()
+        {
+            var a = Track(1, layer: 0);
+            var b = Track(2, layer: 0);
+            var c = Track(3, layer: 1);
+            var sink = new CountingSink();
+            t.Submit(a, V(0.1f), 1f);
+            t.Flush(sink);
+            Assert.That(() =>
+            {
+                for (var i = 1; i <= 10000; i++)
+                {
+                    var x = i / 10000f;
+                    t.Submit(a, V(x), 1f);
+                    t.Submit(b, V(1 - x), 0.5f);
+                    t.Submit(c, V(x * 0.5f), i % 2 == 0 ? 0.3f : 0f);
+                    t.Flush(sink);
+                }
+            }, Is.Not.AllocatingGCMemory());
+            Assert.Greater(sink.Writes, 9000);
+        }
+
         /// <summary>Per the phase 2a ruling: the allocation is measured with Unity's recorder
         /// (<c>Is.Not.AllocatingGCMemory()</c>); <c>GC.GetAllocatedBytesForCurrentThread</c> reads 0 under Unity's Mono.</summary>
         [Test] public void ChannelTable_Flush10000_AllocatesZero()

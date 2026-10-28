@@ -41,7 +41,8 @@ namespace KSP1PartMod.Animation.Tracks
             Loop = set.WrapMode == WrapLoop;
         }
 
-        /// <summary>Submits one value per bound track: per channel <c>lerp(rest, curve(t), Weight)</c> with
+        /// <summary>Submits one value per bound track, the curve's value with the pose's weight; the channel's value is
+        /// per component <c>lerp(rest, curve(t), Weight)</c> (<see cref="ChannelTable.Submit(int, in Value4, float)"/>), with
         /// <c>t = NormalizedTime × length</c>, clamped to the clip or repeated (<see cref="Loop"/>); a channel without
         /// a curve keeps its rest value. False, and nothing submitted, when the pose (time, weight, enabled) and
         /// <see cref="Loop"/> are those of the last call, or the pose is disabled (a stopped state leaves its last
@@ -68,12 +69,12 @@ namespace KSP1PartMod.Animation.Tracks
                 if (channel < 0) continue;
                 var rest = _table.Rest(channel);
                 var c = _curves[i];
-                var v = new Value4(
-                    Blend(rest.X, c, 0, t, w, loop),
-                    Blend(rest.Y, c, 1, t, w, loop),
-                    Blend(rest.Z, c, 2, t, w, loop),
-                    Blend(rest.W, c, 3, t, w, loop));
-                _table.Submit(channel, in v);
+                var raw = new Value4(
+                    Raw(rest.X, c, 0, t, loop),
+                    Raw(rest.Y, c, 1, t, loop),
+                    Raw(rest.Z, c, 2, t, loop),
+                    Raw(rest.W, c, 3, t, loop));
+                _table.Submit(channel, in raw, w); // the table blends: lerp(rest, raw, w), and with the slot's other clips
             }
             return true;
         }
@@ -85,13 +86,13 @@ namespace KSP1PartMod.Animation.Tracks
             for (var i = 0; i < samplers.Length; i++) samplers[i]?.Sample(in pose);
         }
 
-        private float Blend(float rest, Curve[] curves, int channel, float t, float weight, bool loop)
+        /// <summary>The curve's value at <paramref name="t"/>; <paramref name="rest"/> for a channel without curve.</summary>
+        private float Raw(float rest, Curve[] curves, int channel, float t, bool loop)
         {
             if (channel >= curves.Length) return rest;
             var curve = curves[channel];
             if (curve == null) return rest;
-            var value = loop ? curve.EvaluateLooped(t, _length) : curve.Evaluate(t);
-            return rest + (value - rest) * weight;
+            return loop ? curve.EvaluateLooped(t, _length) : curve.Evaluate(t);
         }
     }
 }

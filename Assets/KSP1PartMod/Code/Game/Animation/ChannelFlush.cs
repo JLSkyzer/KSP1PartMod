@@ -11,9 +11,11 @@ namespace KSP1PartMod.Game.Animation
     /// <summary>Writes the channel table of every KSP1 part instance once per frame, after the game's writers (spec
     /// "Material writers and shader timing", flush order): one behaviour, created on the first registration and kept
     /// across scenes. <c>[DefaultExecutionOrder(32000)]</c> is above every order in the Redux decompile (max 10000); whether
-    /// Unity applies it to a type of a mod assembly is not provable, so the <c>mpb check</c> line confirms it at run time.
-    /// If that check reads another value than ours, <see cref="EnableRenderTimeFlush"/> flushes again when the frame
-    /// renders (only targets rewritten every frame write then). The flush allocates nothing.</summary>
+    /// Unity applies it to a type of a mod assembly is not provable, so the <c>mpb check</c> lines confirm it at run time
+    /// (<see cref="MpbCheck"/>: per part type, and at the first reentry of a part type). If a check reads another value
+    /// than ours, <see cref="EnableRenderTimeFlush"/> flushes again when the frame renders: every written target of every
+    /// table after a part-type check, the targets rewritten every frame (active reentry hulls) after a reentry check. The
+    /// flush allocates nothing.</summary>
     [DefaultExecutionOrder(32000)]
     internal sealed class ChannelFlush : MonoBehaviour
     {
@@ -21,7 +23,7 @@ namespace KSP1PartMod.Game.Animation
         private static RendererChannels[] _sinks = new RendererChannels[64];
         private static int _count;
         private static ChannelFlush _instance;
-        private static bool _renderTimeFlush;
+        private static bool _renderTimeFlush, _renderRewriteAll;
 
         // Perf (diagnostics): Drive time and counts of this frame, fed by the modules.
         private static PerfCounter _perf;
@@ -111,37 +113,52 @@ namespace KSP1PartMod.Game.Animation
         }
 
         /// <summary>Fallback of the spec's flush order, after an <c>mpb check</c> read another value than ours (another
-        /// writer replaced the block after our <c>LateUpdate</c>): the checked target is rewritten every frame, and, for
-        /// the session, every table rewrites all its written targets again from
-        /// <c>RenderPipelineManager.beginContextRendering</c>, which runs after every <c>LateUpdate</c>.</summary>
-        public static void EnableRenderTimeFlush(string part, ChannelTable table, int target)
+        /// writer replaced the block after our <c>LateUpdate</c>), for the session, from
+        /// <c>RenderPipelineManager.beginContextRendering</c>, which runs after every <c>LateUpdate</c>.
+        /// <paramref name="everyTarget"/> (a part-type check, unknown writer): the checked target is rewritten every
+        /// frame, and every table rewrites all its written targets at render time. Otherwise (a reentry check: the
+        /// writer is the <c>ReentryMesh</c> of an active hull) only the targets rewritten every frame, those under an
+        /// active hull, are written again at render time.</summary>
+        public static void EnableRenderTimeFlush(string part, ChannelTable table, int target, bool everyTarget = true)
         {
-            table?.SetRewriteEveryFrame(target, true);
-            if (_renderTimeFlush) return;
-            _renderTimeFlush = true;
-            RenderPipelineManager.beginContextRendering += OnRender;
-            KSP1PartModPlugin.Log?.LogWarning(
-                $"[KSP1PartMod] anim: {part} mpb check read another value: every written renderer is flushed again at render time");
+            if (everyTarget) table?.SetRewriteEveryFrame(target, true);
+            var widen = everyTarget && !_renderRewriteAll;
+            if (_renderTimeFlush && !widen) return;
+            if (!_renderTimeFlush)
+            {
+                _renderTimeFlush = true;
+                RenderPipelineManager.beginContextRendering += OnRender;
+            }
+            if (everyTarget) _renderRewriteAll = true;
+            KSP1PartModPlugin.Log?.LogWarning(everyTarget
+                ? $"[KSP1PartMod] anim: {part} mpb check read another value: every written renderer is flushed again at render time"
+                : $"[KSP1PartMod] anim: {part} mpb check at reentry read another value: the renderers under an active reentry hull are flushed again at render time");
         }
 
-        /// <summary>Tests only: undoes <see cref="EnableRenderTimeFlush"/>'s subscription.</summary>
+        /// <summary>Tests only: undoes <see cref="EnableRenderTimeFlush"/>.</summary>
         internal static void DisableRenderTimeFlush()
         {
+            _renderRewriteAll = false;
             if (!_renderTimeFlush) return;
             _renderTimeFlush = false;
             RenderPipelineManager.beginContextRendering -= OnRender;
         }
 
+        /// <summary>Tests only: the render-time flush is on, and whether it rewrites every written target.</summary>
+        internal static (bool on, bool everyTarget) RenderTimeFlushState => (_renderTimeFlush, _renderRewriteAll);
+
         private static void OnRender(ScriptableRenderContext context, List<Camera> cameras) => FlushAtRender();
 
-        /// <summary>The render-time flush: every written target of every table, all its values.</summary>
+        /// <summary>The render-time flush: all the values of every written target of every table, or, after a reentry
+        /// check only, of the targets rewritten every frame (and of any target with a change still pending).</summary>
         internal static void FlushAtRender()
         {
+            var all = _renderRewriteAll;
             for (var i = 0; i < _count; i++)
             {
                 try
                 {
-                    _tables[i].Flush(_sinks[i], rewriteAll: true);
+                    _tables[i].Flush(_sinks[i], rewriteAll: all);
                 }
                 catch (Exception e)
                 {

@@ -25,6 +25,7 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             /// <summary>A curve of type 0 (Transform) with keys, whatever its property.</summary>
             public bool HasTransformCurve;
             public bool HasState, HasTracks;
+            public TrackSet Set;
             public PartAnimationPlan Plan;
             public override string ToString() => $"{Part} '{Clip}' on model {Model} '{Host}'";
         }
@@ -66,12 +67,13 @@ namespace KSP1PartMod.Tests.Animation.Tracks
                                 Part = s.Part, Clip = clip.Name, Host = node.Path(), Model = i, WrapMode = clip.WrapMode, Plan = plan,
                                 HasTransformCurve = clip.Curves.Any(c => c.Type == 0 && c.Keys.Count > 0),
                                 HasState = TrackBindingRule.HasState(clip),
-                                HasTracks = TrackBuilder.FromClip(clip, node.Path(), i, out _) != null,
+                                Set = TrackBuilder.FromClip(clip, node.Path(), i, out _),
                             });
                         }
                     }
                 }
             }
+            foreach (var c in list) c.HasTracks = c.Set != null;
             Assume.That(list.Count, Is.GreaterThan(0), "no planned clip found");
             return _clips = list;
         }
@@ -126,6 +128,55 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             foreach (var g in ClipsWithTracks().GroupBy(c => c.WrapMode).OrderBy(g => g.Key))
                 text.AppendLine($"  wrap mode {g.Key}: {g.Count()}");
             TestContext.WriteLine(text.ToString());
+        }
+
+        /// <summary>Not an assertion (review I3): the (renderer path, property) slots of a part that the tracks of two or
+        /// more clips write, as the default <c>shader_property_map</c> names the property (first candidate). Per slot,
+        /// the owners of its clips: entry kind and legacy layer (a Group's second clip on layer 4), or Redux.</summary>
+        [Test]
+        public void RealClips_SharedSlots_Counts()
+        {
+            var map = KSP1PartMod.Animation.Settings.AnimationSettings.Defaults.ShaderPropertyMap;
+            var slots = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
+            var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+            var partOf = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var c in ClipsWithTracks())
+            {
+                var owner = string.Join("+", OwnerLabels(c));
+                foreach (var track in c.Set.Tracks)
+                {
+                    var property = track.IsLight
+                        ? "light:" + track.Kind
+                        : KSP1PartMod.Animation.Runtime.MaterialRules.Candidates(track.Property, map).FirstOrDefault() ?? track.Property;
+                    var key = $"{c.Part}|{c.Model}|{c.Host}/{track.RelativePath}|{property}";
+                    if (!slots.TryGetValue(key, out var clips)) slots[key] = clips = new HashSet<string>(StringComparer.Ordinal);
+                    clips.Add(c.Clip);
+                    owners[key + "|" + c.Clip] = owner;
+                    partOf[key] = c.Part;
+                }
+            }
+            var shared = slots.Where(kv => kv.Value.Count > 1).ToList();
+            var text = new StringBuilder();
+            text.AppendLine($"slots written by tracks: {slots.Count}, by two or more clips: {shared.Count}, " +
+                            $"in {shared.Select(kv => partOf[kv.Key]).Distinct().Count()} part(s)");
+            foreach (var g in shared.GroupBy(kv => string.Join(" / ", kv.Value.Select(clip => owners[kv.Key + "|" + clip]).OrderBy(o => o, StringComparer.Ordinal)))
+                         .OrderByDescending(g => g.Count()))
+                text.AppendLine($"  owners [{g.Key}]: {g.Count()} slot(s)");
+            foreach (var g in shared.GroupBy(kv => kv.Key.Substring(kv.Key.LastIndexOf('|') + 1)).OrderByDescending(g => g.Count()))
+                text.AppendLine($"  property {g.Key}: {g.Count()}");
+            TestContext.WriteLine(text.ToString());
+        }
+
+        private static IEnumerable<string> OwnerLabels(PlannedClip c)
+        {
+            foreach (var e in c.Plan.Entries)
+            {
+                if (e.Kind == EntryKind.GearBridge || e.Kind == EntryKind.AeroGate) continue;
+                if (string.Equals(e.Clip, c.Clip, StringComparison.Ordinal)) yield return $"{e.Kind}@{e.Layer}";
+                else if (ClipsOf(e).Contains(c.Clip, StringComparer.Ordinal))
+                    yield return e.Kind == EntryKind.Group ? $"{e.Kind}-active@4" : $"{e.Kind}-second@{e.Layer}";
+            }
+            if (c.Plan.ReduxClips.Contains(c.Clip, StringComparer.Ordinal)) yield return "Redux";
         }
     }
 }

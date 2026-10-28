@@ -35,6 +35,8 @@ namespace KSP1PartMod.Tests.ReduxMu
 
         [TearDown] public void TearDown()
         {
+            MpbCheck.ResetForTests();
+            ChannelFlush.DisableRenderTimeFlush();
             if (Table != null) ChannelFlush.Unregister(Table);
             Sink?.ReleaseAll();
             foreach (var o in _made)
@@ -330,6 +332,106 @@ namespace KSP1PartMod.Tests.ReduxMu
             {
                 ChannelFlush.DisableRenderTimeFlush();
             }
+        }
+
+        // --- mpb check (review I1, I2) and the white map (M7)
+
+        private static readonly Color Mid = new Color(0.5f, 0.25f, 0.75f, 1f);
+
+        [Test] public void MpbCheck_Kept_WithinTolerance()
+        {
+            var v = new Value4(0.5f, 0.25f, 0.75f, 1f);
+            Assert.IsTrue(MpbCheck.Kept(v, new Value4(0.50005f, 0.25f, 0.74995f, 1f)));
+            Assert.IsFalse(MpbCheck.Kept(v, new Value4(0.51f, 0.25f, 0.75f, 1f)));
+            Assert.IsFalse(MpbCheck.Kept(v, new Value4(float.NaN, 0.25f, 0.75f, 1f)));
+        }
+
+        /// <summary>A colour with components strictly between 0 and 1 (Linear project): the check passes and turns
+        /// nothing on.</summary>
+        [Test] public void MpbCheck_MidColour_Kept()
+        {
+            Sink = new RendererChannels(Table, "mpb-mid");
+            var r = Renderer();
+            Write(r, Emission, Mid);
+            Assert.IsTrue(MpbCheck.Pending, "the first write of the part type starts the check");
+            Assert.AreEqual(true, MpbCheck.RunNow());
+            Assert.AreEqual((false, false), ChannelFlush.RenderTimeFlushState);
+        }
+
+        [Test] public void MpbCheck_BlockReplaced_RenderTimeFlushOfEveryTarget()
+        {
+            Sink = new RendererChannels(Table, "mpb-replaced");
+            var r = Renderer();
+            Write(r, Emission, Mid);
+            r.SetPropertyBlock(new MaterialPropertyBlock()); // another writer after our flush
+            Assert.AreEqual(false, MpbCheck.RunNow());
+            Assert.AreEqual((true, true), ChannelFlush.RenderTimeFlushState);
+        }
+
+        private (Renderer r, GameObject hull) ReentryPart(string part)
+        {
+            Sink = new RendererChannels(Table, part);
+            var r = Renderer();
+            var c = Channel(r);
+            var hull = new GameObject("hull");
+            _made.Add(hull);
+            hull.SetActive(false);
+            Sink.WatchActive(Sink.AddRenderer(r, Defaults, out _), hull);
+            Table.Submit(c, V(Mid));
+            Flush();
+            Assert.AreEqual(true, MpbCheck.RunNow(), "the part-type check, before any reentry");
+            return (r, hull);
+        }
+
+        /// <summary>The first activation of a watched hull arms a check of that renderer, keyed apart from the part-type
+        /// check; it runs once per part type.</summary>
+        [Test] public void MpbCheck_FirstReentryHull_ArmsItsOwnCheck()
+        {
+            var (_, hull) = ReentryPart("mpb-reentry");
+            Flush();
+            Assert.IsFalse(MpbCheck.Pending, "no hull active: no check");
+            hull.SetActive(true);
+            Flush();
+            Assert.IsTrue(MpbCheck.Pending);
+            Assert.IsTrue(MpbCheck.HasRun(MpbCheck.ReentryKey("mpb-reentry")));
+            Assert.AreEqual(true, MpbCheck.RunNow());
+            hull.SetActive(false);
+            Flush();
+            hull.SetActive(true);
+            Flush();
+            Assert.IsFalse(MpbCheck.Pending, "once per part type");
+        }
+
+        [Test] public void MpbCheck_ReentryBlockReplaced_RenderTimeFlushOfActiveHullsOnly()
+        {
+            var (r, hull) = ReentryPart("mpb-reentry-replaced");
+            hull.SetActive(true);
+            Flush();
+            r.SetPropertyBlock(new MaterialPropertyBlock()); // ReentryMesh after our flush
+            Assert.AreEqual(false, MpbCheck.RunNow());
+            Assert.AreEqual((true, false), ChannelFlush.RenderTimeFlushState);
+            ChannelFlush.FlushAtRender();
+            var b = new MaterialPropertyBlock();
+            r.GetPropertyBlock(b);
+            var c = b.GetColor(Emission);
+            Assert.AreEqual(Mid.g, c.g, 1e-3f, "the active hull's renderer is written again at render time");
+        }
+
+        [Test] public void Sink_WhiteMap_NotBeforeEmissionWritten()
+        {
+            var m = Mat(keywordOn: true);
+            if (!m.HasProperty("_EmissionMap") || !m.HasProperty("_BaseColor")) Assert.Ignore("no _EmissionMap or _BaseColor");
+            m.SetTexture("_EmissionMap", null);
+            var r = Renderer(true, m);
+            var emission = Channel(r);
+            Write(r, "_BaseColor", Color.gray);
+            var b = new MaterialPropertyBlock();
+            r.GetPropertyBlock(b);
+            Assert.IsNull(b.GetTexture("_EmissionMap"), "no emission colour of ours yet");
+            Table.Submit(emission, V(Color.red));
+            Flush();
+            r.GetPropertyBlock(b);
+            Assert.AreSame(Texture2D.whiteTexture, b.GetTexture("_EmissionMap"));
         }
 
         [Test] public void Flush_10000Frames_NoGcAlloc()

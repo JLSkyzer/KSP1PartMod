@@ -146,6 +146,14 @@ namespace KSP1PartMod.Game.Animation
             foreach (var def in data.Entries)
             {
                 if (def == null) continue;
+                if (def.Kind == EntryKind.Heat && settings != null && !settings.HeatGlow)
+                {
+                    // heat_glow off: no entry, no tracks, no material copies; the clip stays out of Redux's runtime too
+                    // (not a failed clip), so it rests as before.
+                    LogHeatOff();
+                    Log($"{_name} {def.Kind} '{Subject(def)}' not built: heat_glow off");
+                    continue;
+                }
                 try
                 {
                     var e = Build(def, saved, tracks, out var note);
@@ -180,12 +188,21 @@ namespace KSP1PartMod.Game.Animation
             }
 
             ResolveAeroGates();
-            if (_tracksWanted && !_tracksPending) BindTracks(tracks, generation, inEditor, late: false);
-            else
+            try
             {
-                // Colour entries write through the table too: one now, replaced when the tracks bind.
-                NewChannels();
-                FinishChannels();
+                if (_tracksWanted && !_tracksPending) BindTracks(tracks, generation, inEditor, late: false);
+                else
+                {
+                    // Colour entries write through the table too: one now, replaced when the tracks bind.
+                    NewChannels();
+                    FinishChannels();
+                }
+            }
+            catch (Exception ex)
+            {
+                // Phase 1 behaviour for this part: states and controls stay, no table (no colours, no tracks).
+                Error($"{_name} channel table failed, tracks and colours off for this part: {ex}");
+                DropChannels();
             }
             AddControls(inEditor);
 
@@ -196,6 +213,30 @@ namespace KSP1PartMod.Game.Animation
             foreach (var e in _entries)
                 if (!e.Disabled && e.Aero == null) Step(e, 0f, inEditor, catchErrors: true);
             _ready = true;
+        }
+
+        private static void LogHeatOff()
+        {
+            if (_loggedHeatOff) return;
+            _loggedHeatOff = true;
+            Log("heat glow off by animations.json");
+        }
+
+        /// <summary>After a failed table setup: no table, no samplers, no later bind.</summary>
+        private void DropChannels()
+        {
+            try
+            {
+                foreach (var e in _entries) e.Tracks = e.ActiveTracks = NoSamplers;
+                _reduxTracks.Clear();
+                _tracksWanted = false;
+                _tracksPending = false;
+                ReleaseChannels();
+            }
+            catch (Exception ex)
+            {
+                Error($"{_name} dropping the channel table failed: {ex}");
+            }
         }
 
         private static void AddClips(List<string> clips, AnimEntryDef def)
@@ -268,11 +309,7 @@ namespace KSP1PartMod.Game.Animation
                     e.Machine = e.Heat = new HeatScalar(def);
                     GameInputs.TryTemperature(this, out e.Temperature, out var field);
                     Log($"{_name} heat from {field} ('{def.Clip}', {e.States.Length} state(s))");
-                    if (!KSP1PartModPlugin.Animations.HeatGlow && !_loggedHeatOff)
-                    {
-                        _loggedHeatOff = true;
-                        Log("heat glow off by animations.json");
-                    }
+                    if (!KSP1PartModPlugin.Animations.HeatGlow) LogHeatOff();
                     break;
                 }
                 case EntryKind.Color:

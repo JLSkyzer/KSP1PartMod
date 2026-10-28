@@ -134,19 +134,9 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             Assert.AreEqual(1f, Submitted(b).X, 1e-5f);
         }
 
-        [Test]
-        public void Sampler_10000Frames_AllocatesZero()
-        {
-            var s = Sampler();
-            s.Sample(Pose(0));
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 1; i <= 10000; i++) s.Sample(Pose(i / 10000f));
-            Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before);
-        }
 
-        // Mono does not implement GC.GetAllocatedBytesForCurrentThread: it stays at 0 (checked 2026-10-27, a sampler made to
-        // allocate passed the two *_AllocatesZero tests of the plan and failed these). The two below use Unity's GC.Alloc
-        // recorder, whose detection TickAllocationTests checks.
+        // Allocation tests use Unity's GC.Alloc recorder (Is.Not.AllocatingGCMemory), whose detection TickAllocationTests
+        // checks: GC.GetAllocatedBytesForCurrentThread always reads 0 under Unity's Mono.
 
         [Test]
         public void Sampler_10000Frames_NoGcAlloc()
@@ -189,15 +179,5 @@ namespace KSP1PartMod.Tests.Animation.Tracks
             Assert.AreEqual((1f, 0.5f), (Submitted(0).X, Submitted(1).X));
         }
 
-        [Test]
-        public void Sampler_Looping10000Frames_AllocatesZero()
-        {
-            var s = Sampler(colourRest: (0.1f, 0.2f, 0.3f, 1f), only: 'g');
-            s.Loop = true;
-            s.Sample(Pose(0));
-            var before = GC.GetAllocatedBytesForCurrentThread();
-            for (var i = 1; i <= 10000; i++) s.Sample(new ClipPose(i / 1000f, 1, 0.5f, i % 7 != 0));
-            Assert.AreEqual(0, GC.GetAllocatedBytesForCurrentThread() - before);
-        }
     }
 }

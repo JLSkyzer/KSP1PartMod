@@ -164,6 +164,17 @@ namespace KSP1PartMod.Tests.Animation.Cfg
         [Test] public void Parse_FxSetter_KeysUnchanged() =>
             Assert.AreEqual(Plan(Color(id: "a")).Entries.Single().Key, Plan(Color(id: "a"), Fx("a")).Entries.Single().Key);
 
+        [Test] public void Parse_FxSetter_TwoSettersOneId_NotedLaterWins()
+        {
+            var p = Plan(Color(id: "a"), Fx("a", response: 0.2f), Fx("a", response: 0.9f));
+            Assert.AreEqual("MODULE[2] FXModuleThrottleEffects names 'a', already driven by MODULE[1]: the later setter wins",
+                p.Notes.Single());
+            Assert.AreEqual(0.9f, p.Entries.Single().ScalarResponse);
+        }
+
+        [Test] public void Parse_FxSetter_OneSetterNamingAnIdTwice_NoNote() =>
+            CollectionAssert.IsEmpty(Plan(Color(id: "a"), Fx("a, a")).Notes);
+
         [Test] public void Parse_FxSetter_IsNotAnEntry() => CollectionAssert.IsEmpty(Plan(Fx("a")).Entries);
 
         // --- real BDB parts

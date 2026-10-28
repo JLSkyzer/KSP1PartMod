@@ -12,13 +12,15 @@ namespace KSP1PartMod.Animation.Cfg
     public static class ScalarSourceParser
     {
         /// <summary>Links the Color entries of <paramref name="entries"/> (by <see cref="AnimEntryDef.ModuleIndex"/> into
-        /// <paramref name="modules"/>) and returns one note per name that matches none. Setters whose module name is in
-        /// <paramref name="skipModules"/> are ignored.</summary>
+        /// <paramref name="modules"/>) and returns one note per name that matches none, and one per name that an earlier
+        /// setter already drives (the later setter's fields win, as KSP1's last write each frame). Setters whose module
+        /// name is in <paramref name="skipModules"/> are ignored.</summary>
         public static IReadOnlyList<string> Apply(IReadOnlyList<IKsp1Node> modules, IReadOnlyList<AnimEntryDef> entries,
             ISet<string> skipModules = null)
         {
             var notes = new List<string>();
             if (modules == null || entries == null) return notes;
+            var driver = new Dictionary<string, int>(StringComparer.Ordinal); // moduleID -> setter module index
             for (var i = 0; i < modules.Count; i++)
             {
                 var setter = modules[i];
@@ -33,7 +35,14 @@ namespace KSP1PartMod.Animation.Cfg
                         Link(e, setter, id);
                         linked = true;
                     }
-                    if (!linked) notes.Add($"MODULE[{i}] {name} names '{id}', no colour changer of ours");
+                    if (!linked)
+                    {
+                        notes.Add($"MODULE[{i}] {name} names '{id}', no colour changer of ours");
+                        continue;
+                    }
+                    if (driver.TryGetValue(id, out var earlier) && earlier != i)
+                        notes.Add($"MODULE[{i}] {name} names '{id}', already driven by MODULE[{earlier}]: the later setter wins");
+                    driver[id] = i;
                 }
             }
             return notes;

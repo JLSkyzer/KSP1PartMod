@@ -182,9 +182,16 @@ namespace KSP1PartMod.Game.Animation
             {
                 if (!string.Equals(set.Clip, clip, StringComparison.Ordinal)) continue;
                 var picked = TrackBinder.Hosts(_transforms, set, tracks, out var note);
+                var kept = 0;
                 foreach (var i in picked)
-                    if (holders == null || holders.Contains(_transforms.Transforms[i].gameObject)) hosts.Add((set, i));
+                {
+                    if (holders != null && !holders.Contains(_transforms.Transforms[i].gameObject)) continue;
+                    hosts.Add((set, i));
+                    kept++;
+                }
                 if (note != null) Log($"{_name} tracks '{clip}': {note}");
+                if (kept == 0 && picked.Count > 0)
+                    Log($"{_name} tracks '{clip}': host '{HostPicker.InstancePath(set.HostPath)}' not among the entry's Animation holders, set skipped");
             }
             if (holders == null && hosts.Count > 1)
             {
@@ -193,7 +200,8 @@ namespace KSP1PartMod.Game.Animation
                 var lookup = AnimationLookup.Select(candidates, AnimationLookup.For(e.Def.Kind), e.Def.Kind == EntryKind.Gear ? e.Def.AnimatorName : null);
                 hosts = lookup.Picked.Select(i => hosts[i]).ToList();
             }
-            return BindSets(tracks, clip, hosts, e.Def, loop, reduxLights);
+            // A Group's active clip plays on its own layer (Step), any other clip on the entry's.
+            return BindSets(tracks, clip, hosts, e.Def, loop, loop ? ActiveLayer : e.Def.Layer, reduxLights);
         }
 
         /// <summary>A clip Redux's legacy runtime plays (<c>Ksp1DeployableAnimationRuntime</c>, which drives every
@@ -210,7 +218,7 @@ namespace KSP1PartMod.Game.Animation
                     if (!set.HasState || StateOn(_transforms.Transforms[i], clip) != null) hosts.Add((set, i));
                 if (note != null) Log($"{_name} tracks '{clip}': {note}");
             }
-            foreach (var (set, sampler, host) in BindEach(tracks, clip, hosts, null, false, reduxLights))
+            foreach (var (set, sampler, host) in BindEach(tracks, clip, hosts, null, false, runtime.Layer, reduxLights))
             {
                 sampler.Loop = false; // Redux's runtime forces ClampForever on every state it plays
                 _reduxTracks.Add(new ReduxTracks(sampler, set.HasState ? StateOn(host, clip) : null, runtime));
@@ -224,13 +232,13 @@ namespace KSP1PartMod.Game.Animation
         }
 
         private TrackSampler[] BindSets(PartTracks tracks, string clip, List<(TrackSet set, int index)> hosts, AnimEntryDef def,
-            bool loop, IReadOnlyCollection<Light> reduxLights) =>
-            BindEach(tracks, clip, hosts, def, loop, reduxLights).Select(b => b.sampler).ToArray();
+            bool loop, int layer, IReadOnlyCollection<Light> reduxLights) =>
+            BindEach(tracks, clip, hosts, def, loop, layer, reduxLights).Select(b => b.sampler).ToArray();
 
         /// <summary>Binds each set on its chosen hosts, logs one line per set, and returns every sampler with its set and
         /// host.</summary>
         private List<(TrackSet set, TrackSampler sampler, Transform host)> BindEach(PartTracks tracks, string clip,
-            List<(TrackSet set, int index)> hosts, AnimEntryDef def, bool loop, IReadOnlyCollection<Light> reduxLights)
+            List<(TrackSet set, int index)> hosts, AnimEntryDef def, bool loop, int layer, IReadOnlyCollection<Light> reduxLights)
         {
             var result = new List<(TrackSet, TrackSampler, Transform)>();
             foreach (var set in tracks.Sets)
@@ -238,7 +246,7 @@ namespace KSP1PartMod.Game.Animation
                 if (!string.Equals(set.Clip, clip, StringComparison.Ordinal)) continue;
                 var mine = hosts.Where(h => ReferenceEquals(h.set, set)).Select(h => _transforms.Transforms[h.index]).ToList();
                 if (mine.Count == 0) continue;
-                var bound = TrackBinder.Bind(_transforms, mine, set, def, _table, _sink, KSP1PartModPlugin.Animations, reduxLights, out var note);
+                var bound = TrackBinder.Bind(_transforms, mine, set, def, layer, _table, _sink, KSP1PartModPlugin.Animations, reduxLights, out var note);
                 Log($"{_name} {note}");
                 foreach (var path in bound.ReduxLights) Log($"{_name} light '{path}' left to Module_Light");
                 for (var i = 0; i < bound.Samplers.Length; i++)

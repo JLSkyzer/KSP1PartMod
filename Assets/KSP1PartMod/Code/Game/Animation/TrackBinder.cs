@@ -66,9 +66,12 @@ namespace KSP1PartMod.Game.Animation
         /// <param name="hosts">The hosts to bind, from <see cref="Hosts"/> after the owner's choice.</param>
         /// <param name="entryOrNull">The owning entry of ours (its module index ranks the channels), or null for a clip
         /// that Redux plays.</param>
+        /// <param name="layer">The legacy layer the owner plays the clip on: it ranks this clip's channels against the other
+        /// clips of a shared slot (<see cref="ChannelTable"/>).</param>
         /// <param name="note">The bind line after <c>anim: &lt;part&gt; </c>.</param>
         public static BoundTracks Bind(PartTransforms part, IReadOnlyList<Transform> hosts, TrackSet set, AnimEntryDef entryOrNull,
-            ChannelTable table, RendererChannels sink, AnimationSettings s, IReadOnlyCollection<Light> reduxLights, out string note)
+            int layer, ChannelTable table, RendererChannels sink, AnimationSettings s, IReadOnlyCollection<Light> reduxLights,
+            out string note)
         {
             var bound = new BoundTracks();
             var samplers = new List<TrackSampler>();
@@ -99,8 +102,8 @@ namespace KSP1PartMod.Game.Animation
                     try
                     {
                         channels[k] = track.IsLight
-                            ? BindLight(part, target, track, moduleIndex, table, sink, reduxLights, lights, bound)
-                            : BindMaterial(target, track, moduleIndex, table, sink, s, renderers, props);
+                            ? BindLight(part, target, track, moduleIndex, layer, table, sink, reduxLights, lights, bound)
+                            : BindMaterial(target, track, moduleIndex, layer, table, sink, s, renderers, props);
                     }
                     catch (ArgumentException)
                     {
@@ -133,7 +136,7 @@ namespace KSP1PartMod.Game.Animation
         public static bool Wanted(Track track, AnimationSettings s) =>
             s == null || (track.IsLight ? s.LightCurves : s.MaterialCurves);
 
-        private static int BindMaterial(Transform target, Track track, int moduleIndex, ChannelTable table, RendererChannels sink,
+        private static int BindMaterial(Transform target, Track track, int moduleIndex, int layer, ChannelTable table, RendererChannels sink,
             AnimationSettings s, HashSet<Renderer> renderers, SortedSet<string> props)
         {
             var r = target.GetComponent<Renderer>();
@@ -154,13 +157,13 @@ namespace KSP1PartMod.Game.Animation
             var type = MaterialType(track.Kind);
             var rest = MaterialRest(material, id, type);
             var t = sink.AddRenderer(r, s, out _, name);
-            var channel = table.Register(t, id, type, WriterClass.Track, moduleIndex, rest);
+            var channel = table.Register(t, id, type, WriterClass.Track, moduleIndex, rest, layer);
             renderers.Add(r);
             props.Add(name);
             return channel;
         }
 
-        private static int BindLight(PartTransforms part, Transform target, Track track, int moduleIndex, ChannelTable table,
+        private static int BindLight(PartTransforms part, Transform target, Track track, int moduleIndex, int layer, ChannelTable table,
             RendererChannels sink, IReadOnlyCollection<Light> reduxLights, HashSet<Light> lights, BoundTracks bound)
         {
             var l = target.GetComponent<Light>();
@@ -173,7 +176,7 @@ namespace KSP1PartMod.Game.Animation
             }
             var type = LightValueType(track.Kind);
             var t = sink.AddLight(l);
-            var channel = table.Register(t, (int)type, type, WriterClass.Track, moduleIndex, LightRest(l, type));
+            var channel = table.Register(t, (int)type, type, WriterClass.Track, moduleIndex, LightRest(l, type), layer);
             lights.Add(l);
             return channel;
         }

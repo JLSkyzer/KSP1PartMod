@@ -17,7 +17,8 @@ namespace KSP1PartMod.Game.Animation
     /// read first, so the values of other writers stay. A light's fields are set only when they differ.</item>
     /// <item>Emission (<see cref="EmissionPolicy"/>), decided per material from the shader found at bind, for renderers
     /// with an <c>_EmissionColor</c> channel: material copies made once, through <c>renderer.materials</c> (never by
-    /// writing the shared, hot-swapped material), and a white <c>_EmissionMap</c> in the block.</item>
+    /// writing the shared, hot-swapped material), and a white <c>_EmissionMap</c> in the block once our <c>_EmissionColor</c>
+    /// is.</item>
     /// <item>Before each write the first slot's material and shader are compared with the bind
     /// (<see cref="WriterPolicy.Rebind"/>): a change rebinds (the only allocating path of the flush), except while the
     /// OAB selection shader is on.</item>
@@ -57,6 +58,10 @@ namespace KSP1PartMod.Game.Animation
         private Value4 _lastValue;
         /// <summary>This sink no longer looks for a renderer to check (<see cref="MpbCheck"/>).</summary>
         private bool _checkDone;
+        /// <summary>The reentry check: the watched target to check at its next write (-1: none), and whether this sink
+        /// armed it already.</summary>
+        private int _reentryCheckTarget = -1;
+        private bool _reentryArmed;
 
         /// <param name="partName">For the log lines and the <c>mpb check</c>; null (tests): no check.</param>
         /// <param name="partRoot">The part object, for renderer paths in the log and <see cref="Orphaned"/>.</param>
@@ -156,7 +161,20 @@ namespace KSP1PartMod.Game.Animation
                 if (_activeNow[t] == _activeShown[t]) continue;
                 _activeShown[t] = _activeNow[t];
                 _table.SetRewriteEveryFrame(t, _activeNow[t]);
+                if (_activeNow[t]) ArmReentryCheck(t);
             }
+        }
+
+        /// <summary>The first time a watched hull of this part type goes active in the session: the <c>mpb check</c> of
+        /// its renderer runs at that renderer's next write (<see cref="End"/>), so that a <c>ReentryMesh</c> running after
+        /// our flush is seen. Runs on a hull's activation only.</summary>
+        private void ArmReentryCheck(int target)
+        {
+            if (_part == null || _reentryArmed || MpbCheck.HasRun(MpbCheck.ReentryKey(_part))) return;
+            _reentryArmed = true;
+            _reentryCheckTarget = target;
+            var r = _objects[target] as Renderer;
+            Log($"{_part} reentry hull active on '{(r != null ? PathOf(r) : "?")}': mpb check armed");
         }
 
         // ---------------------------------------------------------------- IChannelSink
@@ -189,6 +207,7 @@ namespace KSP1PartMod.Game.Animation
                     case ChannelValueType.Float: _block.SetFloat(property, v.X); break;
                     default: return;
                 }
+                if (property == EmissionColorId) _current.EmissionWritten = true;
                 _lastProperty = property;
                 _lastType = type;
                 _lastValue = v;
@@ -228,12 +247,21 @@ namespace KSP1PartMod.Game.Animation
             _current = null;
             _light = null;
             if (b == null) return;
-            if (b.WhiteMap) _block.SetTexture(EmissionMapId, White);
+            // Not before our emission colour is in the block: an unset map and the material's own colour would glow at rest.
+            if (b.WhiteMap && b.EmissionWritten) _block.SetTexture(EmissionMapId, White);
             b.Renderer.SetPropertyBlock(_block);
-            if (!_checkDone && _part != null && _lastProperty >= 0 && !MpbCheck.Pending)
+            if (_part == null || _lastProperty < 0 || MpbCheck.Pending) return;
+            if (target == _reentryCheckTarget)
+            {
+                _reentryCheckTarget = -1;
+                MpbCheck.TryStart(MpbCheck.ReentryKey(_part), _part, " at reentry", _table, target, b.Renderer, _lastProperty,
+                    Name(_lastProperty), _lastType, _lastValue, everyTarget: false);
+            }
+            else if (!_checkDone)
             {
                 _checkDone = true;
-                MpbCheck.TryStart(_part, _table, target, b.Renderer, _lastProperty, Name(_lastProperty), _lastType, _lastValue);
+                MpbCheck.TryStart(_part, _part, null, _table, target, b.Renderer, _lastProperty, Name(_lastProperty), _lastType,
+                    _lastValue, everyTarget: true);
             }
         }
 
@@ -438,6 +466,8 @@ namespace KSP1PartMod.Game.Animation
             /// <summary>A channel of this renderer writes <c>_EmissionColor</c>.</summary>
             public bool EmissionWanted;
             public bool WhiteMap;
+            /// <summary>Our <c>_EmissionColor</c> is in the renderer's block (the white map may follow).</summary>
+            public bool EmissionWritten;
             /// <summary>Our copies, and the material each replaced in its slot.</summary>
             public readonly List<Material> Copies = new List<Material>();
             public readonly List<Material> Originals = new List<Material>();
