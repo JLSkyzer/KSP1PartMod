@@ -213,7 +213,7 @@ namespace KSP1PartMod.Tests.ModuleManager
             CollectionAssert.AreEqual(new[] { "2", "2" }, System.Linq.Enumerable.Select(values, v => v.Value));
             Assert.AreEqual(0, c.ArithmeticApplied);
         }
-    
+
         [TestCase("key[1", "key[1")]
         [TestCase("odd[a[b]", "odd[a[b]")]
         [TestCase("curve[x]", "curve")]

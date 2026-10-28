@@ -53,6 +53,10 @@ namespace KSP1PartMod.Audit
         public int ShroudsMissing { get; private set; }
         public int ShroudsNoNode { get; private set; }
         public int ReduxFairings { get; private set; }
+        /// <summary>Native modules (0.8.0): parts whose converted module runs, and parts where one did not.</summary>
+        public int NativeHeatshields { get; private set; }
+        public int NativeCrossfeeds { get; private set; }
+        public int NativeFailedParts { get; private set; }
 
         public static AuditSummary From(IEnumerable<AuditRecord> records, double elapsedSeconds)
         {
@@ -94,6 +98,9 @@ namespace KSP1PartMod.Audit
             s.ShroudsMissing = parts.Count(r => HasFix(r, "shroud_missing"));
             s.ShroudsNoNode = parts.Count(r => HasFix(r, "shroud_no_node"));
             s.ReduxFairings = parts.Count(r => r.ReduxFairing);
+            s.NativeHeatshields = parts.Count(r => HasNative(r, AuditNative.Heatshield));
+            s.NativeCrossfeeds = parts.Count(r => HasNative(r, AuditNative.Crossfeed));
+            s.NativeFailedParts = parts.Count(r => r.NativeModules != null && r.NativeModules.Any(AuditNative.IsFailed));
 
             s.Controls = all.Where(r => r.Control).ToList();
             s.FailedControls = s.Controls.Where(r => AuditClassifier.IsProblem(r.Kinds)).ToList();
@@ -128,6 +135,9 @@ namespace KSP1PartMod.Audit
 
         public string ShroudsLine() => ShroudLines.AuditSummary(ShroudsKept, ShroudsMissing, ShroudsNoNode, ReduxFairings);
 
+        public string NativeLine() =>
+            $"audit: native modules: {NativeHeatshields} heat shield(s), {NativeCrossfeeds} crossfeed toggle(s), {NativeFailedParts} part(s) where one failed to initialize";
+
         /// <summary>One line per part with a kind other than <see cref="AuditKind.ImportWarning"/>.</summary>
         public static string PartLine(AuditRecord r)
         {
@@ -160,12 +170,20 @@ namespace KSP1PartMod.Audit
 
         // ---- Markdown ----
 
-        public string Markdown(string stamp, string skipPath = null)
+        public string Markdown(string stamp, string skipPath = null, IEnumerable<string> moduleManagerLines = null)
         {
             var sb = new StringBuilder();
             sb.Append("# KSP1PartMod audit ").Append(stamp).Append("\n\n");
             sb.Append($"{Total} part(s) in {Seconds(ElapsedSeconds)} s: {Ok} ok, {OkWithWarnings} ok with import warnings only, {WithProblem} with a problem.\n\n");
             if (!string.IsNullOrEmpty(skipPath)) sb.Append(SkipNote(skipPath)).Append(".\n\n");
+
+            var mm = (moduleManagerLines ?? Enumerable.Empty<string>()).Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+            if (mm.Count > 0)
+            {
+                sb.Append("## ModuleManager (this session)\n" + "\n");
+                foreach (var l in mm) sb.Append("- ").Append(l.Replace("\r", " ").Replace("\n", " ")).Append('\n');
+                sb.Append('\n');
+            }
 
             sb.Append("## By kind\n\n| Kind | Parts |\n|---|---|\n");
             foreach (var p in KindCounts) sb.Append($"| {AuditKinds.Name(p.Key)} | {p.Value} |\n");
@@ -187,6 +205,8 @@ namespace KSP1PartMod.Audit
 
             sb.Append("\n## Shrouds\n\n").Append(ShroudsLine()).Append('\n');
 
+            sb.Append("\n## Native modules\n\n").Append(NativeLine()).Append('\n');
+
             sb.Append("\n## Controls\n\n");
             if (Controls.Count == 0) sb.Append("No control part was audited.\n");
             else if (FailedControls.Count == 0) sb.Append($"All {Controls.Count} control part(s) are clean.\n");
@@ -199,6 +219,8 @@ namespace KSP1PartMod.Audit
         }
 
         // ---- helpers ----
+
+        private static bool HasNative(AuditRecord r, string module) => r.NativeModules != null && r.NativeModules.Contains(module);
 
         private static bool HasFix(AuditRecord r, string fix) => r.ModFixes != null && r.ModFixes.Contains(fix);
 

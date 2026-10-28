@@ -272,11 +272,11 @@ namespace KSP1PartMod.Game
             return s.Length > 0 && MmKeyEdit.CommandOf(s[0]) != MmCommand.None;
         }
 
-        /// <summary>Top folders of the import roots (and of a <c>GameData</c> folder in one) that hold a <c>.dll</c> and no
-        /// imported <c>PART</c>.</summary>
         /// <summary>Tests: the import roots to scan instead of Redux's.</summary>
         internal static Func<IEnumerable<string>> ImportRootsOverride;
 
+        /// <summary>Top folders of the import roots (and of a <c>GameData</c> folder in one) that hold a <c>.dll</c> and no
+        /// imported <c>PART</c>.</summary>
         private static List<string> ScanAutoFolders(HashSet<string> partMods)
         {
             var found = new List<string>();

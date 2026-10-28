@@ -52,5 +52,8 @@ namespace KSP1PartMod.Audit
         public IReadOnlyList<string> ModFixes = None;
         /// <summary>Redux's <c>Module_Fairing</c> is on the part (0.7.0: a bug on a fresh definition of a KSP1 part).</summary>
         public bool ReduxFairing;
+        /// <summary>The native modules this mod converted on the part (0.8.0): each name as <c>Module_Heatshield</c>, with
+        /// <c>:uninitialized</c> or <c>:missing</c> appended when the instantiated part does not have it running.</summary>
+        public IReadOnlyList<string> NativeModules = None;
     }
 }

@@ -33,10 +33,10 @@ namespace KSP1PartMod.Native
                 ? Prefix + "heat shield reference: no KSP2 shield found, fallback Rate " + AblatorMapping.Inv(NativeShieldRef.FallbackRate)
                 : Prefix + $"heat shield reference: {r.Count} KSP2 shield(s), median Rate {AblatorMapping.Inv(r.Rate)}, capacity {AblatorMapping.Inv(r.Capacity)}";
 
-        /// <summary>Every KSP2 shield read (Rate × PyrolysisLossFactor / capacity), to settle the rule in game.</summary>
+        /// <summary>Every KSP2 shield read, as a (Rate × PyrolysisLossFactor, capacity) pair, to settle the rule in game.</summary>
         public static string HeatshieldReferenceDetail(NativeShieldRef r) =>
-            Prefix + "heat shield reference: Rate/capacity of each: " +
-            string.Join(", ", r.Shields.Select(s => AblatorMapping.Inv(s.Rate) + "/" + AblatorMapping.Inv(s.Capacity)));
+            Prefix + "heat shield reference: (Rate x PLF, capacity) of each: " +
+            string.Join(", ", r.Shields.Select(s => "(" + AblatorMapping.Inv(s.Rate) + ", " + AblatorMapping.Inv(s.Capacity) + ")"));
 
         /// <summary>The <c>native: heat shields:</c> line: <paramref name="others"/> are the other fields not reproduced, each
         /// with its number of parts.</summary>

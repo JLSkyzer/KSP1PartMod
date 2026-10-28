@@ -166,7 +166,7 @@ PART
                 NativeLines.HeatshieldReference(NativeShieldRef.Median(new[] { (8e-8, 0.8), (1e-7, 0.8), (1e-8, 0.8) })));
             Assert.AreEqual("[KSP1PartMod] native: heat shield reference: no KSP2 shield found, fallback Rate 8E-08",
                 NativeLines.HeatshieldReference(NativeShieldRef.Fallback));
-            Assert.AreEqual("[KSP1PartMod] native: heat shield reference: Rate/capacity of each: 1E-08/0.8, 8E-08/0.8",
+            Assert.AreEqual("[KSP1PartMod] native: heat shield reference: (Rate x PLF, capacity) of each: (1E-08, 0.8), (8E-08, 0.8)",
                 NativeLines.HeatshieldReferenceDetail(NativeShieldRef.Median(new[] { (8e-8, 0.8), (1e-8, 0.8) })));
             Assert.AreEqual("[KSP1PartMod] native: heat shields: 21 part(s) got Module_Heatshield (1 without the resource, skipped); " +
                             "not reproduced: lossExp/lossConst shape, reentryConductivity, charMin on 2, outputResource on 1",

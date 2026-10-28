@@ -295,6 +295,23 @@ namespace KSP1PartMod.Game.Audit
             rec.CommandInitialized = command != null && command.IsInitialized;
             rec.Engines = root.GetComponentsInChildren<Module_Engine>(true).Length;
             rec.ReduxFairing = root.GetComponentInChildren<Module_Fairing>(true) != null;
+
+            try
+            {
+                var converted = NativeModules.Record.ConvertedModules(rec.Part);
+                if (converted.Count > 0)
+                {
+                    var present = new List<string>();
+                    if (modules != null)
+                        for (int i = 0; i < modules.Count; i++)
+                            if (modules.At(i) != null) present.Add(modules.At(i).GetType().Name);
+                    rec.NativeModules = AuditNative.Tag(converted, present, uninitialized);
+                }
+            }
+            catch (Exception)
+            {
+                // read-only bookkeeping: never fails the audit of a part
+            }
         }
 
         /// <summary>Command and engines from the part's definition, when no model could be spawned.</summary>

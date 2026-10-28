@@ -303,7 +303,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.AreEqual(new[]
             {
                 "[KSP1PartMod] native: heat shield reference: 3 KSP2 shield(s), median Rate 8E-08, capacity 0.8",
-                "[KSP1PartMod] native: heat shield reference: Rate/capacity of each: 1E-08/0.8, 8E-08/0.8, 1E-07/0.8",
+                "[KSP1PartMod] native: heat shield reference: (Rate x PLF, capacity) of each: (1E-08, 0.8), (8E-08, 0.8), (1E-07, 0.8)",
                 "[KSP1PartMod] native: testPart: ModuleAblator -> Module_Heatshield: Ablator capacity 0.2, Rate 1.6E-07 (reference 8E-08 for 0.8, " +
                 "pyrolysisLossFactor 6000, ablator_rate_scale 2), ablation from 500 K, shielding along local -Y",
             }, _lines.Where(l => l.Contains("heat shield reference") || l.Contains("testPart")));

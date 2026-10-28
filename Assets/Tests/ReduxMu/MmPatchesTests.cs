@@ -320,7 +320,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             var part = Run(NeedsFiles());
             Assert.AreEqual("rf", part.GetValue("title"));
         }
-    
+
         [Test] public void PlainPatch_CoversEveryReduxForm()
         {
             var part = Run(File("Squad", Part), File("Mine", PlainPatch));

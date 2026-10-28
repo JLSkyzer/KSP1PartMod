@@ -481,12 +481,13 @@ namespace KSP1PartMod.Tests.Audit
         [Test] public void Csv_ReduxFairing_IsTheLastColumn()
         {
             var cols = AuditCsv.Columns.ToList();
-            Assert.AreEqual("redux_fairing", cols[cols.Count - 1]);
+            Assert.AreEqual("native_modules", cols[cols.Count - 1]);
             var r = Rec("a"); r.ReduxFairing = true;
             var rows = ReadCsv(AuditCsv.Document(new[] { r, Rec("b") }));
             Assert.AreEqual("true", rows[1][cols.IndexOf("redux_fairing")]);
             Assert.AreEqual("false", rows[2][cols.IndexOf("redux_fairing")]);
             Assert.AreEqual(cols.IndexOf("mod_fixes") + 1, cols.IndexOf("redux_fairing"), "no older column moves");
+            Assert.AreEqual(cols.IndexOf("redux_fairing") + 1, cols.IndexOf("native_modules"), "appended after the 0.7.0 columns");
         }
 
         [Test] public void Summary_ShroudsLine_CountsNotesAndFairings()
@@ -500,6 +501,55 @@ namespace KSP1PartMod.Tests.Audit
             Assert.AreEqual("audit: shrouds: 2 part(s) with a KSP1 shroud kept, 2 with a shroud transform missing, 1 without the node, " +
                             "1 still carrying Redux's Module_Fairing", s.ShroudsLine());
             StringAssert.Contains("## Shrouds\n\n" + s.ShroudsLine() + "\n", s.Markdown("x"));
+        }
+
+        // ---- native modules (0.8.0) ----
+
+        [Test] public void Tag_MarksMissingAndUninitializedModules()
+        {
+            var tagged = AuditNative.Tag(new[] { "Module_Heatshield", "Module_ToggleCrossfeed", "Module_Other" },
+                new[] { "Module_Heatshield", "Module_ToggleCrossfeed" }, new[] { "Module_ToggleCrossfeed" });
+            CollectionAssert.AreEqual(new[] { "Module_Heatshield", "Module_ToggleCrossfeed:uninitialized", "Module_Other:missing" }, tagged);
+            Assert.IsFalse(AuditNative.IsFailed("Module_Heatshield"));
+            Assert.IsTrue(AuditNative.IsFailed("Module_ToggleCrossfeed:uninitialized"));
+            Assert.IsTrue(AuditNative.IsFailed("Module_Other:missing"));
+            Assert.AreEqual(0, AuditNative.Tag(null, null, null).Count);
+        }
+
+        [Test] public void Csv_NativeModules_AreJoinedWithSemicolons_AndEmptyByDefault()
+        {
+            var cols = AuditCsv.Columns.ToList();
+            var r = Rec("a"); r.NativeModules = new[] { "Module_Heatshield", "Module_ToggleCrossfeed:missing" };
+            var rows = ReadCsv(AuditCsv.Document(new[] { r, Rec("b") }));
+            Assert.AreEqual("Module_Heatshield;Module_ToggleCrossfeed:missing", rows[1][cols.IndexOf("native_modules")]);
+            Assert.AreEqual("", rows[2][cols.IndexOf("native_modules")]);
+            Assert.AreEqual(cols.Count, rows[1].Count);
+        }
+
+        [Test] public void Summary_NativeLine_CountsRunningModulesAndFailedParts_ControlsApart()
+        {
+            var shield = Rec("shield"); shield.NativeModules = new[] { "Module_Heatshield" };
+            var both = Rec("both"); both.NativeModules = new[] { "Module_Heatshield", "Module_ToggleCrossfeed" };
+            var bad = Rec("bad"); bad.NativeModules = new[] { "Module_ToggleCrossfeed:uninitialized" };
+            var gone = Rec("gone"); gone.NativeModules = new[] { "Module_Heatshield:missing", "Module_ToggleCrossfeed:missing" };
+            var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Heatshield" };
+            var s = AuditSummary.From(new[] { shield, both, bad, gone, control, Rec("plain") }, 1);
+            Assert.AreEqual("audit: native modules: 2 heat shield(s), 1 crossfeed toggle(s), 2 part(s) where one failed to initialize", s.NativeLine());
+            StringAssert.Contains("## Native modules\n\n" + s.NativeLine() + "\n", s.Markdown("x"));
+        }
+
+        [Test] public void Summary_NativeLine_Empty()
+        {
+            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 part(s) where one failed to initialize",
+                AuditSummary.From(new AuditRecord[0], 0).NativeLine());
+        }
+
+        [Test] public void Markdown_ModuleManagerLines_AreInTheHeader_OnlyWhenGiven()
+        {
+            var s = AuditSummary.From(new[] { Rec("a") }, 1);
+            StringAssert.DoesNotContain("ModuleManager", s.Markdown("x"));
+            var md = s.Markdown("x", null, new[] { "[KSP1PartMod] mm: arithmetic: 475 applied", "", "[KSP1PartMod] mm: index: 350 applied" });
+            StringAssert.Contains("## ModuleManager (this session)\n\n- [KSP1PartMod] mm: arithmetic: 475 applied\n- [KSP1PartMod] mm: index: 350 applied\n\n## By kind", md);
         }
 
         [Test] public void Summary_ShroudsLine_Empty()

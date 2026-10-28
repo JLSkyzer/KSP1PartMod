@@ -344,6 +344,7 @@ namespace KSP1PartMod.Game.Audit
             log.LogInfo(summary.SlowestLine());
             log.LogInfo(summary.PodsLine());
             log.LogInfo(summary.ShroudsLine());
+            log.LogInfo(summary.NativeLine());
             WriteMarkdown(summary);
             run.Close();
             _run = null;
@@ -650,7 +651,7 @@ namespace KSP1PartMod.Game.Audit
             if (_stamp == null) return;
             try
             {
-                File.WriteAllText(Path.Combine(Dir, $"audit-{_stamp}.md"), summary.Markdown(_stamp, SkipNotePath()), new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(Dir, $"audit-{_stamp}.md"), summary.Markdown(_stamp, SkipNotePath(), MmPatches.LastSummary), new UTF8Encoding(false));
             }
             catch (Exception e)
             {
