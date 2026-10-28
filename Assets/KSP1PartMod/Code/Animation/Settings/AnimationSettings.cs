@@ -107,12 +107,20 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>KSP1 <c>ModuleToggleCrossfeed</c> imported as KSP2's <c>Module_ToggleCrossfeed</c>
         /// (<c>ksp1_crossfeed_toggle</c>, default true).</summary>
         public bool Ksp1CrossfeedToggle => _mm.CrossfeedToggle;
+        /// <summary>KSP1 <c>ModuleAblator</c> imported as KSP2's <c>Module_Heatshield</c> (<c>ksp1_heatshields</c>, default true).</summary>
+        public bool Ksp1Heatshields => _mm.Heatshields;
+        /// <summary>Multiplies the computed heat shield <c>Rate</c> (<c>ablator_rate_scale</c>, default 1, 0.01 to 100).</summary>
+        public double AblatorRateScale => _mm.AblatorRateScale;
+        /// <summary>The <c>shieldChar</c> colour changer follows the part's ablator (<c>ablator_char</c>, default true; needs
+        /// <c>ksp1_heatshields</c> and, being an animation entry, <c>enabled</c>).</summary>
+        public bool AblatorChar => _mm.AblatorChar;
 
         /// <summary>The keys of 0.8.0 (ModuleManager and native modules), read together.</summary>
         private sealed class SwitchesMm
         {
             public bool SafetyNet = true, PluginFoldersAuto = true, BeforeAfterNeedMod = true, Arithmetic = true, IndexSelectors = true;
-            public bool CrossfeedToggle = true;
+            public bool CrossfeedToggle = true, Heatshields = true, AblatorChar = true;
+            public float AblatorRateScale = 1f;
             public bool EditFirstMatch;
             public IReadOnlyCollection<string> PluginFolders = ReadOnlyNames(ModuleManager.MmPluginRule.DefaultCurated);
             public IReadOnlyCollection<string> NeedsKeep = ReadOnlyNames(ModuleManager.MmPluginRule.DefaultKeep);
@@ -252,6 +260,9 @@ namespace KSP1PartMod.Animation.Settings
                         case "mm_index_selectors": ReadBool(p, ref mm.IndexSelectors, problems); break;
                         case "mm_edit_first_match": ReadBool(p, ref mm.EditFirstMatch, problems); break;
                         case "ksp1_crossfeed_toggle": ReadBool(p, ref mm.CrossfeedToggle, problems); break;
+                        case "ksp1_heatshields": ReadBool(p, ref mm.Heatshields, problems); break;
+                        case "ablator_rate_scale": ReadClampedFloat(p, 0.01, 100, ref mm.AblatorRateScale, problems); break;
+                        case "ablator_char": ReadBool(p, ref mm.AblatorChar, problems); break;
                         case "mm_plugin_folders": mm.PluginFolders = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.PluginFolders; break;
                         case "mm_needs_keep": mm.NeedsKeep = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.NeedsKeep; break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;

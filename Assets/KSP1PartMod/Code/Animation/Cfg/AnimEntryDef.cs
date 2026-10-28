@@ -11,6 +11,10 @@ namespace KSP1PartMod.Animation.Cfg
     public enum EntryKind { Toggle, Deploy, Gear, Throttle, Heat, Color, Group, AeroGate, GearBridge, ReduxFollower, ChuteFollower,
         EngineDeploy, EngineMode, LookAt, DecouplerClip, RcsGlow, RcsEmissive, MeshHider, ScienceToggle, AccelSpring, LandingBag, Shroud }
 
+    /// <summary>The scalar a Color entry follows besides KSP1's FX setter: None (the toggle, or the setter when
+    /// <see cref="AnimEntryDef.ScalarLinked"/>), Ablator (the part's ablator fraction, 0.8.0). Values are only ever appended.</summary>
+    public enum ScalarSource { None, Ablator }
+
     /// <summary>One KSP1 animation module we drive, read from its cfg. Plain public fields so that Newtonsoft and
     /// <c>IOProvider</c> serialize it into the part definition.</summary>
     public sealed class AnimEntryDef
@@ -82,6 +86,12 @@ namespace KSP1PartMod.Animation.Cfg
         /// <summary>Color with <see cref="ScalarLinked"/>: the colour changer's <c>moduleID</c> the setter named (for the
         /// log).</summary>
         public string ModuleId;
+        /// <summary>Color: what drives the scalar besides the FX setter of <see cref="ScalarLinked"/>. <see cref="ScalarSource.Ablator"/>
+        /// (0.8.0, <c>ablator_char</c>): the <c>shieldChar</c> colour of a <c>ModuleAblator</c>, which follows the part's own
+        /// fraction of <see cref="ScalarResource"/>; such an entry is also <see cref="ScalarLinked"/> (no ramp, nothing saved).</summary>
+        public ScalarSource ScalarSource;
+        /// <summary>Color with <see cref="ScalarSource.Ablator"/>: the KSP1 <c>ablativeResource</c> (default <c>Ablator</c>).</summary>
+        public string ScalarResource;
 
         /// <summary>EngineDeploy, DecouplerClip, EngineMode: the fraction of the clip at which KSP1 lets the engine
         /// ignite or the decoupler fire (logged only: we never delay either).</summary>

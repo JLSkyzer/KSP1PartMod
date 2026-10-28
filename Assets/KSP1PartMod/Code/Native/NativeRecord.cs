@@ -49,6 +49,16 @@ namespace KSP1PartMod.Native
             lock (_lock) return _flags.TryGetValue(flag, out var parts) ? parts.Count : 0;
         }
 
+        /// <summary>Every flag starting with <paramref name="prefix"/> (the prefix removed) and its number of parts, in
+        /// ordinal order of the flag.</summary>
+        public IReadOnlyList<(string Flag, int Parts)> FlagsWithPrefix(string prefix)
+        {
+            lock (_lock)
+                return _flags.Where(kv => kv.Key.StartsWith(prefix, StringComparison.Ordinal))
+                    .OrderBy(kv => kv.Key, StringComparer.Ordinal)
+                    .Select(kv => (kv.Key.Substring(prefix.Length), kv.Value.Count)).ToList();
+        }
+
         /// <summary>The number of parts that got <paramref name="nativeModule"/>.</summary>
         public int PartsWith(string nativeModule)
         {

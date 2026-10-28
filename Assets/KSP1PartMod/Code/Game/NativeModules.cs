@@ -53,7 +53,7 @@ namespace KSP1PartMod.Game
             public string Pair => NativeLines.Pair(Ksp1Module, NativeModule);
         }
 
-        /// <summary>Every converter, in the order of the log. Task 4 adds the heat shield.</summary>
+        /// <summary>Every converter, in the order of the log.</summary>
         internal static IReadOnlyList<Converter> All() => new[]
         {
             new Converter
@@ -65,6 +65,16 @@ namespace KSP1PartMod.Game
                 MissingMembers = CrossfeedImporter.MissingMembers,
                 Create = () => new CrossfeedImporter(),
                 Summary = CrossfeedImporter.Summary,
+            },
+            new Converter
+            {
+                Ksp1Module = AblatorMapping.Ksp1Module,
+                NativeModule = AblatorMapping.NativeModule,
+                SwitchKey = "ksp1_heatshields",
+                IsOn = s => s.Ksp1Heatshields,
+                MissingMembers = HeatshieldImporter.MissingMembers,
+                Create = () => new HeatshieldImporter(_settings?.AblatorRateScale ?? 1.0),
+                Summary = HeatshieldImporter.Summary,
             },
         };
 
@@ -80,12 +90,18 @@ namespace KSP1PartMod.Game
         private static List<Converter> _armed = new List<Converter>();
         private static readonly HashSet<string> RejectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static bool _broken, _summaryLogged;
+        /// <summary>The settings of the arming (<c>ablator_rate_scale</c> for the heat shield importers).</summary>
+        private static AnimationSettings _settings;
 
         /// <summary>The hook is in place and has not failed.</summary>
         internal static bool IsArmed => _armed.Count > 0 && !_broken;
 
         /// <summary>The KSP1 module names our importers are offered for this session.</summary>
         internal static IReadOnlyList<string> ArmedModules => _armed.Select(c => c.Ksp1Module).ToList();
+
+        /// <summary>The converter of <paramref name="ksp1Module"/> is armed and the hook has not failed.</summary>
+        internal static bool IsConverterArmed(string ksp1Module) =>
+            !_broken && _armed.Any(c => string.Equals(c.Ksp1Module, ksp1Module, StringComparison.OrdinalIgnoreCase));
 
         internal static Targets Resolve()
         {
@@ -160,6 +176,7 @@ namespace KSP1PartMod.Game
                 _createSerialized = (Func<Type, ModuleData, Ksp1PartImportContext, SerializedPartModule>)Delegate.CreateDelegate(
                     typeof(Func<Type, ModuleData, Ksp1PartImportContext, SerializedPartModule>), t.CreateSerialized);
                 _importers = t.Importers;
+                _settings = settings;
                 _armed = wanted;
                 harmony.Patch(t.Constructor, postfix: new HarmonyMethod(typeof(NativeModules), nameof(AfterRegistryConstructor)));
             }
@@ -181,7 +198,9 @@ namespace KSP1PartMod.Game
             _armed = new List<Converter>();
             _createSerialized = null;
             _importers = null;
+            _settings = null;
             _broken = _summaryLogged = false;
+            HeatshieldImporter.ResetReference();
             RejectedNames.Clear();
             Record.Clear();
         }

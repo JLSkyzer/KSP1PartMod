@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 
 namespace KSP1PartMod.Native
 {
@@ -26,8 +27,26 @@ namespace KSP1PartMod.Native
         public static string CrossfeedSummary(int parts, int startOn, int techRequired) =>
             Prefix + $"crossfeed: {parts} part(s) got {CrossfeedMapping.NativeModule} ({startOn} start with crossfeed on), techRequired ignored on {techRequired}";
 
+        /// <summary>The heat shield reference, once, before the first KSP1 shield.</summary>
+        public static string HeatshieldReference(NativeShieldRef r) =>
+            r == null || r.IsFallback
+                ? Prefix + "heat shield reference: no KSP2 shield found, fallback Rate " + AblatorMapping.Inv(NativeShieldRef.FallbackRate)
+                : Prefix + $"heat shield reference: {r.Count} KSP2 shield(s), median Rate {AblatorMapping.Inv(r.Rate)}, capacity {AblatorMapping.Inv(r.Capacity)}";
+
+        /// <summary>Every KSP2 shield read (Rate × PyrolysisLossFactor / capacity), to settle the rule in game.</summary>
+        public static string HeatshieldReferenceDetail(NativeShieldRef r) =>
+            Prefix + "heat shield reference: Rate/capacity of each: " +
+            string.Join(", ", r.Shields.Select(s => AblatorMapping.Inv(s.Rate) + "/" + AblatorMapping.Inv(s.Capacity)));
+
+        /// <summary>The <c>native: heat shields:</c> line: <paramref name="others"/> are the other fields not reproduced, each
+        /// with its number of parts.</summary>
+        public static string HeatshieldSummary(int parts, int withoutResource, IEnumerable<(string Field, int Parts)> others) =>
+            Prefix + $"heat shields: {parts} part(s) got {AblatorMapping.NativeModule} ({withoutResource} without the resource, skipped); " +
+            "not reproduced: lossExp/lossConst shape, reentryConductivity" +
+            string.Concat((others ?? Enumerable.Empty<(string, int)>()).Select(o => $", {o.Item1} on {o.Item2}"));
+
         public static string PatchFailed(string error) =>
-            Prefix + "import hook failed, no more native module added this session: " + error;
+            Prefix + "import hook failed, no native module is added for the rest of this session: " + error;
 
         public static string ImporterFailed(string part, string ksp1Module, string error) =>
             Prefix + part + ": " + ksp1Module + " not converted (Redux drops it, as in 0.7.0): " + error;

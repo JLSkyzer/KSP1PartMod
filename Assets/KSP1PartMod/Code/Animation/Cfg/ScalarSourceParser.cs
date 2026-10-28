@@ -32,6 +32,7 @@ namespace KSP1PartMod.Animation.Cfg
                     foreach (var e in entries)
                     {
                         if (e.Kind != EntryKind.Color || !id.Equals(ModuleIdOf(modules, e), StringComparison.Ordinal)) continue;
+                        if (e.ScalarSource != ScalarSource.None) continue; // the ablator char follows the ablator only
                         Link(e, setter, id);
                         linked = true;
                     }

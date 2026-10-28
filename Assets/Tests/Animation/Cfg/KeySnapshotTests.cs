@@ -102,6 +102,38 @@ namespace KSP1PartMod.Tests.Animation.Cfg
                 "KSP1 content under mods/KSP1 changed? Regenerate with Write_KeySnapshot040 from the 0.4.0 planner (4695d2b) " +
                 "only if no planner change is involved");
 
+        /// <summary>0.8.0: with <c>ablator_char</c> on, every key of the plan without it is still there, on the same module, and
+        /// the only new entries are the ablator chars (planned last). The snapshot tests above run with it off, so they also
+        /// hold the keys of the plan with it on.</summary>
+        [Test] public void Plan_AblatorChar_KeepsEveryKey_AddsOnlyAblatorEntries_AllRealParts()
+        {
+            var partsWithChar = 0;
+            foreach (var (name, modules) in RealParts())
+            {
+                var withChar = false;
+                foreach (var own in new[] { false, true })
+                foreach (var follow in new[] { false, true })
+                foreach (var shrouds in new[] { false, true })
+                {
+                    var off = OwnershipPlanner.Plan(modules, HasNativeSolar(modules), new HashSet<string>(), own, follow, null, true, true, shrouds, false);
+                    var on = OwnershipPlanner.Plan(modules, HasNativeSolar(modules), new HashSet<string>(), own, follow, null, true, true, shrouds, true);
+                    var onByKey = on.Entries.ToDictionary(e => e.Key, StringComparer.Ordinal);
+                    foreach (var e in off.Entries)
+                    {
+                        Assert.IsTrue(onByKey.TryGetValue(e.Key, out var same), $"{name}: key {e.Key} lost");
+                        Assert.AreEqual(e.ModuleIndex, same.ModuleIndex, $"{name}: key {e.Key} moved to another module");
+                    }
+                    var added = on.Entries.Where(e => off.Entries.All(o => o.Key != e.Key)).ToList();
+                    Assert.IsTrue(added.All(e => e.ScalarSource == ScalarSource.Ablator), $"{name}: only ablator chars are new");
+                    Assert.AreEqual(off.Entries.Count + added.Count, on.Entries.Count, name);
+                    if (added.Count > 0) withChar = true;
+                }
+                if (withChar) partsWithChar++;
+            }
+            TestContext.WriteLine($"{partsWithChar} real part(s) get an ablator char");
+            Assert.AreEqual(9, partsWithChar, "the 9 installed shields with useChar = True and a shieldChar");
+        }
+
         /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0
         /// snapshot. 0.4.0 adds no entry kind: its kinds are those of 0.3.2.</summary>
         [Test, Explicit("writes the 0.4.0 key snapshot")]

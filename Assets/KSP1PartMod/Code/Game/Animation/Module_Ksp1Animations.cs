@@ -342,13 +342,16 @@ namespace KSP1PartMod.Game.Animation
                     break;
                 }
                 case EntryKind.Color:
+                    // The ablator char needs the part's resource: checked before any renderer is taken.
+                    if (def.ScalarSource == ScalarSource.Ablator && !PrepareAblator(e, out note)) return null;
                     e.Writer = new MaterialWriter(gameObject, def, settings);
                     note = e.Writer.Note;
                     if (e.Writer.RendererCount == 0) return null;
                     Log($"{_name} color '{def.ShaderProperty}' {e.Writer.Note}");
                     note = null;
                     e.Machine = e.Color = new ColorRamp(def);
-                    if (def.ScalarLinked && KSP1PartModPlugin.Animations.ThrottleEffects) LinkThrottle(e);
+                    if (e.Ablator != null) StartAblator(e);
+                    else if (def.ScalarLinked && KSP1PartModPlugin.Animations.ThrottleEffects) LinkThrottle(e);
                     break;
                 case EntryKind.Group:
                 {
@@ -830,7 +833,15 @@ namespace KSP1PartMod.Game.Animation
                         break;
                     }
                     case EntryKind.Color:
-                        if (e.Link != null)
+                        if (e.Ablator != null)
+                        {
+                            // The part's own ablator fraction: read only, visual only (0.8.0).
+                            var container = AblatorContainer();
+                            if (container != null)
+                                e.Ablator.Tick(container.GetResourceStoredUnits(e.AblatorId), container.GetResourceCapacityUnits(e.AblatorId));
+                            e.Color.SetScalar(e.Ablator.Fraction);
+                        }
+                        else if (e.Link != null)
                         {
                             // KSP1's FX setter: flight only, the editor holds 0 (ScalarLink); SetScalar every frame.
                             var target = inEditor ? 0f : LinkTarget(e);
@@ -1306,6 +1317,9 @@ namespace KSP1PartMod.Game.Animation
             public MaterialWriter Writer;
             /// <summary>Color: the <c>FXModuleThrottleEffects</c> state it follows (<c>throttle_effects</c>), else null.</summary>
             public ScalarLink Link;
+            /// <summary>Color with <see cref="ScalarSource.Ablator"/>: the part's ablator fraction and the resource it reads.</summary>
+            public AblatorScalar Ablator;
+            public KSP.Sim.ResourceSystem.ResourceDefinitionID AblatorId;
             /// <summary>Color with <see cref="Link"/>: the engine's normalized output and the vessel's main throttle.</summary>
             public Func<float> Output, MainThrottle;
             public Func<(float throttle, bool operational)> Engine;

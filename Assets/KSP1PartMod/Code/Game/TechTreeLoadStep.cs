@@ -157,6 +157,18 @@ namespace KSP1PartMod.Game
                 {
                     KSP1PartModPlugin.Log.LogWarning(
                         $"[KSP1PartMod] gave up: import complete={Bool(imported)}, tree ready={Bool(treeReady)}");
+                    if (imported)
+                    {
+                        try
+                        {
+                            // The import is complete even though the tree is not: the native summary still holds.
+                            NativeModules.LogImportSummaryOnce();
+                        }
+                        catch (Exception e)
+                        {
+                            KSP1PartModPlugin.Log.LogError("[KSP1PartMod] native: summary failed: " + e);
+                        }
+                    }
                     done();
                     yield break;
                 }

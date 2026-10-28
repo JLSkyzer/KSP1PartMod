@@ -302,5 +302,120 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             var other = new B9Gate { SetId = "other", SubtypeIds = new[] { "x", "y", "z" }, InactiveIn = new[] { "x" }, DefaultSubtype = "y" };
             Assert.IsFalse(B9GatePlanner.GatedApart(new[] { E(G("y", "z")), E(other) }), "different switches");
         }
+
+        // ------------------------------------------------------------------ the ablator char (0.8.0)
+
+        private const string StockShield = @"
+MODULE
+{
+    name = ModuleAblator
+    ablativeResource = Ablator
+    pyrolysisLossFactor = 6000
+    ablationTempThresh = 500
+    useChar = True
+    charModuleName = shieldChar
+}
+MODULE
+{
+    name = ModuleColorChanger
+    moduleID = shieldChar
+    shaderProperty = _BurnColor
+    useRate = False
+    toggleInEditor = False
+    toggleInFlight = False
+    redCurve
+    {
+        key = 0 0
+        key = 1 1
+    }
+    alphaCurve
+    {
+        key = 0 0.8
+    }
+}";
+
+        private static IKsp1Node[] Modules(string text) => CfgText.Parse(text).GetNodes("MODULE").ToArray();
+
+        private static PartAnimationPlan PlanChar(bool ablatorChar, params IKsp1Node[] modules) =>
+            OwnershipPlanner.Plan(modules, false, new HashSet<string>(), false, true, null, true, true, false, ablatorChar);
+
+        [Test] public void AblatorChar_StockShield_OneColorEntryFollowingTheAblator()
+        {
+            var p = PlanChar(true, Modules(StockShield));
+            var e = p.Entries.Single();
+            Assert.AreEqual(EntryKind.Color, e.Kind);
+            Assert.AreEqual(ScalarSource.Ablator, e.ScalarSource);
+            Assert.IsTrue(e.ScalarLinked, "no ramp, nothing saved");
+            Assert.AreEqual("Ablator", e.ScalarResource);
+            Assert.AreEqual("shieldChar", e.ModuleId);
+            Assert.AreEqual("color:_BurnColor:0", e.Key);
+            Assert.AreEqual(1, e.ModuleIndex);
+            Assert.IsFalse(e.ToggleInEditor || e.ToggleInFlight, "no button");
+            Assert.IsNull(e.ActionGroup);
+            CollectionAssert.AreEqual(new[] { "MODULE[1] ModuleColorChanger: moduleID 'shieldChar' follows the ablator (Module_Heatshield)" },
+                p.Notes);
+        }
+
+        [Test] public void AblatorChar_Off_The070Note_Unchanged()
+        {
+            var p = PlanChar(false, Modules(StockShield));
+            CollectionAssert.IsEmpty(p.Entries);
+            CollectionAssert.AreEqual(new[] { "MODULE[1] ModuleColorChanger: moduleID 'shieldChar' is driven by ModuleAblator, stays at 0, not ours" },
+                p.Notes);
+            var older = OwnershipPlanner.Plan(Modules(StockShield), false, new HashSet<string>(), false);
+            CollectionAssert.AreEqual(p.Notes, older.Notes, "the default of every older overload");
+        }
+
+        [Test] public void AblatorChar_NoAblatorOrNoUseChar_The070Note()
+        {
+            var p = PlanChar(true, Color("_BurnColor", moduleId: "shieldChar"));
+            CollectionAssert.IsEmpty(p.Entries);
+            StringAssert.Contains("stays at 0, not ours", p.Notes.Single());
+
+            var noUseChar = PlanChar(true, CfgText.Module("name = ModuleAblator"), Color("_BurnColor", moduleId: "shieldChar"));
+            CollectionAssert.IsEmpty(noUseChar.Entries);
+            StringAssert.Contains("stays at 0, not ours", noUseChar.Notes.Single());
+
+            var other = PlanChar(true, CfgText.Module("name = ModuleAblator\nuseChar = true\ncharModuleName = myChar\nablativeResource = Ab2"),
+                Color("_BurnColor", moduleId: "myChar"));
+            Assert.AreEqual("Ab2", other.Entries.Single().ScalarResource);
+            Assert.AreEqual("myChar", other.Entries.Single().ModuleId);
+        }
+
+        /// <summary>A KV pod: its shieldChar and a light changer drive the same shader property. The light's key is the one it
+        /// had in 0.7.0; the char comes after it.</summary>
+        [Test] public void AblatorChar_KvPodLike_TheLightKeyIsUnchanged()
+        {
+            var modules = Modules(StockShield.Replace("_BurnColor", "_EmissiveColor")).Concat(new[]
+            {
+                Color("_EmissiveColor"),
+            }).ToArray();
+            var before = PlanChar(false, modules);
+            var after = PlanChar(true, modules);
+            Assert.AreEqual("color:_EmissiveColor:0", before.Entries.Single().Key);
+            CollectionAssert.AreEqual(new[] { "color:_EmissiveColor:0", "color:_EmissiveColor:1" }, after.Entries.Select(e => e.Key));
+            Assert.AreEqual(2, after.Entries[0].ModuleIndex, "the light keeps ordinal 0");
+            Assert.AreEqual(ScalarSource.None, after.Entries[0].ScalarSource);
+            Assert.AreEqual(1, after.Entries[1].ModuleIndex);
+            Assert.AreEqual(ScalarSource.Ablator, after.Entries[1].ScalarSource);
+        }
+
+        [Test] public void AblatorChar_AThrottleSetterNamingIt_DoesNotLinkIt()
+        {
+            var setter = CfgText.Module("name = FXModuleThrottleEffects\nfxModuleNames = shieldChar");
+            var p = PlanChar(true, Modules(StockShield).Concat(new[] { setter }).ToArray());
+            var e = p.Entries.Single();
+            Assert.AreEqual(ScalarSource.Ablator, e.ScalarSource);
+            Assert.IsNull(e.EngineName);
+            Assert.AreEqual(0.5f, e.ScalarResponse);
+            CollectionAssert.Contains(p.Notes, "MODULE[2] FXModuleThrottleEffects names 'shieldChar', no colour changer of ours");
+        }
+
+        [Test] public void AblatorChar_SkipModules_DropsIt()
+        {
+            var p = OwnershipPlanner.Plan(Modules(StockShield), false, new HashSet<string>(), false, true,
+                new HashSet<string> { "ModuleColorChanger" }, true, true, false, true);
+            CollectionAssert.IsEmpty(p.Entries);
+        }
     }
 }

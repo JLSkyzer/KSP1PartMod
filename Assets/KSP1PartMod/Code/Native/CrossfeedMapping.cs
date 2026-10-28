@@ -45,6 +45,9 @@ namespace KSP1PartMod.Native
         public static string TechRequiredNote(string tech) =>
             $"{Ksp1Module}: techRequired '{tech}' ignored, the toggle is available from the start (KSP2's toggle has no tech gate)";
 
+        public static string MissingToggleNote(string key) =>
+            $"{Ksp1Module}: {key} missing, KSP2's default true used (KSP1's default not read)";
+
         public static CrossfeedMapping From(IKsp1Node module, bool? partCrossFeed)
         {
             var m = new CrossfeedMapping { StartCrossFeed = partCrossFeed ?? true };
@@ -90,6 +93,9 @@ namespace KSP1PartMod.Native
             }
             foreach (var child in module.AllNodes)
                 m._notes.Add($"{Ksp1Module}: node {child.Name} not reproduced");
+            // KSP1's default for a missing toggle was not read (S): KSP2's true is used, and said.
+            foreach (var key in new[] { "toggleEditor", "toggleFlight" })
+                if (!seen.Contains(key)) m._notes.Add(MissingToggleNote(key));
             return m;
         }
 

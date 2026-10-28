@@ -82,18 +82,22 @@ namespace KSP1PartMod.Animation.Cfg
         /// <c>jettisonName</c> becomes a <see cref="EntryKind.Shroud"/> entry, planned after the plugin entries with
         /// ordinals of its own kind. Its names get their variant gates (<see cref="ShroudVariantPlanner"/>) and leave any
         /// mesh hider that names them (<see cref="ShroudOwnership"/>). Off: no shroud entry, as in 0.6.0.</param>
+        /// <param name="ablatorChar">Settings <c>ablator_char</c> with <c>ksp1_heatshields</c> (0.8.0): a colour changer that a
+        /// <c>ModuleAblator</c> with <c>useChar</c> drives (<c>shieldChar</c>) becomes a Color entry whose scalar is the part's
+        /// ablator fraction (<see cref="ScalarSource.Ablator"/>). Those entries are planned after every other one, so no
+        /// older key moves. Off: the 0.7.0 note, no entry.</param>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules,
-            bool pluginModules, bool b9Gates, bool shrouds = false) =>
+            bool pluginModules, bool b9Gates, bool shrouds = false, bool ablatorChar = false) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules,
-                pluginModules, b9Gates, shrouds);
+                pluginModules, b9Gates, shrouds, ablatorChar);
 
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
         /// table. The plugin modules and the B9 gates are off unless asked for: older callers keep the 0.4.0 plan.</summary>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
             bool followRedux = false, ISet<string> skipModules = null, bool pluginModules = false, bool b9Gates = false,
-            bool shrouds = false)
+            bool shrouds = false, bool ablatorChar = false)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -122,6 +126,8 @@ namespace KSP1PartMod.Animation.Cfg
             if (reduxSource != null && !remove) reduxClips.Add(reduxSource.Clip);
 
             var entries = new List<AnimEntryDef>();
+            // The colour changers that follow the ablator (ablatorChar): planned after every other entry.
+            var ablatorChars = new List<(int Index, string Id, string Resource)>();
             var chuteSeen = false;
             for (var i = 0; i < modules.Count; i++)
             {
@@ -161,7 +167,12 @@ namespace KSP1PartMod.Animation.Cfg
 
                 if (kind == EntryKind.Color && DrivenByAblator(modules, module, out var id))
                 {
-                    notes.Add($"MODULE[{i}] {name}: moduleID '{id}' is driven by ModuleAblator, stays at 0, not ours");
+                    if (ablatorChar && TryCharAblator(modules, id, out var resource))
+                    {
+                        ablatorChars.Add((i, id, resource));
+                        notes.Add($"MODULE[{i}] {name}: moduleID '{id}' follows the ablator (Module_Heatshield)");
+                    }
+                    else notes.Add($"MODULE[{i}] {name}: moduleID '{id}' is driven by ModuleAblator, stays at 0, not ours");
                     continue;
                 }
 
@@ -189,6 +200,21 @@ namespace KSP1PartMod.Animation.Cfg
             if (shrouds)
                 for (var i = 0; i < modules.Count; i++)
                     Add(entries, ShroudParser.Parse(modules[i], i, 0));
+
+            // The ablator char (0.8.0): after the shrouds, last of all, so that no older Color key moves (a KV pod has a
+            // light changer on the same shader property after its shieldChar).
+            foreach (var (index, id, resource) in ablatorChars)
+            {
+                var e = EntryParser.Parse(modules[index], index, 0);
+                if (e == null || e.Kind != EntryKind.Color) continue;
+                e.ScalarSource = ScalarSource.Ablator;
+                e.ScalarLinked = true; // no ramp, nothing saved: the colour is the fraction
+                e.ScalarResource = resource;
+                e.ModuleId = id;
+                e.ToggleInEditor = e.ToggleInFlight = false; // KSP1's ablator owns it: no button, no action group
+                e.ActionGroup = null;
+                Add(entries, e);
+            }
 
             // skip_modules, after the keys: dropping an entry never renumbers another.
             if (skipModules != null && skipModules.Count > 0)
@@ -349,6 +375,25 @@ namespace KSP1PartMod.Animation.Cfg
 
         private static IEnumerable<string> Clips(AnimEntryDef e) =>
             new[] { e.Clip, e.SecondClip, e.ThirdClip }.Where(c => !string.IsNullOrEmpty(c));
+
+        /// <summary>The first <c>ModuleAblator</c> of the part that drives the colour changer <paramref name="id"/> (its
+        /// <c>charModuleName</c>, default <c>shieldChar</c>) with <c>useChar = true</c>, and its <c>ablativeResource</c>
+        /// (default <c>Ablator</c>). KSP1's default for a missing <c>useChar</c> is taken as false (S; every installed
+        /// shield says true).</summary>
+        private static bool TryCharAblator(IReadOnlyList<IKsp1Node> modules, string id, out string resource)
+        {
+            resource = null;
+            foreach (var m in modules)
+            {
+                if (!"ModuleAblator".Equals(NameOf(m), StringComparison.OrdinalIgnoreCase)) continue;
+                if (!id.Equals((m.GetValue("charModuleName") ?? "shieldChar").Trim(), StringComparison.Ordinal)) continue;
+                if (!bool.TryParse(m.GetValue("useChar")?.Trim(), out var useChar) || !useChar) continue;
+                var r = m.GetValue("ablativeResource")?.Trim();
+                resource = string.IsNullOrEmpty(r) ? "Ablator" : r;
+                return true;
+            }
+            return false;
+        }
 
         /// <summary>A ModuleColorChanger that a ModuleAblator of the part drives through its <c>charModuleName</c>
         /// (KSP1 default <c>shieldChar</c>), or whose moduleID is <c>shieldChar</c>: its colour follows ablation,

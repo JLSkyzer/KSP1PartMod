@@ -63,7 +63,13 @@ PART
             Assert.IsTrue(m.ToggleInFlight);
             Assert.IsFalse(m.OverridesPart);
             Assert.IsFalse(m.StartCrossFeed, "the PART value stays");
-            CollectionAssert.IsEmpty(m.Notes);
+            CollectionAssert.AreEqual(new[]
+            {
+                CrossfeedMapping.MissingToggleNote("toggleEditor"),
+                CrossfeedMapping.MissingToggleNote("toggleFlight"),
+            }, m.Notes, "a missing toggle keeps KSP2's true, and says so");
+            Assert.AreEqual("ModuleToggleCrossfeed: toggleEditor missing, KSP2's default true used (KSP1's default not read)",
+                m.Notes[0]);
 
             var unknownPart = CrossfeedMapping.From(Bare(""), null);
             Assert.IsTrue(unknownPart.StartCrossFeed, "no PART value: KSP2's default");
@@ -78,7 +84,7 @@ PART
 
         [Test] public void TechRequired_IgnoredAndNoted()
         {
-            var m = CrossfeedMapping.From(Bare("crossfeedStatus = false\ntechRequired = fuelSystems"), true);
+            var m = CrossfeedMapping.From(Bare("crossfeedStatus = false\ntechRequired = fuelSystems\ntoggleEditor = true\ntoggleFlight = true"), true);
             Assert.AreEqual("fuelSystems", m.TechRequired);
             CollectionAssert.AreEqual(new[] { CrossfeedMapping.TechRequiredNote("fuelSystems") }, m.Notes);
             StringAssert.Contains("techRequired 'fuelSystems' ignored", m.Notes[0]);
@@ -87,7 +93,7 @@ PART
 
         [Test] public void NotABool_DefaultKept_Noted()
         {
-            var m = CrossfeedMapping.From(Bare("toggleFlight = maybe\ncrossfeedStatus = 1"), false);
+            var m = CrossfeedMapping.From(Bare("toggleFlight = maybe\ncrossfeedStatus = 1\ntoggleEditor = true"), false);
             Assert.IsTrue(m.ToggleInFlight);
             Assert.IsFalse(m.OverridesPart);
             Assert.IsFalse(m.StartCrossFeed);
@@ -105,6 +111,8 @@ PART
                 "ModuleToggleCrossfeed: moduleID not reproduced",
                 "ModuleToggleCrossfeed: crossfeedStatus repeated, the first value kept",
                 "ModuleToggleCrossfeed: node EXTRA not reproduced",
+                CrossfeedMapping.MissingToggleNote("toggleEditor"),
+                CrossfeedMapping.MissingToggleNote("toggleFlight"),
             }, m.Notes);
         }
 

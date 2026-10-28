@@ -4,6 +4,7 @@ using System.Linq;
 using HarmonyLib;
 using KSP.Modules;
 using KSP.Sim.Definitions;
+using KSP.Sim.ResourceSystem;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Game;
 using KSP1PartMod.Native;
@@ -38,6 +39,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         {
             new Harmony(NativeModules.HarmonyId).UnpatchAll(NativeModules.HarmonyId);
             NativeModules.Reset();
+            HeatshieldImporter.ReferenceSource = null;
         }
 
         private bool Arm(string json = "{}") =>
@@ -46,8 +48,8 @@ namespace KSP1PartMod.Tests.ReduxMu
         private static IDictionary<string, IKsp1PartModuleImporter> Importers(Ksp1PartModuleImporterRegistry registry) =>
             (IDictionary<string, IKsp1PartModuleImporter>)NativeModules.Resolve().Importers.GetValue(registry);
 
-        private static Ksp1ConfigNode Part(string modules, string partValues = "") =>
-            Ksp1ConfigNode.Parse("PART\n{\nname = testPart\n" + partValues + modules + "}\n").GetNodes("PART").First();
+        private static Ksp1ConfigNode Part(string modules, string partValues = "", string name = "testPart") =>
+            Ksp1ConfigNode.Parse("PART\n{\nname = " + name + "\n" + partValues + modules + "}\n").GetNodes("PART").First();
 
         private static string Toggle(string body) => "MODULE\n{\nname = ModuleToggleCrossfeed\n" + body + "\n}\n";
 
@@ -128,19 +130,24 @@ namespace KSP1PartMod.Tests.ReduxMu
         [Test] public void Arm_LogsTheArmedLine_AndEveryNewRegistryGetsOurImporter()
         {
             Assert.IsTrue(Arm());
-            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed");
+            CollectionAssert.Contains(_lines,
+                "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed, ModuleAblator -> Module_Heatshield");
             Assert.IsInstanceOf<CrossfeedImporter>(Importers(new Ksp1PartModuleImporterRegistry())[CrossfeedMapping.Ksp1Module]);
+            Assert.IsInstanceOf<HeatshieldImporter>(Importers(new Ksp1PartModuleImporterRegistry())["moduleablator"]);
+            Assert.IsTrue(NativeModules.IsConverterArmed(AblatorMapping.Ksp1Module));
             Assert.IsInstanceOf<CrossfeedImporter>(Importers(new Ksp1PartModuleImporterRegistry())["moduletogglecrossfeed"]);
         }
 
         [Test] public void SwitchOff_NothingAdded_ReduxAsIn070()
         {
-            Assert.IsFalse(Arm("{\"ksp1_crossfeed_toggle\": false}"));
+            Assert.IsFalse(Arm("{\"ksp1_crossfeed_toggle\": false, \"ksp1_heatshields\": false}"));
             CollectionAssert.AreEqual(new[]
             {
                 "[KSP1PartMod] native: ModuleToggleCrossfeed -> Module_ToggleCrossfeed off (ksp1_crossfeed_toggle false)",
+                "[KSP1PartMod] native: ModuleAblator -> Module_Heatshield off (ksp1_heatshields false)",
                 NativeLines.NoneArmed,
             }, _lines);
+            Assert.IsFalse(NativeModules.IsConverterArmed(AblatorMapping.Ksp1Module));
             var registry = new Ksp1PartModuleImporterRegistry();
             Assert.IsFalse(Importers(registry).ContainsKey(CrossfeedMapping.Ksp1Module));
             var part = Part(Toggle("crossfeedStatus = false"));
@@ -214,6 +221,8 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.AreEqual(new[]
             {
                 "[KSP1PartMod] native: testPart: " + CrossfeedMapping.TechRequiredNote("fuelSystems"),
+                "[KSP1PartMod] native: testPart: " + CrossfeedMapping.MissingToggleNote("toggleEditor"),
+                "[KSP1PartMod] native: testPart: " + CrossfeedMapping.MissingToggleNote("toggleFlight"),
                 "[KSP1PartMod] native: testPart: " + CrossfeedMapping.ExtraModuleNote,
             }, _lines.Where(l => l.Contains("testPart")));
             NativeModules.LogImportSummaryOnce();
@@ -229,6 +238,142 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(part.GetNodes("MODULE").First(), context, out _));
             Assert.IsTrue(context.PartData.fuelCrossFeed);
             Assert.IsFalse(context.ModuleData.OfType<Data_ToggleCrossFeed>().Single().ToggleInEditor);
+        }
+
+        [Test] public void TryImport_FailureAfterCreateSerialized_RollsBackTheDataAndTheCrossfeed()
+        {
+            Assert.IsTrue(Arm());
+            NativeModules.Sink = l =>
+            {
+                if (l.Contains("techRequired 'boom'") && !l.Contains("not converted")) throw new InvalidOperationException("sink");
+                _lines.Add(l);
+            };
+            var part = Part(Toggle("crossfeedStatus = True\ntechRequired = boom\ntoggleEditor = true\ntoggleFlight = true"));
+            var context = Context(part, false);
+            Assert.IsFalse(new Ksp1PartModuleImporterRegistry().TryImport(part.GetNodes("MODULE").First(), context, out _));
+            CollectionAssert.IsEmpty(context.ModuleData, "no orphan Data_ToggleCrossFeed");
+            Assert.IsFalse(context.PartData.fuelCrossFeed, "the PART value is back");
+            Assert.AreEqual(1, _lines.Count(l => l.Contains("testPart: ModuleToggleCrossfeed not converted")));
+        }
+
+        // ------------------------------------------------------------------ the heat shield
+
+        private const string StockAblator = "MODULE\n{\nname = ModuleAblator\nablativeResource = Ablator\nlossExp = -7500\nlossConst = 0.1\n" +
+                                            "pyrolysisLossFactor = 6000\nreentryConductivity = 0.01\nablationTempThresh = 500\nuseChar = True\n" +
+                                            "charModuleName = shieldChar\n}\n";
+
+        private static Ksp1PartImportContext ShieldContext(Ksp1ConfigNode part, double capacity)
+        {
+            var context = Context(part);
+            if (capacity > 0)
+                context.PartData.resourceContainers.Add(new ContainedResourceDefinition(capacity, "Ablator") { initialUnits = capacity });
+            return context;
+        }
+
+        [Test] public void Resolve_HeatshieldTargets()
+        {
+            CollectionAssert.IsEmpty(HeatshieldImporter.MissingMembers());
+            Assert.AreEqual(typeof(Module_Heatshield), new Data_Heatshield().ModuleType);
+            Assert.AreEqual("Ablator", Ksp1ResourceMapper.MapResourceName("Ablator"));
+        }
+
+        [Test] public void TryImport_StockShield_BuildsModuleHeatshield_AgainstTheReference()
+        {
+            HeatshieldImporter.ReferenceSource = () => new[] { (8e-8, 0.8), (1e-7, 0.8), (1e-8, 0.8) };
+            Assert.IsTrue(Arm("{\"ablator_rate_scale\": 2}"));
+            var part = Part(StockAblator);
+            var context = ShieldContext(part, 0.2);
+            Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(part.GetNodes("MODULE").First(), context, out var module));
+
+            Assert.AreEqual(typeof(Module_Heatshield), module.BehaviourType);
+            Assert.AreEqual("PartComponentModule_Heatshield", module.ComponentType.Name);
+            var data = context.ModuleData.OfType<Data_Heatshield>().Single();
+            Assert.AreEqual("Ablator", data.requiredResources.Single().ResourceName);
+            Assert.AreEqual((float)(8e-8 * 0.25 * 2), data.requiredResources[0].Rate, 1e-15f, "median Rate x capacity ratio x scale");
+            Assert.AreEqual(0.0, data.requiredResources[0].AcceptanceThreshold);
+            Assert.AreEqual(500.0, data.AblationTempThreshold);
+            Assert.AreEqual(1.0, data.PyrolysisLossFactor);
+            Assert.AreEqual(1f, data.ShieldingScale);
+            Assert.AreEqual(UnityEngine.Vector3.down, data.ShieldingDirection);
+            Assert.IsFalse(data.DisabledWhenRetracted);
+            Assert.IsFalse(data.UseChar);
+            Assert.AreEqual(25.0, data.AblationTempHysteresis, "KSP2's default kept");
+            CollectionAssert.AreEqual(new[] { AblatorMapping.NativeModule }, NativeModules.Record.ConvertedModules("testPart"));
+
+            CollectionAssert.AreEqual(new[]
+            {
+                "[KSP1PartMod] native: heat shield reference: 3 KSP2 shield(s), median Rate 8E-08, capacity 0.8",
+                "[KSP1PartMod] native: heat shield reference: Rate/capacity of each: 1E-08/0.8, 8E-08/0.8, 1E-07/0.8",
+                "[KSP1PartMod] native: testPart: ModuleAblator -> Module_Heatshield: Ablator capacity 0.2, Rate 4E-08 (reference 8E-08 for 0.8, " +
+                "pyrolysisLossFactor 6000, ablator_rate_scale 2), ablation from 500 K, shielding along local -Y",
+            }, _lines.Where(l => l.Contains("heat shield reference") || l.Contains("testPart")));
+
+            // A second part reads the reference once; a rebuild logs nothing twice.
+            Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(part.GetNodes("MODULE").First(), ShieldContext(part, 0.2), out _));
+            Assert.AreEqual(1, _lines.Count(l => l.Contains("median Rate")));
+            Assert.AreEqual(1, _lines.Count(l => l.Contains("testPart")));
+
+            NativeModules.LogImportSummaryOnce();
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: heat shields: 1 part(s) got Module_Heatshield (0 without the resource, skipped); " +
+                                              "not reproduced: lossExp/lossConst shape, reentryConductivity");
+        }
+
+        [Test] public void TryImport_NoResource_NoModule_Noted_Counted_FallbackReference()
+        {
+            HeatshieldImporter.ReferenceSource = () => new (double, double)[0];
+            Assert.IsTrue(Arm());
+            var part = Part(StockAblator);
+            var context = ShieldContext(part, 0);
+            Assert.IsFalse(new Ksp1PartModuleImporterRegistry().TryImport(part.GetNodes("MODULE").First(), context, out _));
+            CollectionAssert.IsEmpty(context.ModuleData);
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: testPart: " + AblatorMapping.NoResourceNote("Ablator"));
+
+            var other = Part(StockAblator.Replace("lossConst = 0.1", "lossConst = 0.1\noutputResource = Ore"), name: "other");
+            Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(other.GetNodes("MODULE").First(), ShieldContext(other, 0.8), out _));
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: heat shield reference: no KSP2 shield found, fallback Rate 8E-08");
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: other: ModuleAblator: outputResource not reproduced");
+
+            NativeModules.LogImportSummaryOnce();
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: heat shields: 1 part(s) got Module_Heatshield (1 without the resource, skipped); " +
+                                              "not reproduced: lossExp/lossConst shape, reentryConductivity, outputResource on 1");
+        }
+
+        [Test] public void TryImport_SecondAblator_ReturnsFalseWithANote()
+        {
+            HeatshieldImporter.ReferenceSource = () => new[] { (8e-8, 0.8) };
+            Assert.IsTrue(Arm());
+            var part = Part(StockAblator + StockAblator);
+            var context = ShieldContext(part, 0.8);
+            var modules = part.GetNodes("MODULE").ToList();
+            Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(modules[0], context, out _));
+            Assert.IsFalse(new Ksp1PartModuleImporterRegistry().TryImport(modules[1], context, out _));
+            Assert.AreEqual(1, context.ModuleData.OfType<Data_Heatshield>().Count());
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: testPart: " + AblatorMapping.ExtraModuleNote);
+        }
+
+        [Test] public void TryImport_HeatshieldFailureAfterCreateSerialized_RollsBack()
+        {
+            HeatshieldImporter.ReferenceSource = () => new[] { (8e-8, 0.8) };
+            Assert.IsTrue(Arm());
+            NativeModules.Sink = l =>
+            {
+                if (l.Contains("ModuleAblator -> Module_Heatshield:")) throw new InvalidOperationException("sink");
+                _lines.Add(l);
+            };
+            var part = Part(StockAblator);
+            var context = ShieldContext(part, 0.8);
+            Assert.IsFalse(new Ksp1PartModuleImporterRegistry().TryImport(part.GetNodes("MODULE").First(), context, out _));
+            CollectionAssert.IsEmpty(context.ModuleData, "no orphan Data_Heatshield");
+            Assert.AreEqual(1, _lines.Count(l => l.Contains("testPart: ModuleAblator not converted")));
+        }
+
+        [Test] public void HeatshieldSwitchOff_CrossfeedStillArmed()
+        {
+            Assert.IsTrue(Arm("{\"ksp1_heatshields\": false}"));
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: ModuleAblator -> Module_Heatshield off (ksp1_heatshields false)");
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed");
+            Assert.IsFalse(Importers(new Ksp1PartModuleImporterRegistry()).ContainsKey(AblatorMapping.Ksp1Module));
+            Assert.IsFalse(NativeModules.IsConverterArmed(AblatorMapping.Ksp1Module));
         }
     }
 }

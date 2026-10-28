@@ -48,6 +48,7 @@ namespace KSP1PartMod.Game
             serializedModule = default;
             var part = context?.PartName ?? "?";
             var added = -1;
+            bool? crossFeedBefore = null;
             try
             {
                 if (context == null || moduleNode == null) return false;
@@ -65,21 +66,28 @@ namespace KSP1PartMod.Game
                 };
                 added = context.ModuleData.Count;
                 serializedModule = NativeModules.CreateSerialized(typeof(Module_ToggleCrossfeed), data, context);
-                added = -1;
-                if (map.OverridesPart && partData != null) partData.fuelCrossFeed = map.StartCrossFeed;
+                if (map.OverridesPart && partData != null)
+                {
+                    crossFeedBefore = partData.fuelCrossFeed;
+                    partData.fuelCrossFeed = map.StartCrossFeed;
+                }
 
                 var record = NativeModules.Record;
                 record.AddConversion(part, CrossfeedMapping.NativeModule);
                 if (partData?.fuelCrossFeed ?? map.StartCrossFeed) record.Flag(part, FlagStartOn);
                 if (map.TechRequired != null) record.Flag(part, FlagTech);
                 foreach (var note in map.Notes) NativeModules.Note(part, note);
+                added = -1;
                 return true;
             }
             catch (Exception e)
             {
                 // Redux's own result for this module: dropped, nothing of ours left in the part's module data.
                 if (added >= 0 && context != null)
+                {
                     while (context.ModuleData.Count > added) context.ModuleData.RemoveAt(context.ModuleData.Count - 1);
+                    if (crossFeedBefore.HasValue && context.PartData != null) context.PartData.fuelCrossFeed = crossFeedBefore.Value;
+                }
                 serializedModule = default;
                 NativeModules.ImporterFailed(part, CrossfeedMapping.Ksp1Module, e);
                 return false;
