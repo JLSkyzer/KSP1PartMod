@@ -1,11 +1,16 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Reflection;
 using KSP.Game;
 using KSP1PartMod.Game;
 using KSP1PartMod.Game.Animation;
 using KSP1PartMod.Game.Perf;
 using KSP1PartMod.Perf;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.TestTools.Constraints;
 using Is = UnityEngine.TestTools.Constraints.Is;
 
@@ -55,13 +60,39 @@ namespace KSP1PartMod.Tests.ReduxMu
             ChannelFlush.ResetFrameCostForTests(true, windowSeconds: 300);
             var w = ChannelFlush.FrameWindowOrCreate();
             Assert.IsNotNull(w);
-            Frame(w, 3); // warm-up: the 0.4.0 counter and any first-call state
-            Assert.That(() =>
+            // The timed sites that EditMode never calls itself (render callbacks, a LateUpdate), bound once before the loop.
+            const BindingFlags flags = BindingFlags.NonPublic | BindingFlags.Static;
+            var flushRender = (Action<ScriptableRenderContext, List<Camera>>)Delegate.CreateDelegate(
+                typeof(Action<ScriptableRenderContext, List<Camera>>), typeof(ChannelFlush).GetMethod("OnRender", flags));
+            var mpbRender = (Action<ScriptableRenderContext, List<Camera>>)Delegate.CreateDelegate(
+                typeof(Action<ScriptableRenderContext, List<Camera>>), typeof(MpbCheck).GetMethod("OnRender", flags));
+            var go = new GameObject("lookat-alloc");
+            try
             {
-                for (var i = 0; i < 10_000; i++) Frame(w, 3);
-            }, Is.Not.AllocatingGCMemory());
-            Assert.AreEqual(10_001, w.Frames);
-            Assert.AreSame(w, ChannelFlush.FrameWindow, "one window for the session");
+                var lookAt = go.AddComponent<AdvancedLookAt>();
+                lookAt.Init(new Transform[0], new Transform[0], null, null);
+                var lookAtLate = (Action)Delegate.CreateDelegate(typeof(Action), lookAt,
+                    typeof(AdvancedLookAt).GetMethod("LateUpdate", BindingFlags.NonPublic | BindingFlags.Instance));
+                var cameras = new List<Camera>();
+                void All()
+                {
+                    Frame(w, 3);
+                    flushRender(default, cameras);
+                    mpbRender(default, cameras);
+                    lookAtLate();
+                }
+                All(); // warm-up: the 0.4.0 counter and any first-call state
+                Assert.That(() =>
+                {
+                    for (var i = 0; i < 10_000; i++) All();
+                }, Is.Not.AllocatingGCMemory());
+                Assert.AreEqual(10_001, w.Frames);
+                Assert.AreSame(w, ChannelFlush.FrameWindow, "one window for the session");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
         }
 
         /// <summary>No KSP1 module: the radiator patch alone still counts, and the frame ends.</summary>

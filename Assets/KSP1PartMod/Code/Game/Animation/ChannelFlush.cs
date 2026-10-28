@@ -107,7 +107,13 @@ namespace KSP1PartMod.Game.Animation
             }
             if (!perf) return;
             var now = Stopwatch.GetTimestamp();
-            FrameWindowOrCreate()?.Add(PerfFeature.Flush, now - start);
+            var window = FrameWindowOrCreate();
+            if (window != null)
+            {
+                window.Add(PerfFeature.Flush, now - start, 2);
+                window.NoteParts(PerfFeature.Flush, _count); // the tables flushed: one per KSP1 part instance
+                window.NoteEntries(PerfFeature.Flush, writes); // the values written
+            }
             if (_perf == null)
             {
                 _perf = new PerfCounter(Stopwatch.Frequency);

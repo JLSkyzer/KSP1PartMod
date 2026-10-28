@@ -96,18 +96,26 @@ namespace KSP1PartMod.Perf
             _started = true;
         }
 
-        public void Add(PerfFeature feature, long ticks)
+        /// <summary>One timed block: <paramref name="ticks"/> in <paramref name="feature"/>, and one timing (one timestamp) for
+        /// the overhead estimate.</summary>
+        public void Add(PerfFeature feature, long ticks) => Add(feature, ticks, 1);
+
+        /// <param name="timings">The timestamps this block took: a lap of <c>Drive</c> takes one (its start is the previous
+        /// lap's end), a site timed on its own (a patch, a <c>LateUpdate</c>, a render callback) takes two.</param>
+        public void Add(PerfFeature feature, long ticks, int timings)
         {
             var i = (int)feature;
             if ((uint)i >= (uint)Features) return;
             if (ticks > 0) _frameTicks[i] += ticks;
-            _frameTimings++;
+            if (timings > 0) _frameTimings += timings;
         }
 
-        public void NotePart(PerfFeature feature)
+        public void NotePart(PerfFeature feature) => NoteParts(feature, 1);
+
+        public void NoteParts(PerfFeature feature, int count)
         {
             var i = (int)feature;
-            if ((uint)i < (uint)Features) _frameParts[i]++;
+            if ((uint)i < (uint)Features && count > 0) _frameParts[i] += count;
         }
 
         public void NoteEntries(PerfFeature feature, int count)
@@ -247,6 +255,12 @@ namespace KSP1PartMod.Perf
             Array.Clear(_maxParts, 0, _maxParts.Length);
             Array.Clear(_maxEntries, 0, _maxEntries.Length);
             Array.Clear(_frameHist, 0, _frameHist.Length);
+            // A forced close (a change of scene) comes in the middle of a frame: what that frame gathered so far belongs to
+            // the scene left, so the next window does not start with it.
+            Array.Clear(_frameTicks, 0, _frameTicks.Length);
+            Array.Clear(_frameParts, 0, _frameParts.Length);
+            Array.Clear(_frameEntries, 0, _frameEntries.Length);
+            _frameTimings = 0;
             _frames = _frameTimeSum = _frameMax = _timings = 0;
             Start(now);
         }

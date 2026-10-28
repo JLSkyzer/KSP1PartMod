@@ -78,6 +78,43 @@ namespace KSP1PartMod.Tests.Animation.Perf
             Assert.IsNull(lines[3]);
         }
 
+        /// <summary>A change of scene closes the window in the middle of a frame: what that frame gathered so far is dropped
+        /// with the window, never carried into the next scene's first frame.</summary>
+        [Test] public void ForcedClose_DropsTheOpenFrame()
+        {
+            var w = Window();
+            w.TimerOverheadTicks = 1;
+            w.Add(PerfFeature.Clips, 10);
+            w.EndFrame(10000);
+            w.Add(PerfFeature.Material, 500, 2); // the frame in progress when the scene changes
+            w.NotePart(PerfFeature.Material);
+            w.NoteEntries(PerfFeature.Material, 4);
+            Assert.IsTrue(w.TryReport(Us, "VAB", out _, out _, force: true));
+            Assert.IsFalse(w.Last.Features.Any(f => f.Feature == PerfFeature.Material), "not ended: not in the VAB window");
+
+            w.Add(PerfFeature.Clips, 10);
+            w.EndFrame(10000);
+            Assert.IsTrue(w.TryReport(2 * Us, "flight", out _, out _, force: true));
+            var s = w.Last;
+            Assert.IsFalse(s.Features.Any(f => f.Feature == PerfFeature.Material), "not carried into the flight window");
+            Assert.AreEqual(0.001, s.OverheadMs, 1e-12, "one timing in one frame: the dropped frame's two are gone");
+        }
+
+        /// <summary>A site timed on its own takes two timestamps; the overhead counts both.</summary>
+        [Test] public void Timings_CountEveryTimestamp()
+        {
+            var w = Window();
+            w.TimerOverheadTicks = 1; // 1 µs per timing
+            w.Add(PerfFeature.RadiatorPatch, 5, 2);
+            w.Add(PerfFeature.Clips, 5);
+            w.NoteParts(PerfFeature.Flush, 7);
+            w.Add(PerfFeature.Flush, 5, 2);
+            w.EndFrame(10000);
+            Assert.IsTrue(w.TryReport(Us, "flight", out _, out _, force: true));
+            Assert.AreEqual(0.005, w.Last.OverheadMs, 1e-12, "2 + 1 + 2 timings");
+            Assert.AreEqual(7, w.Last.Features.Single(f => f.Feature == PerfFeature.Flush).Parts);
+        }
+
         [Test] public void Buckets_96_From1UsTo100Ms()
         {
             Assert.AreEqual(96, FrameCostWindow.Buckets);

@@ -69,9 +69,30 @@ namespace KSP1PartMod.Game.Animation
         }
 
         /// <summary>A timed site outside <c>Drive</c> (a patch, a <c>LateUpdate</c>, a render callback): the time since
-        /// <paramref name="since"/>, counted in <paramref name="feature"/>.</summary>
-        internal static void AddSince(PerfFeature feature, long since) =>
-            FrameWindowOrCreate()?.Add(feature, Stopwatch.GetTimestamp() - since);
+        /// <paramref name="since"/>, counted in <paramref name="feature"/>, with its two timestamps for the overhead. The first
+        /// such site also creates the behaviour if nothing has (no KSP1 table registered and no game-state subscription), so
+        /// that its frames end.</summary>
+        internal static void AddSince(PerfFeature feature, long since)
+        {
+            var now = Stopwatch.GetTimestamp();
+            if (_instance == null && !_instanceTried) TryEnsureInstance();
+            FrameWindowOrCreate()?.Add(feature, now - since, 2);
+        }
+
+        private static bool _instanceTried;
+
+        private static void TryEnsureInstance()
+        {
+            _instanceTried = true;
+            try
+            {
+                EnsureInstance();
+            }
+            catch (Exception e)
+            {
+                BreakFrameCost(e);
+            }
+        }
 
         /// <summary>From <c>LateUpdate</c>, after the flush: the frame ends (<paramref name="unscaledDeltaTime"/> gives the fps and
         /// the frame p95), and a window that has lasted <c>perf_window_seconds</c> writes its lines.</summary>
@@ -172,6 +193,7 @@ namespace KSP1PartMod.Game.Animation
             _windowSecondsForTests = windowSeconds;
             _frame = null;
             _frameBroken = false;
+            _instanceTried = false;
             _scene = SceneOther;
         }
     }

@@ -118,7 +118,7 @@ namespace KSP1PartMod.Perf
 
         public static string FrameFeature(string scene, FeatureCost f) =>
             Prefix + $"frame: {scene}: {PerfFeatures.Label(f.Feature)} {FrameMs(f.AvgMs)} ms avg, {FrameMs(f.P95Ms)} ms p95, " +
-            $"{FrameMs(f.MaxMs)} ms max per frame; {f.Parts} part(s), {f.Entries} entr(ies)";
+            $"{FrameMs(f.MaxMs)} ms max per frame" + (PerfFeatures.HasCounts(f.Feature) ? $"; {f.Parts} part(s), {f.Entries} entr(ies)" : "");
 
         private static string Join<T>(IEnumerable<T> items, System.Func<T, string> one)
         {

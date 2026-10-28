@@ -87,21 +87,31 @@ namespace KSP1PartMod.Game
                 log.LogWarning(Prefix + "Ksp1TextureLoader.LoadTexture not found, measure, sharing and quality off");
                 return;
             }
+            Harmony measure;
             try
             {
-                var measure = new Harmony(MeasureHarmonyId);
+                // The LoadTexture postfix also records each fresh load's usage (sharing) and applies the quality rule: without
+                // it, neither can work.
+                measure = new Harmony(MeasureHarmonyId);
                 measure.Patch(load, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterLoad)));
-                var complete = AccessTools.Method(registry, "MarkImportComplete");
-                if (complete != null)
-                    measure.Patch(complete, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterImportComplete)));
-                else log.LogWarning(Prefix + "Ksp1ImportedPartRegistry.MarkImportComplete not found, no memory line at the end of the import");
-                log.LogInfo(Prefix + "measure armed on Ksp1TextureLoader.LoadTexture" + (complete != null ? " and Ksp1ImportedPartRegistry.MarkImportComplete" : ""));
             }
             catch (Exception e)
             {
                 log.LogError(Prefix + "measure not armed, sharing and quality off: " + e);
                 return;
             }
+            // Memory moments only: on its own, so that its failure never takes sharing or quality down (it did up to 0.12.0).
+            MethodInfo completeMethod;
+            try
+            {
+                completeMethod = AccessTools.Method(registry, "MarkImportComplete");
+            }
+            catch (Exception)
+            {
+                completeMethod = null; // reported as not found
+            }
+            var complete = ArmImportComplete(measure, completeMethod, m => log.LogWarning(m));
+            log.LogInfo(Prefix + "measure armed on Ksp1TextureLoader.LoadTexture" + (complete ? " and Ksp1ImportedPartRegistry.MarkImportComplete" : ""));
             ArmSourceExtension(loader);
             log.LogInfo(Prefix + (followQuality
                 ? "quality armed: readable KSP1 textures follow the game's texture quality"
@@ -115,6 +125,27 @@ namespace KSP1PartMod.Game
                 return;
             }
             ArmSharing(load, loader, registry);
+        }
+
+        /// <summary>The end-of-import memory moment (a postfix on <c>MarkImportComplete</c>). Never throws: a missing method or a
+        /// failed patch gives one <paramref name="warn"/> line and false, and the caller goes on to arm sharing and quality.</summary>
+        internal static bool ArmImportComplete(Harmony measure, MethodBase complete, Action<string> warn)
+        {
+            if (complete == null)
+            {
+                warn?.Invoke(Prefix + "Ksp1ImportedPartRegistry.MarkImportComplete not found, no memory line at the end of the import");
+                return false;
+            }
+            try
+            {
+                measure.Patch(complete, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterImportComplete)));
+                return true;
+            }
+            catch (Exception e)
+            {
+                warn?.Invoke(Prefix + "no memory line at the end of the import (sharing and quality unaffected): " + e);
+                return false;
+            }
         }
 
         /// <summary>The source file of each fresh load (its extension, for the census): the path Redux resolved last. Optional

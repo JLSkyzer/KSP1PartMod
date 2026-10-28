@@ -36,6 +36,12 @@ namespace KSP1PartMod.Perf
             }
         }
 
+        /// <summary>Whether the frame line prints part and entry counts for <paramref name="f"/>. The two patches and the
+        /// sub-category bar run per call (several fixed steps per frame, one bar), so a count would be calls, not parts: their
+        /// lines stop after the timings.</summary>
+        public static bool HasCounts(PerfFeature f) =>
+            f != PerfFeature.RadiatorPatch && f != PerfFeature.DrillPatch && f != PerfFeature.SubcategoryBar;
+
         /// <summary>The feature an entry's <c>Step</c> is counted in. A kind not classified here throws, so that a new kind
         /// fails its test until it is.</summary>
         public static PerfFeature Of(EntryKind kind)

@@ -173,6 +173,15 @@ namespace KSP1PartMod.Tests.Animation.Perf
             var f = new FeatureCost { Feature = PerfFeature.Plugins, AvgMs = 0.2, P95Ms = 0.3, MaxMs = 1.25, Parts = 120, Entries = 340 };
             Assert.AreEqual("[KSP1PartMod] perf: frame: flight: 2b plugins 0.2 ms avg, 0.3 ms p95, 1.25 ms max per frame; 120 part(s), 340 entr(ies)",
                 PerfLines.FrameFeature("flight", f));
+            // Counted per call, not per part: no counts on their lines.
+            foreach (var calls in new[] { PerfFeature.RadiatorPatch, PerfFeature.DrillPatch, PerfFeature.SubcategoryBar })
+            {
+                Assert.IsFalse(PerfFeatures.HasCounts(calls), calls.ToString());
+                f.Feature = calls;
+                StringAssert.EndsWith("1.25 ms max per frame", PerfLines.FrameFeature("flight", f));
+            }
+            Assert.AreEqual("[KSP1PartMod] perf: frame: VAB: flush 0.2 ms avg, 0.3 ms p95, 1.25 ms max per frame; 120 part(s), 340 entr(ies)",
+                PerfLines.FrameFeature("VAB", new FeatureCost { Feature = PerfFeature.Flush, AvgMs = 0.2, P95Ms = 0.3, MaxMs = 1.25, Parts = 120, Entries = 340 }));
         }
 
         [Test] public void Numbers_InvariantCulture()

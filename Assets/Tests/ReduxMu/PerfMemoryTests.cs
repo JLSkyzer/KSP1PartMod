@@ -249,5 +249,31 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsNull(Ksp1Textures.MomentOf(GameState.MainMenu, GameState.WarmUpLoading, false), "only with perf_memory_lines");
             Assert.IsNull(Ksp1Textures.MomentOf(GameState.KerbalSpaceCenter, GameState.Loading, true));
         }
+
+        /// <summary>The end-of-import moment is armed on its own: a failed patch or a missing method gives one warning and
+        /// false, never a throw, so <c>TryApply</c> goes on to arm sharing and quality (up to 0.12.0 a throw here skipped both).</summary>
+        [Test] public void ImportCompleteHook_FailureNeverThrows()
+        {
+            const string id = "KSP1PartMod.Tests.ImportCompleteHook";
+            var harmony = new HarmonyLib.Harmony(id);
+            try
+            {
+                // An interface method has no body: Harmony cannot patch it.
+                Assert.IsFalse(Ksp1Textures.ArmImportComplete(harmony, typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose)), _warn.Add));
+                Assert.AreEqual(1, _warn.Count);
+                StringAssert.Contains("sharing and quality unaffected", _warn[0]);
+
+                Assert.IsFalse(Ksp1Textures.ArmImportComplete(harmony, null, _warn.Add));
+                Assert.AreEqual(2, _warn.Count);
+                StringAssert.Contains("MarkImportComplete not found", _warn[1]);
+
+                Assert.IsFalse(Ksp1Textures.ArmImportComplete(null, typeof(IDisposable).GetMethod(nameof(IDisposable.Dispose)), null),
+                    "no Harmony and no sink: still no throw");
+            }
+            finally
+            {
+                harmony.UnpatchAll(id);
+            }
+        }
     }
 }

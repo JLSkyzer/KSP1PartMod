@@ -40,7 +40,7 @@ namespace KSP1PartMod.Game.Perf
         public const string HarmonyId = "KSP1PartMod.LoadTimeline";
         public const int MaxFlowSteps = 500;
         public const int MaxRebuildRecords = 100;
-        private const int OverheadPairs = 1001;
+        private const int OverheadTimestamps = 10001;
 
         /// <summary>One Redux member to time: its label in the log, its phase and the patch methods.</summary>
         internal sealed class Member
@@ -228,7 +228,8 @@ namespace KSP1PartMod.Game.Perf
             var overheadNs = 0.0;
             try
             {
-                var ticks = TimerOverhead.Estimate(Stopwatch.GetTimestamp, OverheadPairs);
+                // The mean, not the median: a timestamp costs less than one tick of a 10 MHz counter, so the median reads 0.
+                var ticks = TimerOverhead.Mean(Stopwatch.GetTimestamp, OverheadTimestamps);
                 overheadNs = ticks * 1e9 / Stopwatch.Frequency;
             }
             catch (Exception)
