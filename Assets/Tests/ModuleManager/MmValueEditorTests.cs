@@ -269,6 +269,22 @@ namespace KSP1PartMod.Tests.ModuleManager
                 Flat(Apply(Values("curve", "a", "curve", "b"), "@curve[x]", "v", c, firstMatch: true)));
         }
 
+        [Test] public void VectorComponent_Skipped_NotLeftToRedux()
+        {
+            var c = new MmCounters();
+            CollectionAssert.AreEqual(new[] { "node_stack_top", "0, 1, 0", "node_stack_top", "0, 2, 0" },
+                Flat(Apply(Values("node_stack_top", "0, 1, 0", "node_stack_top", "0, 2, 0"), "@node_stack_top[1,,] *", "#$scale$", c)));
+            Assert.AreEqual(1, c.VectorComponentSkipped);
+            Assert.AreEqual(0, c.NonNumeric + c.ArithmeticApplied);
+        }
+
+        [Test] public void VectorComponentWithoutOperator_StillReduxParity()
+        {
+            var c = new MmCounters();
+            CollectionAssert.AreEqual(new[] { "curve", "v" }, Flat(Apply(Values("curve", "a"), "@curve[x]", "v", c)));
+            Assert.AreEqual(0, c.VectorComponentSkipped);
+        }
+
         [Test] public void EmptyKey_NoEdit()
         {
             var c = new MmCounters();

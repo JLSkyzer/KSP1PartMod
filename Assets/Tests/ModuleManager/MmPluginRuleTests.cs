@@ -149,6 +149,13 @@ namespace KSP1PartMod.Tests.ModuleManager
             Assert.AreEqual("RemoteTech", d.Mod);
         }
 
+        [Test] public void RootPatch_ForNames_IgnoreCaseWhateverTheSet()
+        {
+            Assert.AreEqual(MmDropReason.Keep, Drop("@PART[*]:AFTER[ZZBLUEDOG_DB]", "Bluedog_DB", true, new List<string> { "zzBluedog_DB" }).Reason);
+            Assert.AreEqual(MmDropReason.Keep,
+                Drop("@PART[*]:AFTER[zzbluedog_db]", "Bluedog_DB", true, new HashSet<string>(StringComparer.Ordinal) { "zzBluedog_DB" }).Reason);
+        }
+
         [Test] public void RootPatch_BeforeAbsent_KeptWhenRuleOff() =>
             Assert.AreEqual(MmDropReason.Keep, Drop("@PART[*]:BEFORE[SomeAbsentMod]", "Bluedog_DB", true, NoFor, beforeAfterRule: false).Reason);
 

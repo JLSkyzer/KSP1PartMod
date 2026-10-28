@@ -167,11 +167,20 @@ namespace KSP1PartMod.ModuleManager
             return set;
         }
 
+        /// <summary>Case-insensitive whatever the collection's own comparer.</summary>
+        private static bool ContainsIgnoreCase(ICollection<string> names, string name)
+        {
+            if (names == null) return false;
+            if (names is HashSet<string> set && ReferenceEquals(set.Comparer, StringComparer.OrdinalIgnoreCase))
+                return set.Contains(name);
+            return Contains(names, name);
+        }
+
         /// <summary>Whether a root node is dropped, in this order: a patch from a blocked folder; <c>:FOR</c> of a blocked
         /// name; with <paramref name="beforeAfterRule"/>, <c>:BEFORE</c>/<c>:AFTER</c> of a name neither available nor a
         /// FOR name (MM drops it anyway); <c>:BEFORE</c>/<c>:AFTER</c> of a blocked name. A non-patch root node and
         /// <c>:LAST</c> are never dropped. <paramref name="available"/> is Redux's available set (before blocking);
-        /// <paramref name="forNames"/> should be <see cref="ForNames"/>.</summary>
+        /// <paramref name="forNames"/> (usually <see cref="ForNames"/>) is compared case-insensitively, whatever its comparer.</summary>
         public static MmDrop RootPatchDrop(string rootName, string fileModName, bool isPatch, Func<string, bool> blocked,
             Func<string, bool> available, ICollection<string> forNames, bool beforeAfterRule)
         {
@@ -193,7 +202,7 @@ namespace KSP1PartMod.ModuleManager
                 {
                     // MM's own rule first: a mod that is not there drops the patch whatever the safety net says, so the
                     // safety net is only credited with the patches it alone drops
-                    if (beforeAfterRule && !available(mod) && !(forNames != null && forNames.Contains(mod)))
+                    if (beforeAfterRule && !available(mod) && !ContainsIgnoreCase(forNames, mod))
                         absent = absent ?? mod;
                     else if (blocked(mod)) blockedOrder = blockedOrder ?? mod;
                 }

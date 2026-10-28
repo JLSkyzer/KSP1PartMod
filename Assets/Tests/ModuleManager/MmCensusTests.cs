@@ -53,6 +53,14 @@ namespace KSP1PartMod.Tests.ModuleManager
         private static void Bump<T>(Dictionary<T, int> counts, T key) =>
             counts[key] = counts.TryGetValue(key, out var n) ? n + 1 : 1;
 
+        /// <summary>A count pinned to its 2026-10-28 value, ±10%, so drift in the data or the parser shows up.</summary>
+        private static void AssertNear(int expected, int actual, string what)
+        {
+            var tolerance = Math.Max(1, (int)Math.Ceiling(expected * 0.1));
+            Assert.That(actual, NUnit.Framework.Is.InRange(expected - tolerance, expected + tolerance),
+                $"{what}: {actual}, pinned at {expected} ±{tolerance} (2026-10-28 census); update the pin if the files changed");
+        }
+
         private static string Format<T>(Dictionary<T, int> counts) =>
             counts.Count == 0 ? "none" : string.Join(", ", counts.OrderByDescending(p => p.Value).ThenBy(p => p.Key.ToString())
                 .Select(p => $"{p.Key} {p.Value}"));
@@ -86,7 +94,7 @@ namespace KSP1PartMod.Tests.ModuleManager
                     else if (e.PassedBack && e.HasBrackets)
                     {
                         vector++;
-                        if (name.Length > 0 && "*+-/!^".IndexOf(name[name.Length - 1]) >= 0) vectorWithOperator++;
+                        if (e.SkippedVectorEdit) vectorWithOperator++;
                     }
                     else if (e.PassedBack) failures.Add($"{file.Path}: '{v.Key} = {v.Value}'");
                     else plain++;
@@ -95,13 +103,17 @@ namespace KSP1PartMod.Tests.ModuleManager
             var supported = operators.Where(p => p.Key != MmOperator.Pow && p.Key != MmOperator.Regex).Sum(p => p.Value);
             var unsupported = operators.Where(p => p.Key == MmOperator.Pow || p.Key == MmOperator.Regex).Sum(p => p.Value);
             TestContext.WriteLine($"mm census (installed, {files.Count} cfg): value lines ours {ours}, counted only {countedOnly}, " +
-                                  $"vector component (passed back) {vector} ({vectorWithOperator} with an operator), plain {plain}");
+                                  $"vector component {vector} ({vectorWithOperator} with an operator, skipped), plain {plain}");
             TestContext.WriteLine($"  operators: supported {supported}, counted only {unsupported}: {Format(operators)}");
             TestContext.WriteLine($"  value indices {valueIndex.Values.Sum()}: {Format(valueIndex)}");
             TestContext.WriteLine($"  node indices {nodeIndex.Values.Sum()}: {Format(nodeIndex)}");
             TestContext.WriteLine($"  indices total {valueIndex.Values.Sum() + nodeIndex.Values.Sum()}");
             Assert.IsEmpty(failures, "lines passed back:\n" + string.Join("\n", failures.Take(30)));
-            Assert.Greater(supported, 0);
+            AssertNear(475, supported, "supported operators");
+            AssertNear(141, unsupported, "counted-only operators");
+            AssertNear(40, valueIndex.Values.Sum(), "value indices");
+            AssertNear(310, nodeIndex.Values.Sum(), "node indices");
+            AssertNear(8, vectorWithOperator, "vector component edits skipped");
         }
 
         // ---- 2. the plugin rule over the user's whole GameData ----
@@ -174,6 +186,7 @@ namespace KSP1PartMod.Tests.ModuleManager
             TestContext.WriteLine(sb.ToString());
             CollectionAssert.Contains(curatedPresent, "RealFuels");
             CollectionAssert.DoesNotContain(autoBlocked, "B9PartSwitch");
+            AssertNear(102, autoBlocked.Count, "folders blocked automatically");
         }
 
         // ---- 3. the BEFORE/AFTER rule over the installed set ----
@@ -206,6 +219,7 @@ namespace KSP1PartMod.Tests.ModuleManager
             Assert.IsTrue(forNames.Contains("zzBluedog_DB"));
             Assert.IsFalse(byMod.ContainsKey("zzBluedog_DB"), "zzBluedog_DB is a FOR name and must never be dropped");
             Assert.IsFalse(byMod.ContainsKey("Bluedog_DB"));
+            AssertNear(277, byReason.Values.Sum(), "patches dropped by the BEFORE/AFTER rule");
         }
 
         // ---- 4. key fields touched by index or arithmetic edits (plan (g)) ----

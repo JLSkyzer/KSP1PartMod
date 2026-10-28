@@ -104,6 +104,26 @@ namespace KSP1PartMod.Tests.ModuleManager
             Assert.IsTrue(e.HasBrackets);
             Assert.IsFalse(e.IsOurs);
             Assert.AreEqual("node_stack_top", e.Key);
+            Assert.AreEqual(MmOperator.Mul, e.BracketOperator);
+            Assert.IsTrue(e.SkippedVectorEdit);
+        }
+
+        [Test] public void Parse_VectorComponentWithIndexAndOperator_Skipped()
+        {
+            var e = MmKeyEdit.Parse("@volume,1[1, ] *", "0.2");
+            Assert.AreEqual(MmOperator.Mul, e.BracketOperator);
+            Assert.IsTrue(e.SkippedVectorEdit);
+            Assert.AreEqual(MmOperator.Sub, MmKeyEdit.Parse("@position[1]-", "#$x$").BracketOperator);
+            Assert.AreEqual(MmOperator.Regex, MmKeyEdit.Parse("%key[0] ^", ":a:b:").BracketOperator);
+        }
+
+        [Test] public void Parse_BracketsWithoutOperator_NotSkipped()
+        {
+            Assert.AreEqual(MmOperator.None, MmKeyEdit.Parse("@curve[x]", "v").BracketOperator);
+            Assert.IsFalse(MmKeyEdit.Parse("@curve[x]", "v").SkippedVectorEdit);
+            Assert.IsFalse(MmKeyEdit.Parse("@MODULE[a],*", "v").SkippedVectorEdit, "the * of a ,* index is not an operator");
+            Assert.IsFalse(MmKeyEdit.Parse("!key[x] *", "v").SkippedVectorEdit, "a delete has no operator");
+            Assert.IsFalse(MmKeyEdit.Parse("@mass *", "2").SkippedVectorEdit);
         }
 
         [Test] public void Parse_OperatorOnAdd_IsPlainReduxKey() =>

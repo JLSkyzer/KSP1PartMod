@@ -15,6 +15,8 @@ namespace KSP1PartMod.ModuleManager
         /// <c>mm_edit_first_match</c>).</summary>
         public int UnindexedMultiMatch;
         public int VariableValues;
+        /// <summary>Vector-component edits with an operator (<c>@key[1,,] *= x</c>), skipped.</summary>
+        public int VectorComponentSkipped;
 
         public int ArithmeticApplied => ArithmeticMul + ArithmeticAdd + ArithmeticSub + ArithmeticDiv;
     }
@@ -33,6 +35,11 @@ namespace KSP1PartMod.ModuleManager
         public static bool Apply(List<KeyValuePair<string, string>> values, MmKeyEdit edit, bool firstMatchDefault, MmCounters c)
         {
             if (values == null || c == null || string.IsNullOrWhiteSpace(edit.Key)) return false;
+            if (edit.SkippedVectorEdit)
+            {
+                c.VectorComponentSkipped++;
+                return false;
+            }
             if (edit.CountedOnly)
             {
                 if (edit.Operator == MmOperator.Pow) c.NotSupportedPow++;

@@ -20,10 +20,15 @@ namespace KSP1PartMod.ModuleManager
         public readonly bool PassedBack;
         /// <summary>The name holds a bracket (a selector or MM's vector component <c>key[1,,]</c>, not handled).</summary>
         public readonly bool HasBrackets;
+        /// <summary>The trailing operator of a passed-back line with brackets (MM's vector component,
+        /// <c>@key[1,,] *= x</c>); <see cref="MmOperator.None"/> otherwise. Such a line is skipped
+        /// (<see cref="SkippedVectorEdit"/>).</summary>
+        public readonly MmOperator BracketOperator;
 
         private MmKeyEdit(MmCommand command, string key, MmIndex index, MmOperator op, string value, bool passedBack,
-            bool hasBrackets)
+            bool hasBrackets, MmOperator bracketOperator = MmOperator.None)
         {
+            BracketOperator = bracketOperator;
             Command = command;
             Key = key;
             Index = index;
@@ -35,6 +40,10 @@ namespace KSP1PartMod.ModuleManager
 
         /// <summary>An operator we apply (<c>*= += -= /=</c>) or an explicit index: the line needs us.</summary>
         public bool IsOurs => !PassedBack && (IsSupported(Operator) || Index.Kind != MmIndexKind.None && !CountedOnly);
+
+        /// <summary>A vector-component edit with an operator (<c>@key[1,,] *= x</c>): skipped, neither applied nor left to
+        /// Redux, which would write the raw operand over every value of the key. Counted.</summary>
+        public bool SkippedVectorEdit => PassedBack && HasBrackets && BracketOperator != MmOperator.None;
 
         /// <summary><c>!=</c> or <c>^=</c>: recognised, counted, never applied.</summary>
         public bool CountedOnly => Operator == MmOperator.Pow || Operator == MmOperator.Regex;
@@ -98,7 +107,22 @@ namespace KSP1PartMod.ModuleManager
             if (readable && TryRead(rest, command, out var key, out var index, out var op))
                 return new MmKeyEdit(command, key, index, op, rawValue, false, false);
             var baseName = ReduxBaseName(rest);
-            return new MmKeyEdit(command, baseName, MmIndex.None, MmOperator.None, rawValue, baseName != rest, brackets);
+            var bracketOperator = brackets && (command == MmCommand.Edit || command == MmCommand.CreateOrEdit)
+                ? TrailingOperator(rest)
+                : MmOperator.None;
+            return new MmKeyEdit(command, baseName, MmIndex.None, MmOperator.None, rawValue, baseName != rest, brackets,
+                bracketOperator);
+        }
+
+        /// <summary>The operator character ending the name, unless it is the <c>*</c> of a <c>,*</c> index.</summary>
+        private static MmOperator TrailingOperator(string rest)
+        {
+            if (rest.Length == 0) return MmOperator.None;
+            var op = OperatorOf(rest[rest.Length - 1]);
+            if (op != MmOperator.Mul) return op;
+            var before = rest.Length - 1;
+            while (before > 0 && char.IsWhiteSpace(rest[before - 1])) before--;
+            return before > 0 && rest[before - 1] == ',' ? MmOperator.None : op;
         }
 
         /// <summary>Key, index and operator of a name without brackets or colon.</summary>
