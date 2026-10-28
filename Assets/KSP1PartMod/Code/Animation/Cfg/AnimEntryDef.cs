@@ -5,8 +5,10 @@ namespace KSP1PartMod.Animation.Cfg
     /// Color: ModuleColorChanger. Group: ModuleAnimationGroup. AeroGate: KRE ModuleDeployableAero. GearBridge: a
     /// Gear action group for a gear clip that Redux's deployable module plays. ReduxFollower: Redux's single deployable
     /// source, whose Mecanim copy does not move; we draw its legacy clip from Redux's state. ChuteFollower: the same for
-    /// ModuleParachute (Clip = semi, SecondClip = full, SpeedFactorIn / Out = semi / full deployment speed).</summary>
-    public enum EntryKind { Toggle, Deploy, Gear, Throttle, Heat, Color, Group, AeroGate, GearBridge, ReduxFollower, ChuteFollower }
+    /// ModuleParachute (Clip = semi, SecondClip = full, SpeedFactorIn / Out = semi / full deployment speed). The last ten kinds are the
+    /// plugin modules of <see cref="PluginEntryParser"/> (DeployableEngines, Bluedog_DB, DMagic, FXModuleAnimateRCS).</summary>
+    public enum EntryKind { Toggle, Deploy, Gear, Throttle, Heat, Color, Group, AeroGate, GearBridge, ReduxFollower, ChuteFollower,
+        EngineDeploy, EngineMode, LookAt, DecouplerClip, RcsGlow, RcsEmissive, MeshHider, ScienceToggle, AccelSpring, LandingBag }
 
     /// <summary>One KSP1 animation module we drive, read from its cfg. Plain public fields so that Newtonsoft and
     /// <c>IOProvider</c> serialize it into the part definition.</summary>
@@ -79,5 +81,34 @@ namespace KSP1PartMod.Animation.Cfg
         /// <summary>Color with <see cref="ScalarLinked"/>: the colour changer's <c>moduleID</c> the setter named (for the
         /// log).</summary>
         public string ModuleId;
+
+        /// <summary>EngineDeploy, DecouplerClip, EngineMode: the fraction of the clip at which KSP1 lets the engine
+        /// ignite or the decoupler fire (logged only: we never delay either).</summary>
+        public float WaitForAnimation;
+        /// <summary>EngineDeploy: a VAB preview toggle exists.</summary>
+        public bool EditorToggle;
+        /// <summary>EngineDeploy (Bluedog_DB): the module uses only the first animator found.</summary>
+        public bool FirstAnimatorOnly;
+        /// <summary>EngineDeploy (Bluedog_DB): the deployed state is saved.</summary>
+        public bool PersistDeployed;
+        /// <summary>EngineMode: <c>EngineIDAtTimeZero</c>, the mode in which the clip sits at time 0.</summary>
+        public string ModeAtTimeZero;
+        /// <summary>EngineMode: <c>SpeedMultiplier</c>. ScienceToggle: <c>animSpeed</c>.</summary>
+        public float SpeedMultiplier = 1;
+        /// <summary>RcsGlow: <c>thrustForceMult</c>.</summary>
+        public float ThrustForceMult = 1;
+        /// <summary>LookAt: the <c>targetName</c> / <c>rotatorsName</c> of each CONSTRAINLOOKFX (same length).
+        /// MeshHider: <see cref="TransformNames"/>.</summary>
+        public string[] TargetNames, RotatorNames, TransformNames;
+        /// <summary>LookAt: <c>axisConstrained</c> and <c>axisScales</c> (x, y, z).</summary>
+        public bool[] AxisConstrained;
+        public float[] AxisScales;
+        /// <summary>AccelSpring: <c>springK</c>, <c>springDamping</c>, and the clip positions of the retracted
+        /// (<c>stowedAnchor</c>) and deployed (<c>deployedAnchor</c>) anchors.</summary>
+        public float SpringK, SpringDamping, AnchorRetracted, AnchorDeployed;
+        /// <summary>ScienceToggle: <c>oneWayAnimation</c>.</summary>
+        public bool OneWay;
+        /// <summary>LandingBag: speed of the backward play (KSP1: 0.2).</summary>
+        public float RetractSpeed = 1;
     }
 }

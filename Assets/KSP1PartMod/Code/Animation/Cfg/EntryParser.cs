@@ -20,7 +20,9 @@ namespace KSP1PartMod.Animation.Cfg
         {
             if (module == null) return null;
             AnimEntryDef e;
-            switch (Kind(module.GetValue("name")))
+            var kind = Kind(module.GetValue("name"));
+            if (kind == null) return PluginEntryParser.Parse(module, moduleIndex, ordinal);
+            switch (kind)
             {
                 case EntryKind.Toggle: e = Toggle(module); break;
                 case EntryKind.Deploy: e = Deploy(module); break;
