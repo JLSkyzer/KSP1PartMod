@@ -153,7 +153,9 @@ namespace KSP1PartMod.Game
         /// <summary>After KSP2's own initialization of the module: ours lose the <c>Animator</c> and the animated flag.</summary>
         internal static void AfterInit(PartBehaviourModule __instance)
         {
-            if (_broken || !_on || __instance == null) return;
+            // After a break the gate still applies (null and clear): a part loaded later must not get KSP2's native wait back.
+            // Only the bridge and its lines are skipped.
+            if (!_on || __instance == null) return;
             try
             {
                 var part = IsruRuntime.PartNameOf(__instance);
@@ -164,7 +166,7 @@ namespace KSP1PartMod.Game
                 var nativeAnimated = data.IsPartAnimated;
                 _animator.SetValue(__instance, null);
                 data.IsPartAnimated = false;
-                if (!flight) return;
+                if (!flight || _broken) return;
                 if (nativeAnimated) LogLoadedRunning(part, data);
                 var handle = new Handle { Part = part, Data = data, Record = record };
                 var anim = __instance.GetComponent<Module_Ksp1Animations>();
@@ -189,7 +191,8 @@ namespace KSP1PartMod.Game
         {
             var standings = data.ExperimentStandings;
             if (standings == null) return;
-            for (var i = standings.Count - 1; i >= 0; i--) // the game takes the last running one
+            // As IndexOfRunningExperiment, which scans from the end: the highest running index (one runs at a time).
+            for (var i = standings.Count - 1; i >= 0; i--)
                 if (standings[i] != null && standings[i].CurrentExperimentState == ExperimentState.RUNNING)
                 {
                     LogOnce("loaded|" + part, ScienceLines.LoadedRunning(part, standings[i].ExperimentID));
@@ -251,6 +254,39 @@ namespace KSP1PartMod.Game
                 if (string.Equals(c.ExperimentDefinitionId, id, StringComparison.Ordinal))
                     return true;
             return false;
+        }
+
+        // ---------------------------------------------------------------- the bridge
+
+        /// <summary>Per flight frame, one part's bridge. A throw stops every bridge for the session (<see cref="Break"/>); each part
+        /// then drops its own at its next step and is no longer animated for KSP2, so no run waits for a gate nobody writes: the
+        /// game is never left worse than with no bridge.</summary>
+        internal static void Step(Handle h)
+        {
+            var bridge = h?.Bridge;
+            if (bridge == null) return;
+            if (_broken)
+            {
+                Stop(h);
+                return;
+            }
+            try
+            {
+                bridge.Step();
+            }
+            catch (Exception e)
+            {
+                Break(e);
+                Stop(h);
+            }
+        }
+
+        /// <summary>Drops the part's bridge and clears <c>IsPartAnimated</c> (once: the bridge is gone after).</summary>
+        internal static void Stop(Handle h)
+        {
+            if (h == null) return;
+            h.Bridge = null;
+            if (h.Data != null) h.Data.IsPartAnimated = false;
         }
 
         // ---------------------------------------------------------------- helpers

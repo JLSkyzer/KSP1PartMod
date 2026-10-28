@@ -50,6 +50,11 @@ namespace KSP1PartMod.Game.Animation
             var h = _science;
             if (h == null || _scienceBound) return;
             _scienceBound = true;
+            if (ScienceRuntime.Broken)
+            {
+                ScienceRuntime.Stop(h); // stopped for the session before this part bound: no bridge, not animated
+                return;
+            }
             var part = h.Part ?? _name ?? SafePartName();
             var animationsOn = ScienceRuntime.AnimationsOn;
             var waitOn = ScienceRuntime.WaitOn;
@@ -142,22 +147,7 @@ namespace KSP1PartMod.Game.Animation
             }
         }
 
-        /// <summary>Per flight frame, after the entries: the science bridge.</summary>
-        private void StepScience()
-        {
-            var bridge = _science?.Bridge;
-            if (bridge == null || ScienceRuntime.Broken) return;
-            try
-            {
-                bridge.Step();
-            }
-            catch (Exception ex)
-            {
-                _science.Bridge = null;
-                ScienceRuntime.Break(ex);
-                // Never leave a run waiting for a gate nobody writes any more.
-                if (_science.Data != null) _science.Data.IsPartAnimated = false;
-            }
-        }
+        /// <summary>Per flight frame, after the entries: the science bridge (<see cref="ScienceRuntime.Step"/>).</summary>
+        private void StepScience() => ScienceRuntime.Step(_science);
     }
 }

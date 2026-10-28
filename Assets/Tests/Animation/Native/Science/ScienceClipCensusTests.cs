@@ -40,6 +40,7 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             var waitsWithoutGate = 0;
             var configurations = 0;
             var failures = new List<string>();
+            var opened = new HashSet<string>(StringComparer.Ordinal);
             foreach (var (mod, node) in parts)
             {
                 var name = node.GetValue("name")?.Trim() ?? "?";
@@ -66,6 +67,7 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
                         }
                         row[1]++;
                         Add(opens, t.First.Kind.ToString());
+                        opened.Add(name);
                         if (c.Waits)
                         {
                             row[2]++;
@@ -83,6 +85,12 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             CollectionAssert.IsEmpty(failures, string.Join("\n", failures));
             Assert.Greater(configurations, 0);
             Assert.AreEqual(configurations, opens.Values.Sum() + noClip.Values.Sum());
+            // The three stock parts whose experiment names its clip (FxModules = 0): the goo canister, the materials bay, the
+            // magnetometer boom. Each must get a first target.
+            foreach (var stock in new[] { "GooExperiment", "science_module", "Magnetometer" })
+                if (parts.Any(p => p.Part.GetValue("name")?.Trim() == stock))
+                    CollectionAssert.Contains(opened, stock, $"{stock} opens no clip");
+                else Assert.Fail($"{stock} is not installed under mods/KSP1");
         }
     }
 }

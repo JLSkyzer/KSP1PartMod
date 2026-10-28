@@ -286,16 +286,18 @@ PART
         /// <summary>The deploy gate of KSP2's own <c>PartComponentModule_ScienceExperiment.OnUpdate</c>: animated and not deployed, the
         /// run does not count down; deployed, it does; not animated (what the postfix leaves), it does whatever the gate. A first
         /// frame at the full time (no resource check, which needs the game).</summary>
-        [Test] public void Countdown_RealComponent_WaitsOnlyWhileAnimatedAndNotDeployed()
+        [Test] public void Countdown_RealComponent_WaitsOnlyWhileAnimatedAndNotDeployed() => WithCalendar(CountdownCase);
+
+        /// <summary>OnUpdate formats the remaining time with the game's calendar (PhysicsSettings, loaded by the game): a default
+        /// instance for the test, the static put back after.</summary>
+        private static void WithCalendar(Action body)
         {
-            // OnUpdate formats the remaining time with the game's calendar (PhysicsSettings, loaded by the game): a default
-            // instance for the test, the static put back after.
             var settingsField = AccessTools.Field(typeof(PhysicsSettings), "_physicsSettings");
             var saved = settingsField.GetValue(null);
             try
             {
                 if (saved == null) settingsField.SetValue(null, new PhysicsSettings());
-                CountdownCase();
+                body();
             }
             finally
             {
@@ -489,6 +491,153 @@ PART
             Run(200); // warm
             Assert.That(() => Run(10000), Is.Not.AllocatingGCMemory());
             Assert.Greater(bridge.Opens, 10);
+        }
+
+        // ------------------------------------------------------------------ a break (Task 5 review, item 1)
+
+        /// <summary>One bridge throws: every bridge stops, and each part drops its own at its next step and is no longer animated, so
+        /// a gated part that had not latched still counts down (KSP2's real countdown).</summary>
+        [Test] public void Break_OneBridgeThrows_TheOtherPartStillCountsDown() => WithCalendar(() =>
+        {
+            var record = Record(DMagicCfg);
+            var id = record.Configurations.Single().ExperimentDefinitionId;
+
+            var dataA = Data(record, ExperimentState.RUNNING);
+            var throwing = new ScienceBridge.Target("science:Boom:0", () => throw new InvalidOperationException("test"), () => false,
+                () => true, () => false);
+            var a = new ScienceRuntime.Handle { Part = "partA", Data = dataA, Record = record, Bridge = Bridge(dataA, id, throwing, waits: true) };
+
+            var dataB = Data(record, ExperimentState.RUNNING);
+            var m = Toggle();
+            var b = new ScienceRuntime.Handle { Part = "partB", Data = dataB, Record = record, Bridge = Bridge(dataB, id, Target(m), waits: true) };
+            Assert.IsTrue(dataA.IsPartAnimated && dataB.IsPartAnimated, "as the bind leaves a waiting part");
+
+            ScienceRuntime.Step(b);
+            Assert.IsFalse(dataB.PartIsDeployed, "B opens its clip and waits");
+            Assert.IsTrue(m.IsMoving);
+
+            _lines.Clear();
+            ScienceRuntime.Step(a);
+            Assert.IsTrue(ScienceRuntime.Broken);
+            Assert.IsNull(a.Bridge);
+            Assert.IsFalse(dataA.IsPartAnimated);
+            Assert.IsTrue(_lines.Single().StartsWith("[KSP1PartMod] science: patch failed, stopped for this session: "), _lines.Single());
+
+            ScienceRuntime.Step(b);
+            Assert.IsNull(b.Bridge, "every bridge stops");
+            Assert.IsFalse(dataB.IsPartAnimated, "B no longer waits for a gate nobody writes");
+            Assert.IsFalse(dataB.PartIsDeployed);
+
+            var location = new ResearchLocation(false, "Kerbin", ScienceSitutation.LowOrbit, null);
+            var standing = dataB.ExperimentStandings[0];
+            var time = dataB.Experiments[0].TimeToComplete;
+            standing.CurrentRunningTime = time;
+            standing.ExperimentLocation = location;
+            Component(dataB, location).OnUpdate(0, 1.0);
+            Assert.AreEqual(time - 1, standing.CurrentRunningTime, 1e-9, "B's countdown advances");
+        });
+
+        /// <summary>After a break, a part initialized later still loses the Animator and the flag; only the bridge and its lines are
+        /// skipped.</summary>
+        [Test] public void Break_LaterInit_StillClearsTheGate_NoBridgeNoLines()
+        {
+            Assert.IsTrue(Arm());
+            var data = Data(Record(DMagicCfg), ExperimentState.RUNNING);
+            var m = Part("dmagicTest", data, out _);
+            Module_Ksp1Animations anim;
+            try { anim = m.gameObject.AddComponent<Module_Ksp1Animations>(); }
+            catch (Exception e) { Assert.Ignore("the animation module cannot be added in EditMode: " + e.Message); return; }
+            ScienceRuntime.Break(new InvalidOperationException("test"));
+            _lines.Clear();
+            ScienceRuntime.AfterInit(m);
+            Assert.IsNull(m.Animator);
+            Assert.IsFalse(data.IsPartAnimated);
+            anim.FinishIsruInit();
+            anim.FinishScienceInit();
+            Assert.IsFalse(data.IsPartAnimated);
+            Assert.IsNull(AccessTools.Field(typeof(Module_Ksp1Animations), "_science").GetValue(anim), "no bridge handed over");
+            CollectionAssert.IsEmpty(_lines, "no loaded-running nor clip line");
+        }
+
+        // ------------------------------------------------------------------ the real bind (Task 5 review, item 3)
+
+        /// <summary>The goo canister's path in full: the planner's entry for its <c>ModuleAnimateGeneric</c> (a Toggle) bound by our
+        /// module's own setup on a legacy <c>Animation</c>, the science bind (<c>BindScience</c>, <c>ScienceTarget</c>) and a step to
+        /// RUNNING: the toggle opens.</summary>
+        [Test] public void Bind_RealSetup_GooToggleOpensAtRunning()
+        {
+            Assert.IsTrue(Arm());
+            var node = CfgText.Parse(GooCfg).GetNodes("PART").Single();
+            var modules = node.GetNodes("MODULE").ToList();
+            var plan = OwnershipPlanner.Plan(modules, false, new HashSet<string>(), true, false, new HashSet<string>(), true, true); // own_first_deployable: the clip is ours
+            var toggleDef = plan.Entries.Single(e => e.ModuleIndex == 0);
+            Assert.AreEqual(EntryKind.Toggle, toggleDef.Kind, "the planner's entry for the goo's ModuleAnimateGeneric");
+            var record = Record(GooCfg);
+            var data = Data(record);
+            var m = Part("gooTest", data, out _);
+
+            // The clip on a legacy Animation of the model, as the KSP1 import leaves an owned clip.
+            var model = m.gameObject.transform.Find("model").gameObject;
+            var animation = model.AddComponent<UnityEngine.Animation>();
+            var clip = new AnimationClip { legacy = true };
+            clip.SetCurve("", typeof(Transform), "localPosition.x", AnimationCurve.Linear(0f, 0f, 1f, 1f));
+            animation.AddClip(clip, toggleDef.Clip);
+
+            Module_Ksp1Animations anim;
+            try { anim = m.gameObject.AddComponent<Module_Ksp1Animations>(); }
+            catch (Exception e) { Assert.Ignore("the animation module cannot be added in EditMode: " + e.Message); return; }
+            var animData = new Data_Ksp1Animations { Entries = plan.Entries.ToList(), ReduxClips = plan.ReduxClips.ToList() };
+            AccessTools.Field(typeof(Module_Ksp1Animations), "data").SetValue(anim, animData);
+            BackingMode.SetValue(anim, PartBehaviourModule.PartBackingModes.Flight);
+            AccessTools.Field(typeof(Module_Ksp1Animations), "_name").SetValue(anim, "gooTest");
+            anim.InitForDataModules();
+            try { AccessTools.Method(typeof(Module_Ksp1Animations), "Setup").Invoke(anim, null); }
+            catch (Exception e) { Assert.Ignore("our module's setup cannot run in EditMode: " + e.GetBaseException()); }
+            Assert.IsTrue((bool)AccessTools.Field(typeof(Module_Ksp1Animations), "_ready").GetValue(anim), "bound");
+
+            _lines.Clear();
+            ScienceRuntime.AfterInit(m);
+            anim.FinishIsruInit();
+            anim.FinishScienceInit();
+            CollectionAssert.AreEqual(new[] { $"[KSP1PartMod] science: gooTest: EnvironmentSurvey opens {toggleDef.Key}" }, _lines);
+            Assert.IsFalse(data.IsPartAnimated, "the stock experiment does not wait");
+
+            var step = AccessTools.Method(typeof(Module_Ksp1Animations), "StepScience");
+            step.Invoke(anim, null);
+            var handle = (ScienceRuntime.Handle)AccessTools.Field(typeof(Module_Ksp1Animations), "_science").GetValue(anim);
+            Assert.IsNotNull(handle?.Bridge);
+            Assert.AreEqual(0, handle.Bridge.Opens, "READY: nothing opens");
+            data.ExperimentStandings[0].CurrentExperimentState = ExperimentState.RUNNING;
+            step.Invoke(anim, null);
+            Assert.AreEqual(1, handle.Bridge.Opens);
+            var entries = (System.Collections.IList)AccessTools.Field(typeof(Module_Ksp1Animations), "_entries").GetValue(anim);
+            var entry = entries.Cast<object>().Single();
+            var toggle = (ToggleMachine)AccessTools.Field(entry.GetType(), "Toggle").GetValue(entry);
+            Assert.IsFalse(toggle.Closed, "the goo's toggle opened");
+            Assert.IsTrue(toggle.IsMoving);
+        }
+
+        /// <summary>The Redux follower's open path: the part's <c>Data_Deployable</c> of the clip, whose <c>toggleExtend</c> the bridge
+        /// sets.</summary>
+        [Test] public void DeployableOf_ReduxFollower_TheClipsDeployable()
+        {
+            var go = new GameObject("followerTest");
+            _objects.Add(go);
+            Module_Deployable deployable;
+            Module_Ksp1Animations anim;
+            try
+            {
+                deployable = go.AddComponent<Module_Deployable>();
+                anim = go.AddComponent<Module_Ksp1Animations>();
+            }
+            catch (Exception e) { Assert.Ignore("the modules cannot be added in EditMode: " + e.Message); return; }
+            var data = new Data_Deployable { animationName = "Deploy" };
+            AccessTools.Field(typeof(Module_Deployable), "dataDeployable").SetValue(deployable, data);
+            deployable.InitForDataModules();
+            Assert.AreSame(data, ReduxFollowerBinder.DeployableOf(anim, "Deploy"));
+            Assert.IsFalse(data.toggleExtend.GetValue());
+            data.toggleExtend.SetValue(true);
+            Assert.IsTrue(data.toggleExtend.GetValue(), "the value the bridge writes");
         }
 
         // ------------------------------------------------------------------ the report line
