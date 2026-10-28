@@ -16,10 +16,10 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 ## Avant de commencer
 
 - [ ] Installé dans `<jeu>/mods/KSP1PartMod/` : `swinfo.json` en version **0.10.0**. `animations.json` : si le fichier
-  installé n'est pas celui de 0.9.0, il n'a pas été remplacé ; y ajouter les huit clés `ksp1_converters`, `ksp1_drills`,
+  installé n'est pas celui de 0.9.0, il n'a pas été remplacé ; y ajouter les neuf clés `ksp1_converters`, `ksp1_drills`,
   `ksp1_survey_scanners`, `ksp1_resource_scanners` (`true`), `ksp1_ore_resource` (`"CarbonRegolith"`),
-  `harvest_multiplier` (`1`), `isru_heat_scale` (`1`), `isru_active_animation` (`true`). Sans elles, ce sont les valeurs
-  par défaut, c'est équivalent.
+  `harvest_multiplier` (`1`), `isru_heat_scale` (`1`), `isru_active_animation` (`true`), `isru_ksp1_rates` (`false`).
+  Sans elles, ce sont les valeurs par défaut, c'est équivalent.
 - [ ] **Garder une sauvegarde de 0.9.0** contenant un vaisseau avec de l'Ore dans un réservoir KSP1 (test des anciennes
   sauvegardes, section 8), et une sauvegarde rapide avant chaque test de vol.
 - [ ] Campagne où le mod est activé (Edit Pack). Pièces de test (de série KSP1) : `ISRU`, `MiniISRU`, `RadialDrill`
@@ -52,7 +52,10 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
     left out (RequiresUnlock: …), 0 with no scannable resource`.
 - [ ] Une ligne par mode, par exemple `native: ISRU: converter 'Lf+Ox' -> mode 0: in CarbonRegolith … ElectricCharge 30
   out Methane … Oxidizer … (mass in … t/s, out … t/s), heat … kW; Ore weighs 0.05 t per KSP1 unit in Redux, 0.01 t in KSP1:
-  Ore mass x5`. Le « x5 » est attendu (voir section 3).
+  Ore mass x5; pace x… (KSP2's rate per EC): consumes … t/s per EC/s in KSP1, … in KSP2 (converter_2v_inline
+  'MethaloxISRU')`. Le « x5 » est attendu (voir section 3). Le facteur `pace` (environ 0,002 pour les modes de l'ISRU de
+  série) ramène chaque mode au rythme du convertisseur KSP2 par EC ; les piles à combustible (sans EC en entrée)
+  affichent `pace: KSP1 rates (no ElectricCharge input)`.
 - [ ] Une ligne par foreuse : `native: RadialDrill: drill: Ore -> CarbonRegolith at … units/s at density 1 (KSP2 yield …
   per EC/s from <foreuse KSP2> x 15 EC/s x Efficiency factor 1 (1.5 / (0.1 x 15)) x harvest_multiplier 1); per EC/s: KSP1
   drill …, KSP2 drill …; EC 15/s, heat … kW, impact 'ImpactTransform' 5.42 m`. **Les deux valeurs « per EC/s » doivent être
@@ -78,12 +81,21 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 
 - [ ] Le menu Mode de l'ISRU KSP1 liste quatre modes aux noms lisibles (dont Lf+Ox et Monoprop), pas de clé brute.
   Idem pour le `MiniISRU`.
-- [ ] Avec du CarbonRegolith à bord (réservoir d'Ore KSP1 rempli par une foreuse, ou au VAB), le mode Lf+Ox remplit un
-  réservoir KSP1 de Methalox. Noter le débit.
+- [ ] **Rythme KSP2.** L'ISRU tourne désormais au rythme du convertisseur KSP2 par EC (environ 500 fois plus lent que
+  dans KSP1 : CarbonRegolith 5e-5/s pour 30 EC/s). Une foreuse `RadialDrill` posée sur une carte à pleine densité
+  (environ 4,2e-5/s) suffit à l'alimenter, comme la foreuse KSP2 alimente le convertisseur KSP2. Test : foreuse et ISRU
+  ensemble, réservoir d'Ore KSP1 presque vide au départ ; l'ISRU doit tourner sans s'arrêter tout seul (`AutoShutdown`)
+  tant que la foreuse fore. Noter les deux débits.
+- [ ] Avec un réservoir d'Ore KSP1 rempli au VAB, le mode Lf+Ox remplit un réservoir KSP1 de Methalox, lentement. Noter
+  le débit et comparer au facteur `pace` du journal.
+- [ ] `isru_ksp1_rates` à `true` (redémarrer) : les débits de KSP1 reviennent (`pace: KSP1 rates (isru_ksp1_rates)`).
+  L'ISRU vide alors un réservoir plein en quelques minutes, et alimenté par une seule foreuse il s'arrête aussitôt
+  (réservoir vide, environ 600 fois ce que la foreuse produit). C'est attendu avec cette clé.
 - [ ] Noter le cas où un réservoir de sortie est plein : KSP2 arrête la conversion, KSP1 jetait l'excédent
   (`DumpExcess` non reproduit).
 - [ ] **Masse** : l'Ore pèse 0,05 t par unité chez Redux contre 0,01 t dans KSP1. Le nombre d'unités suit KSP1, mais la
-  masse de carburant produite par tonne d'Ore est environ **5 fois plus faible** que dans KSP1 (ligne « Ore mass x5 »).
+  masse de carburant produite par tonne d'Ore est environ **5 fois plus faible** que dans KSP1 (ligne « Ore mass x5 »),
+  avec ou sans le rythme KSP2.
   C'est attendu, pas un défaut.
 - [ ] Le clip actif `ProcessorLarge_running` tourne pendant la conversion et s'arrête avec elle (ligne
   `anim: ISRU group '…' active clip follows Module_ResourceConverter running`).
@@ -121,7 +133,10 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 - [ ] Le `SurveyScanner` déployé en orbite polaire (inclinaison 80° à 100°) entre 0 et 5 000 km finit un balayage en 5 s,
   et la fenêtre des ressources montre les cartes du corps. Ligne `isru: SurveyScanner: Module_ResourceScanner deploy
   follows …` (ou `always extended (…)`).
-- [ ] Le `SurfaceScanner` posé (sous 1 km) balaie le CarbonRegolith du corps.
+- [ ] Le `SurfaceScanner` posé (sous 1 km) balaie le CarbonRegolith du corps. **Attention** : KSP2 mesure cette altitude
+  depuis le niveau de la mer, pas depuis le sol. Posé sur un relief à plus de 1 km d'altitude (une bonne partie de la
+  Mun, les hauts plateaux de Duna, les montagnes de Kerbin), il affiche « altitude incorrecte » : c'est attendu, le
+  tester près du niveau de la mer (côte de Kerbin, par exemple).
 - [ ] Un magnétomètre BDB n'a pas de module de scanner : il fait partie des 19 `left out` du résumé.
 - [ ] L'`OrbitalScanner` (RequiresUnlock) n'a pas de module de scanner ; son clip actif reste immobile, comme en 0.9.0.
 
@@ -147,12 +162,18 @@ point, avec la ligne `native: <module KSP1> -> <module KSP2> off (<clé> false)`
 - [ ] Charger la sauvegarde de 0.9.0 avec de l'Ore (TestRocks) dans un réservoir KSP1 : `native: ore: old save: <pièce>:
   saved TestRocks <a> moved to CarbonRegolith <b> (mass kept[, capped at the capacity <c>])`, puis `native: ore: old saves:
   <n> part(s) migrated this session, TestRocks <a> -> CarbonRegolith <b>`. Le réservoir affiche bien la quantité `<b>`.
-  **Attendu** : aucune perte (la masse est gardée).
+  **Attendu** : aucune perte (la masse est gardée). Si le réservoir KSP1 a une quantité initiale dans sa définition,
+  la ligne finit par `replaces the CarbonRegolith <x> the load gave the part` : cette quantité est remplacée, pas
+  ajoutée.
+- [ ] Enregistrer, puis recharger cette sauvegarde : **aucune** nouvelle ligne `ore: old save:` pour ce vaisseau (pas de
+  double migration), et la quantité `<b>` est inchangée.
 - [ ] Aucune ligne `ore: old saves: … not found, not migrated` ni `no resource database while …`.
 - [ ] Un vaisseau enregistré dans le VAB avant 0.10.0 (espace de travail) **n'est pas migré** : son Ore est perdu. Le noter
   si c'est le cas.
 - [ ] Le remplacement de l'Ore est **global** : une campagne où le mod est désactivé, dans la même session, importe aussi
   ses réservoirs d'Ore KSP1 en CarbonRegolith. C'est attendu.
+- [ ] Pas de retour en arrière : remettre `ksp1_ore_resource` à `"TestRocks"` après avoir joué avec le remplacement vide
+  les réservoirs d'Ore KSP1 des vaisseaux enregistrés. Ne pas le tester sur une sauvegarde à garder.
 
 ## 9. Audit (optionnel)
 

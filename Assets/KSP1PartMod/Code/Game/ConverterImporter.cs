@@ -18,7 +18,8 @@ namespace KSP1PartMod.Game
     /// <summary>KSP1 <c>ModuleResourceConverter</c>s → one KSP2 <c>Module_ResourceConverter</c> per part
     /// (<c>ksp1_converters</c>, plan (j)): every KSP1 converter of the part becomes one mode (formula) of the native module,
     /// in cfg order (<see cref="ConverterMapping"/>). Names through Redux's <c>MapResourceName</c> (after the Ore remap),
-    /// rates through Redux's own <c>ConvertAmount</c> (<see cref="IsruAccess"/>), as the containers.
+    /// rates through Redux's own <c>ConvertAmount</c> (<see cref="IsruAccess"/>), as the containers, then scaled to the KSP2
+    /// converter's consumption per EC/s (<see cref="ConverterPace"/>; <c>isru_ksp1_rates</c> keeps the KSP1 rates).
     /// <list type="bullet">
     /// <item>the first call of a part's import context builds the module from <c>context.PartNode</c>; the node it was
     /// called with replaces its entry (B9's scratch re-import, plan (l)); later calls in that context return false, silently;</item>
@@ -33,6 +34,7 @@ namespace KSP1PartMod.Game
         private const string FlagNotReproduced = "converter:nr:";
 
         private readonly double _heatScale;
+        private readonly bool _ksp1Rates;
 
         /// <summary>Tests: the resource database (returning null: none). Null: the game's (<see cref="IsruAccess.Database"/>).</summary>
         internal static Func<ResourceDefinitionDatabase> DatabaseSource;
@@ -41,6 +43,12 @@ namespace KSP1PartMod.Game
         internal static Func<double> HeatPerEc = DefaultHeatPerEc;
 
         private static double DefaultHeatPerEc() => IsruReference.Get().ConverterHeatPerEc;
+
+        /// <summary>The native converter formulas the modes' pace comes from (<see cref="ConverterPace"/>), read from the game's
+        /// parts (<see cref="IsruReference"/>, its 26w42c fallback when none is read). Tests may replace it.</summary>
+        internal static Func<IReadOnlyList<NativeIsruFormula>> NativeConverters = DefaultNativeConverters;
+
+        private static IReadOnlyList<NativeIsruFormula> DefaultNativeConverters() => IsruReference.Get().ConverterFormulas;
         /// <summary>Tests: called after Redux's <c>CreateSerialized</c>, before the conversion is counted (a throw = a failure).</summary>
         internal static Action<string> FaultForTests;
 
@@ -60,9 +68,12 @@ namespace KSP1PartMod.Game
         private static Action<object, string, string> _add;
         private static System.Reflection.FieldInfo _catalog;
 
-        public ConverterImporter(double heatScale)
+        /// <param name="ksp1Rates"><c>isru_ksp1_rates</c>: the modes keep their KSP1 rates (false: scaled to the KSP2
+        /// converter's consumption per EC/s).</param>
+        public ConverterImporter(double heatScale, bool ksp1Rates = false)
         {
             _heatScale = heatScale;
+            _ksp1Rates = ksp1Rates;
         }
 
         /// <summary>The members the importer needs; empty when all are found.</summary>
@@ -163,7 +174,14 @@ namespace KSP1PartMod.Game
 
                 var db = CurrentDatabase();
                 var r = Resources(db, null);
-                var map = ConverterMapping.From(list, 0, called, r, HeatPerEc(), _heatScale);
+                // The pace (the drills' per-EC rule); KSP1 rates with the switch, or without a database (no unit mass, and
+                // Redux's ConvertAmount leaves the KSP1 units unconverted).
+                IReadOnlyList<NativeIsruFormula> pace = null;
+                string kept = null;
+                if (_ksp1Rates) kept = "isru_ksp1_rates";
+                else if (db == null) kept = "no resource database";
+                else pace = NativeConverters();
+                var map = ConverterMapping.From(list, 0, called, r, HeatPerEc(), _heatScale, pace, kept);
                 var stats = new PartStats { Modes = map.Formulas.Count, Dropped = map.DroppedFormulas, Several = map.SourceCount > 1 };
                 if (!map.HasModule)
                 {
@@ -305,6 +323,7 @@ namespace KSP1PartMod.Game
             DatabaseSource = null;
             FaultForTests = null;
             HeatPerEc = DefaultHeatPerEc;
+            NativeConverters = DefaultNativeConverters;
         }
     }
 }

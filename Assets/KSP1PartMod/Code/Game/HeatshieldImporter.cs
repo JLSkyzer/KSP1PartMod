@@ -190,7 +190,7 @@ namespace KSP1PartMod.Game
             {
                 var core = kv.Value;
                 if (kv.Key == null || kv.Key.Contains('+') || core?.data == null) continue;
-                if (core.data.tags != null && core.data.tags.IndexOf("KSP1", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                if (Ksp1Tags.IsKsp1Import(core.data.tags)) continue;
                 var shield = ShieldOf(core);
                 var settings = shield?.requiredResources;
                 if (settings == null || settings.Count == 0 || string.IsNullOrEmpty(settings[0].ResourceName)) continue;

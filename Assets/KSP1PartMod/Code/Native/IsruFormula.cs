@@ -30,6 +30,9 @@ namespace KSP1PartMod.Native
             Required = required;
         }
 
+        /// <summary>The same flow at <paramref name="factor"/> times its KSP2 rate (the KSP1 ratio kept).</summary>
+        internal IsruFlow Scaled(double factor) => new IsruFlow(Ksp1Name, Name, Ksp1Ratio, Rate * factor, Required);
+
         internal IsruFlow Plus(IsruFlow other) =>
             new IsruFlow(Ksp1Name, Name, Ksp1Ratio + other.Ksp1Ratio, Rate + other.Rate, Required && other.Required);
     }
@@ -64,6 +67,8 @@ namespace KSP1PartMod.Native
         /// <summary>Every produced resource has a known unit mass.</summary>
         public bool MassOutKnown { get; private set; } = true;
         public bool MassKnown => MassInKnown && MassOutKnown;
+        /// <summary>A converter mode's pace against the native converters (null for a drill, or when not computed).</summary>
+        public ConverterPace Pace { get; internal set; }
 
         internal void ComputeTotals(IsruResources r)
         {

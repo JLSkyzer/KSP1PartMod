@@ -201,9 +201,10 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsFalse(registry.TryImport(Modules(part)[0], Context(part), out _), "unsupported, dropped by Redux");
         }
 
+        /// <summary>With <c>isru_ksp1_rates</c>: the KSP1 rates, through Redux's <c>ConvertAmount</c> only.</summary>
         [Test] public void StockIsru_OneModule_FourModes_MappedNames_ConvertedRates()
         {
-            Assert.IsTrue(Arm(Database()));
+            Assert.IsTrue(Arm(Database(), KeepKsp1Rates));
             var registry = new Ksp1PartModuleImporterRegistry();
             var part = Part(Isru());
             var context = Context(part);
@@ -242,7 +243,8 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.AreEqual(new[] { ConverterMapping.NativeModule }, NativeModules.Record.ConvertedModules("testPart"));
             CollectionAssert.Contains(_lines,
                 "[KSP1PartMod] native: testPart: converter 'Lf+Ox' -> mode 0: in CarbonRegolith 0.025, ElectricCharge 30 out Methane 0.9, Oxidizer 0.55 " +
-                "(mass in 0.025 t/s, out 0.005 t/s), heat 315 kW; Ore weighs 0.05 t per KSP1 unit in Redux, 0.01 t in KSP1: Ore mass x5");
+                "(mass in 0.025 t/s, out 0.005 t/s), heat 315 kW; Ore weighs 0.05 t per KSP1 unit in Redux, 0.01 t in KSP1: Ore mass x5; " +
+                "pace: KSP1 rates (isru_ksp1_rates)");
             Assert.AreEqual(4, _lines.Count(l => l.StartsWith("[KSP1PartMod] native: testPart: converter '")));
 
             // A rebuild of the same part logs and counts nothing twice.
@@ -256,6 +258,45 @@ namespace KSP1PartMod.Tests.ReduxMu
                 "(1 part(s) with several KSP1 converters, one runs at a time); modes dropped: 0 (unknown resource); " +
                 "not reproduced: several modes at once 1");
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: converter names: 0 term(s) added to Redux's part localization");
+        }
+
+        private const string KeepKsp1Rates = "{\"isru_ksp1_rates\": true}";
+
+        /// <summary>The default (the final review's I1 ruling): each mode consumes per EC/s what the KSP2 converter consumes
+        /// (here the 26w42c fallback, MethaloxISRU: CarbonRegolith 3.333e-5 per 20 EC/s); EC, heat and the KSP1 ratios kept.</summary>
+        [Test] public void StockIsru_Default_PacedToTheKsp2ConverterPerEc()
+        {
+            Assert.IsTrue(Arm(Database()));
+            ConverterImporter.NativeConverters = () => NativeIsruRef.FallbackConverters;
+            var part = Part(Isru());
+            var context = Context(part);
+            Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(Modules(part)[0], context, out _));
+            var data = context.ModuleData.OfType<Data_ResourceConverter>().Single();
+            const double nativePerEc = 3.333e-5 / 20;
+            foreach (var f in data.FormulaDefinitions)
+            {
+                var inputs = Rates(f.InputResources);
+                Assert.AreEqual("CarbonRegolith", inputs[0].Name);
+                Assert.AreEqual(30 * nativePerEc, inputs[0].Rate, 1e-9, f.InternalName + ": CarbonRegolith per EC/s = KSP2's");
+                Assert.AreEqual(30f, inputs[1].Rate, "EC unchanged");
+            }
+            var lfox = data.FormulaDefinitions[0];
+            var factor = 30 * nativePerEc / 0.025;
+            Assert.AreEqual(0.9 * factor, lfox.OutputResources[0].Rate, 1e-9, "Methane: KSP1's ratio to the input kept");
+            Assert.AreEqual(0.55 * factor, lfox.OutputResources[1].Rate, 1e-9);
+            Assert.AreEqual(315f, lfox.FluxGenerated, 1e-4f, "heat follows the EC: unchanged");
+            var line = _lines.Single(l => l.StartsWith("[KSP1PartMod] native: testPart: converter 'Lf+Ox' -> mode 0:"));
+            StringAssert.Contains($"; pace x{IsruCfg.Inv(factor)} (KSP2's rate per EC): consumes {IsruCfg.Inv(0.025 / 30)} t/s per EC/s in KSP1, " +
+                                  $"{IsruCfg.Inv(nativePerEc)} in KSP2 (converter_2v_inline 'MethaloxISRU')", line);
+        }
+
+        [Test] public void NoDatabase_NotPaced()
+        {
+            Assert.IsTrue(Arm(null));
+            ConverterImporter.NativeConverters = () => NativeIsruRef.FallbackConverters;
+            var part = Part(Isru());
+            Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(Modules(part)[0], Context(part), out _));
+            Assert.That(_lines.Where(l => l.Contains("converter 'Lf+Ox'")), Has.All.EndsWith("; pace: KSP1 rates (no resource database)"));
         }
 
         [Test] public void UnknownResource_ModeDropped_Counted()
@@ -286,7 +327,8 @@ namespace KSP1PartMod.Tests.ReduxMu
         /// whole list with only that mode edited.</summary>
         [Test] public void ScratchContext_EditedLfOx_FourModes_OnlyThatOneEdited()
         {
-            Assert.IsTrue(Arm(Database()));
+            // KSP1 rates: under the pace, an edited input ratio is brought back to KSP2's consumption per EC/s.
+            Assert.IsTrue(Arm(Database(), KeepKsp1Rates));
             var registry = new Ksp1PartModuleImporterRegistry();
             var part = Part(Isru());
             var edited = Modules(Part(Isru("1.0")))[0];
@@ -422,7 +464,6 @@ namespace KSP1PartMod.Tests.ReduxMu
                 Assert.IsFalse(OreMigration.Migrate(saved, c, db, target).Migrated, why);
                 Assert.AreEqual(before, c.IsResourceContained(id) ? c.GetResourceStoredUnits(id) : -1, why);
             }
-            Untouched(Saved(("TestRocks", 1500), ("CarbonRegolith", 10)), Container(db, ("CarbonRegolith", 100)), "CarbonRegolith", "saved after the remap");
             Untouched(Saved(("TestRocks", 1500)), Container(db, ("CarbonRegolith", 100), ("TestRocks", 100)), "CarbonRegolith", "the container still holds TestRocks");
             Untouched(Saved(("TestRocks", 1500)), Container(db, ("Methane", 100)), "CarbonRegolith", "no target in the container");
             Untouched(Saved(("TestRocks", 0)), Container(db, ("CarbonRegolith", 100)), "CarbonRegolith", "nothing stored");
@@ -430,6 +471,49 @@ namespace KSP1PartMod.Tests.ReduxMu
             Untouched(Saved(("TestRocks", 1500)), Container(db, ("CarbonRegolith", 100)), "Unobtainium", "unknown target");
             Assert.IsFalse(OreMigration.Migrate(Saved(("TestRocks", 1500)), Container(db, ("CarbonRegolith", 100)), null, "CarbonRegolith").Migrated, "no database");
         });
+
+        /// <summary>The final review's C1: Patch Manager's <c>UpdateSavedVesselPartDefinitions</c> adds the definition's
+        /// containers the save lacks, at their initial units, before <c>SetState</c>. A 0.9.0 save then holds both TestRocks
+        /// and the target: it is still migrated, and the injected amount is replaced, not added to.</summary>
+        [Test] public void OreMigration_PatchManagerAddedTheTargetFirst_StillMigrated_Replaced() => WithWorld(() =>
+        {
+            var db = Database();
+            var id = db.GetResourceIDFromName("CarbonRegolith");
+            foreach (var injected in new[] { 0.0, 10.0, 100.0 })
+            {
+                var container = Container(db, ("CarbonRegolith", 100));
+                var saved = Saved(("TestRocks", 1500), ("CarbonRegolith", injected));
+                var r = OreMigration.Migrate(saved, container, db, "CarbonRegolith");
+                Assert.IsTrue(r.Migrated, "injected " + injected);
+                Assert.AreEqual(75, container.GetResourceStoredUnits(id), 1e-9, "replaced, not added: injected " + injected);
+                Assert.AreEqual(injected, r.ReplacedUnits, 1e-12);
+                Assert.IsFalse(r.Capped);
+            }
+            var small = Container(db, ("CarbonRegolith", 50));
+            var capped = OreMigration.Migrate(Saved(("TestRocks", 1500), ("CarbonRegolith", 50)), small, db, "CarbonRegolith");
+            Assert.IsTrue(capped.Capped);
+            Assert.AreEqual(50, small.GetResourceStoredUnits(id), "min(capacity, converted)");
+        });
+
+        /// <summary>No double migration: what the game saves after a migration (<c>GetState</c> writes only the contained
+        /// resources: the target, no TestRocks), plus Patch Manager's pass at the next load (nothing to add), is left alone.</summary>
+        [Test] public void OreMigration_TheNextSave_NotMigratedAgain() => WithWorld(() =>
+        {
+            var db = Database();
+            var id = db.GetResourceIDFromName("CarbonRegolith");
+            var container = Container(db, ("CarbonRegolith", 100));
+            Assert.IsTrue(OreMigration.Migrate(Saved(("TestRocks", 1500), ("CarbonRegolith", 0)), container, db, "CarbonRegolith").Migrated);
+            var next = Saved(("CarbonRegolith", container.GetResourceStoredUnits(id)));
+            var reloaded = Container(db, ("CarbonRegolith", 100));
+            reloaded.SetResourceStoredUnits(id, 75);
+            Assert.IsFalse(OreMigration.Migrate(next, reloaded, db, "CarbonRegolith").Migrated);
+            Assert.AreEqual(75, reloaded.GetResourceStoredUnits(id), 1e-9);
+        });
+
+        [Test] public void OreMigration_PartLine_NamesTheReplacedAmount() =>
+            Assert.AreEqual("[KSP1PartMod] native: ore: old save: T: saved TestRocks 1500 moved to CarbonRegolith 75 (mass kept, " +
+                            "replaces the CarbonRegolith 10 the load gave the part)",
+                OreMigration.Lines.Part("T", 1500, "CarbonRegolith", 75, null, 10));
 
         [Test] public void OreMigration_OneLinePerPartType_AndASessionTotal()
         {

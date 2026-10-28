@@ -120,7 +120,18 @@ namespace KSP1PartMod.Native
         /// <summary>The minable set when neither the density maps nor the native drill can be read (26w42c).</summary>
         public static readonly IReadOnlyList<string> FallbackMinable = new[] { "Water", "Ammonia", "CarbonRegolith", "Uranium" };
 
-        public static readonly NativeIsruRef Fallback = new NativeIsruRef(FallbackDrill, null, FallbackConverterHeatPerEc, 0, NativeScannerRef.Fallback);
+        /// <summary>26w42c, <c>converter_2v_inline</c> (plan (e), V): the converter pace when no native converter is read.</summary>
+        public static readonly IReadOnlyList<NativeIsruFormula> FallbackConverters = new[]
+        {
+            NativeIsruFormula.Converter("converter_2v_inline", "HydrogenISRU", new[] { ("ElectricCharge", 12.0), ("Water", 2e-5) },
+                new[] { ("Hydrogen", 1.944e-6) }, 100),
+            NativeIsruFormula.Converter("converter_2v_inline", "MethaloxISRU", new[] { ("ElectricCharge", 20.0), ("CarbonRegolith", 3.333e-5) },
+                new[] { ("Methane", 4.444e-6), ("Oxidizer", 1.778e-5) }, 210),
+            NativeIsruFormula.Converter("converter_2v_inline", "HydrazineISRU", new[] { ("ElectricCharge", 6.0), ("Ammonia", 2.167e-5) },
+                new[] { ("MonoPropellant", 6.667e-6) }, 140),
+        };
+
+        public static readonly NativeIsruRef Fallback = new NativeIsruRef(FallbackDrill, null, FallbackConverterHeatPerEc, 0, NativeScannerRef.Fallback, null);
 
         public NativeDrillRef Drill { get; }
         public double ConverterHeatPerEc { get; }
@@ -128,6 +139,11 @@ namespace KSP1PartMod.Native
         public int ConverterModes { get; }
         public bool ConvertersAreFallback => ConverterModes == 0;
         public NativeScannerRef Scanner { get; }
+
+        /// <summary>The native converter formulas with an EC input and a consumed resource, the KSP1 converters' pace
+        /// (<see cref="ConverterPace"/>); <see cref="FallbackConverters"/> when none was read.</summary>
+        public IReadOnlyList<NativeIsruFormula> ConverterFormulas { get; }
+        public bool ConverterFormulasAreFallback { get; }
 
         /// <summary>Every native drill read (the reference included), by heat per EC/s then part name; the fallback drill alone
         /// when none was read.</summary>
@@ -139,13 +155,15 @@ namespace KSP1PartMod.Native
             new[] { Drill }.Concat(Drills).SelectMany(d => d.Outputs).Select(o => o.Name).Distinct(StringComparer.Ordinal).ToList();
 
         private NativeIsruRef(NativeDrillRef drill, IReadOnlyList<NativeDrillRef> drills, double converterHeatPerEc, int converterModes,
-            NativeScannerRef scanner)
+            NativeScannerRef scanner, IReadOnlyList<NativeIsruFormula> converterFormulas)
         {
             Drill = drill;
             Drills = drills ?? new[] { drill };
             ConverterHeatPerEc = converterHeatPerEc;
             ConverterModes = converterModes;
             Scanner = scanner;
+            ConverterFormulasAreFallback = converterFormulas == null || converterFormulas.Count == 0;
+            ConverterFormulas = ConverterFormulasAreFallback ? FallbackConverters : converterFormulas;
         }
 
         /// <summary>What a native drill yields of <paramref name="resource"/> per EC/s at density 1 (units/s per EC/s): the
@@ -201,7 +219,10 @@ namespace KSP1PartMod.Native
                 : new NativeScannerRef(scanner.Part, scanner.Ec, scanner.Outputs.Select(o => o.Name).ToList(), scanner.TimeToComplete,
                     scanner.MinAltitude, scanner.MaxAltitude, scanner.MinInclination, scanner.MaxInclination);
 
-            return new NativeIsruRef(drill, drillRefs.Count > 0 ? drillRefs : null, converterHeat, heats.Count, scannerRef);
+            var paced = all.Where(f => f.Kind == NativeIsruKind.Converter && Positive(f.Ec)
+                                       && f.Inputs.Any(i => !IsruResources.IsElectricCharge(i.Name) && Positive(i.Rate))).ToList();
+
+            return new NativeIsruRef(drill, drillRefs.Count > 0 ? drillRefs : null, converterHeat, heats.Count, scannerRef, paced);
         }
     }
 }

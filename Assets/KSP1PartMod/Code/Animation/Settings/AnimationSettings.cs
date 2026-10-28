@@ -156,6 +156,9 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>A <c>ModuleAnimationGroup</c> active clip plays while the part's native module runs
         /// (<c>isru_active_animation</c>, default true; needs <see cref="Enabled"/>).</summary>
         public bool IsruActiveAnimation => _isru.ActiveAnimation;
+        /// <summary>KSP1 converter modes keep their KSP1 rates (<c>isru_ksp1_rates</c>, default false: their rates are scaled to the
+        /// KSP2 converter's consumption per EC/s, as the drills follow the KSP2 drill's yield per EC/s).</summary>
+        public bool IsruKsp1Rates => _isru.Ksp1Rates;
 
         /// <summary>Redux's own mapping of KSP1 Ore.</summary>
         public const string ReduxOreResource = "TestRocks";
@@ -164,6 +167,7 @@ namespace KSP1PartMod.Animation.Settings
         private sealed class SwitchesIsru
         {
             public bool Converters = true, Drills = true, SurveyScanners = true, ResourceScanners = true, ActiveAnimation = true;
+            public bool Ksp1Rates;
             public string OreResource = "CarbonRegolith";
             public double HarvestMultiplier = 1.0, HeatScale = 1.0;
         }
@@ -344,6 +348,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "harvest_multiplier": ReadClampedDouble(p, 0.01, 100, ref isru.HarvestMultiplier, problems); break;
                         case "isru_heat_scale": ReadClampedDouble(p, 0, 10, ref isru.HeatScale, problems); break;
                         case "isru_active_animation": ReadBool(p, ref isru.ActiveAnimation, problems); break;
+                        case "isru_ksp1_rates": ReadBool(p, ref isru.Ksp1Rates, problems); break;
                         case "mm_plugin_folders": mm.PluginFolders = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.PluginFolders; break;
                         case "mm_needs_keep": mm.NeedsKeep = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.NeedsKeep; break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;

@@ -87,7 +87,7 @@ namespace KSP1PartMod.Game
                 SwitchKey = "ksp1_converters",
                 IsOn = s => s.Ksp1Converters,
                 MissingMembers = ConverterImporter.MissingMembers,
-                Create = () => new ConverterImporter(_settings?.IsruHeatScale ?? 1.0),
+                Create = () => new ConverterImporter(_settings?.IsruHeatScale ?? 1.0, _settings?.IsruKsp1Rates ?? false),
                 SummaryLines = ConverterImporter.SummaryLines,
                 AfterArm = h => ConverterImporter.ArmNames(h),
             },

@@ -12,6 +12,9 @@ namespace KSP1PartMod.Native
     /// (plan (j)): one formula per KSP1 converter, in cfg order.
     /// <list type="bullet">
     /// <item>names through <see cref="IsruResources.Map"/>, rates through its converter (units/s, as the containers);</item>
+    /// <item>pace (the final review's I1 ruling, the drills' per-EC rule): with the native converter formulas given, each
+    /// mode's non-EC rates are scaled so that its consumption per EC/s equals the native converter's
+    /// (<see cref="ConverterPace"/>); without them (<c>isru_ksp1_rates</c>), the KSP1 rates;</item>
     /// <item><c>REQUIRED_RESOURCE</c>: an input at rate 0 (present, never consumed); its amount is not reproduced;</item>
     /// <item><c>FluxGenerated = GeneratesHeat ? heatPerEc × EC input × heatScale : 0</c>; a formula that generates heat
     /// without an EC input gets 0, noted;</item>
@@ -88,8 +91,13 @@ namespace KSP1PartMod.Native
         /// <param name="called">The node the importer was called with (null: none).</param>
         /// <param name="heatPerEc">kW per EC/s (the native converters' median); not above 0 or not finite: the fallback.</param>
         /// <param name="heatScale"><c>isru_heat_scale</c>; negative or not finite: 1.</param>
+        /// <param name="nativeConverters">The native converter formulas each mode's pace is taken from
+        /// (<see cref="ConverterPace"/>, the drills' per-EC rule); null: every mode keeps its KSP1 rates, with
+        /// <paramref name="keptReason"/> as its pace.</param>
+        /// <param name="keptReason">Why the rates are KSP1's when <paramref name="nativeConverters"/> is null (null: no pace at
+        /// all, the modes carry none).</param>
         public static ConverterMapping From(IReadOnlyList<IKsp1Node> converters, int callIndex, IKsp1Node called, IsruResources r,
-            double heatPerEc, double heatScale)
+            double heatPerEc, double heatScale, IReadOnlyList<NativeIsruFormula> nativeConverters = null, string keptReason = null)
         {
             var m = new ConverterMapping();
             if (callIndex > 0)
@@ -133,6 +141,8 @@ namespace KSP1PartMod.Native
                     m.DroppedFormulas++;
                     continue;
                 }
+                if (nativeConverters != null) Pace(f, ConverterPace.Of(f, nativeConverters, r.MassPerUnit), r);
+                else if (keptReason != null) f.Pace = ConverterPace.Kept(keptReason);
                 m._formulas.Add(f);
                 if (autoShutdown == null) autoShutdown = f.AutoShutdown;
                 else if (autoShutdown != f.AutoShutdown)
@@ -144,6 +154,18 @@ namespace KSP1PartMod.Native
             if (m._formulas.Count == 0 && list.Count > 0)
                 m._notes.Add($"{Ksp1Module}: no mode left, no {NativeModule}");
             return m;
+        }
+
+        /// <summary>Applies <paramref name="pace"/> to the mode: every non-EC rate times its factor (the KSP1 ratios, the EC
+        /// rate and the heat, which follows the EC, kept), then the mass totals again.</summary>
+        private static void Pace(IsruFormula f, ConverterPace pace, IsruResources r)
+        {
+            f.Pace = pace;
+            if (!pace.Scaled) return;
+            IsruFlow Scale(IsruFlow x) => IsruResources.IsElectricCharge(x.Name) ? x : x.Scaled(pace.Factor);
+            f.Inputs = f.Inputs.Select(Scale).ToList();
+            f.Outputs = f.Outputs.Select(Scale).ToList();
+            f.ComputeTotals(r);
         }
 
         private void NotReproducedField(string field, string note)

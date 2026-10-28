@@ -477,7 +477,7 @@ namespace KSP1PartMod.Tests.ReduxMu
                 ["drill_2v_radial"] = Core("drill_2v_radial", "isru drill", new List<ModuleData> { mine }, null),
                 ["converter_2v_inline"] = Core("converter_2v_inline", "", null, new List<SerializedPartModule> { Serialized(new SerializedModuleData(converter)) }),
                 ["scanner_1v_orbital"] = Core("scanner_1v_orbital", "", null, new List<SerializedPartModule> { Serialized(SerializedModuleData.Snapshot(scanner)) }),
-                ["RadialDrill"] = Core("RadialDrill", "KSP1 drill", new List<ModuleData> { mine }, null),
+                ["RadialDrill"] = Core("RadialDrill", "drill Squad Utility KSP1", new List<ModuleData> { mine }, null),
                 ["drill_2v_radial+big"] = Core("drill_2v_radial+big", "", new List<ModuleData> { mine }, null),
             };
             var formulas = IsruReference.FormulasOf(parts).ToList();

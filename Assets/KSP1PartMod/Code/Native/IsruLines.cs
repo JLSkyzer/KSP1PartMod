@@ -59,7 +59,17 @@ namespace KSP1PartMod.Native
             $"heat {Inv(f.FluxGenerated)} kW" +
             (oreTonnesPerUnit is double ore && ore > 0
                 ? $"; Ore weighs {Inv(ore)} t per KSP1 unit in Redux, {Inv(Ksp1OreTonnesPerUnit)} t in KSP1: Ore mass x{Inv(ore / Ksp1OreTonnesPerUnit)}"
-                : "");
+                : "") +
+            Pace(f.Pace);
+
+        /// <summary>The pace segment of a mode line (empty when the mode carries none): the factor, then the KSP1 and the
+        /// native consumption per EC/s side by side, or why the KSP1 rates are kept.</summary>
+        public static string Pace(ConverterPace p) =>
+            p == null ? ""
+            : p.Scaled
+                ? $"; pace x{Inv(p.Factor)} (KSP2's rate per EC): consumes {Inv(p.Ksp1PerEc)} {p.Unit}/s per EC/s in KSP1, " +
+                  $"{Inv(p.NativePerEc)} in KSP2 ({p.NativeFrom}{(p.FromAll ? ", median of every KSP2 converter mode" : "")})"
+                : $"; pace: KSP1 rates ({p.KeptReason})";
 
         public static string ConvertersSummary(int parts, int modes, int severalConverters, int dropped, IEnumerable<(string Field, int Parts)> notReproduced) =>
             Prefix + $"converters: {parts} part(s) got {ConverterMapping.NativeModule} with {modes} mode(s) " +

@@ -14,7 +14,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
         private static readonly string[] Keys =
         {
             "ksp1_converters", "ksp1_drills", "ksp1_survey_scanners", "ksp1_resource_scanners", "ksp1_ore_resource",
-            "harvest_multiplier", "isru_heat_scale", "isru_active_animation",
+            "harvest_multiplier", "isru_heat_scale", "isru_active_animation", "isru_ksp1_rates",
         };
 
         private static void AssertDefaults(AnimationSettings s)
@@ -28,6 +28,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
             Assert.AreEqual(1.0, s.HarvestMultiplier, 1e-12);
             Assert.AreEqual(1.0, s.IsruHeatScale);
             Assert.IsTrue(s.IsruActiveAnimation);
+            Assert.IsFalse(s.IsruKsp1Rates, "KSP1 converters run at KSP2's pace per EC by default");
         }
 
         [Test] public void Defaults() => AssertDefaults(AnimationSettings.Defaults);
@@ -43,7 +44,8 @@ namespace KSP1PartMod.Tests.Animation.Settings
         {
             var s = AnimationSettings.Parse("{\"ksp1_converters\": false, \"ksp1_drills\": false, \"ksp1_survey_scanners\": false, " +
                                             "\"ksp1_resource_scanners\": false, \"ksp1_ore_resource\": \"  Water \", " +
-                                            "\"harvest_multiplier\": 0.2, \"isru_heat_scale\": 0, \"isru_active_animation\": false}", out var e);
+                                            "\"harvest_multiplier\": 0.2, \"isru_heat_scale\": 0, \"isru_active_animation\": false, " +
+                                            "\"isru_ksp1_rates\": true}", out var e);
             Assert.IsNull(e);
             Assert.IsFalse(s.Ksp1Converters);
             Assert.IsFalse(s.Ksp1Drills);
@@ -54,6 +56,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
             Assert.AreEqual(0.2, s.HarvestMultiplier, 1e-12);
             Assert.AreEqual(0, s.IsruHeatScale, "0 = no heat");
             Assert.IsFalse(s.IsruActiveAnimation);
+            Assert.IsTrue(s.IsruKsp1Rates);
         }
 
         [Test] public void OreResource_EmptyOrTestRocks_KeepsReduxMapping()
