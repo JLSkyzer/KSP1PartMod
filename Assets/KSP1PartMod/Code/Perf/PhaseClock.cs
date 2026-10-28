@@ -97,7 +97,7 @@ namespace KSP1PartMod.Perf
             PerfPhase.Icons, PerfPhase.Release, PerfPhase.ReportLines, PerfPhase.ReportWarnings,
         };
 
-        /// <summary>Our own steps (reset once the <c>perf: ours:</c> line is written, at the end of the animation step, after
+        /// <summary>Our own steps (reset once the <c>perf: ours:</c> line is written, at the end of the campaign load, after
         /// the import lines that also read <see cref="PerfPhase.OurImporters"/>).</summary>
         public static readonly IReadOnlyList<PerfPhase> OurPhases = new[]
         {

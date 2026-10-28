@@ -92,6 +92,9 @@ namespace KSP1PartMod.Tests.ReduxMu
             var patched = Harmony.GetAllPatchedMethods()
                 .Where(m => Harmony.GetPatchInfo(m)?.Owners.Contains(LoadTimeline.HarmonyId) == true).ToList();
             Assert.AreEqual(25, patched.Count); // 24 Redux members and SequentialFlow.OnActionResolve
+            var finalized = patched.Where(m => Harmony.GetPatchInfo(m).Finalizers.Any(p => p.owner == LoadTimeline.HarmonyId))
+                .Select(m => m.Name).OrderBy(n => n).ToList();
+            CollectionAssert.AreEqual(new[] { "RebuildPrefab", "TryTranslatePart" }, finalized);
             foreach (var m in patched)
             {
                 var info = Harmony.GetPatchInfo(m);
@@ -103,7 +106,8 @@ namespace KSP1PartMod.Tests.ReduxMu
                 foreach (var p in info.Postfixes.Where(p => p.owner == LoadTimeline.HarmonyId))
                     Assert.AreEqual(Priority.Last, p.priority, m.Name);
                 Assert.IsFalse(info.Transpilers.Any(p => p.owner == LoadTimeline.HarmonyId));
-                Assert.IsFalse(info.Finalizers.Any(p => p.owner == LoadTimeline.HarmonyId));
+                foreach (var p in info.Finalizers.Where(p => p.owner == LoadTimeline.HarmonyId))
+                    Assert.AreEqual(typeof(void), p.PatchMethod.ReturnType, m.Name + ": a void finalizer leaves the exception as is");
             }
         }
 
@@ -178,6 +182,73 @@ namespace KSP1PartMod.Tests.ReduxMu
             var core = new PartCore { data = new PartData { partName = "perfNoImport" } };
             var go = Redux.Ksp1Import.Model.Ksp1ModelImporter.BuildPrefab(file, part, core, new Ksp1ImportReport());
             if (go != null) UnityEngine.Object.DestroyImmediate(go);
+        }
+
+        // ------------------------------------------------------------------ throwing originals
+
+        private static Exception Thrown(Action call)
+        {
+            try
+            {
+                call();
+            }
+            catch (System.Reflection.TargetInvocationException e)
+            {
+                return e.InnerException;
+            }
+            catch (Exception e)
+            {
+                return e;
+            }
+            return null;
+        }
+
+        private static void Rebuild(object entry) =>
+            AccessTools.Method(typeof(Ksp1ImportedPartRegistry), "RebuildPrefab").Invoke(null, new[] { entry });
+
+        [Test] public void ThrowingRebuild_ClearsTheRebuildFlag_AndKeepsTheException()
+        {
+            var before = Thrown(() => Rebuild(null)); // Redux's own exception, unpatched
+            Assert.IsNotNull(before);
+            Arm();
+            var after = Thrown(() => Rebuild(null));
+            Assert.IsNotNull(after);
+            Assert.AreEqual(before.GetType(), after.GetType());
+            Assert.AreEqual(before.Message, after.Message);
+            Assert.IsFalse(PerfClock.InRebuild, "the finalizer clears the flag the prefix set");
+            PerfClock.NoteTicks(PerfPhase.AnimationStep, 5);
+            Assert.AreEqual(1, PerfClock.Clock.Get(PerfPhase.AnimationStep).Calls, "later notes are not dropped");
+        }
+
+        [Test] public void ThrowingTranslate_ClearsThePartFlag_AndKeepsTheException()
+        {
+            var root = new Ksp1ModRoot("C:/import", "C:/import/GameData");
+            var file = new Ksp1ConfigFile(root, "C:/import/GameData/Test/Parts/perf.cfg", "Test", Ksp1ConfigNode.Parse("PART { }"));
+            Action call = () => new Ksp1PartTranslator(null, null).TryTranslatePart(file, null, new Ksp1ImportReport(), out _, out _);
+            var before = Thrown(call);
+            Assert.IsNotNull(before);
+            Arm();
+            var after = Thrown(call);
+            Assert.AreEqual(before.GetType(), after?.GetType());
+            Assert.AreEqual(before.Message, after.Message);
+            Assert.IsFalse(LoadTimeline.InPart);
+        }
+
+        [Test] public void BeginImport_ResetsTheMainThreadPhases_ButKeepsTheWorkerOnes()
+        {
+            Arm();
+            PerfClock.NoteTicks(PerfPhase.Translate, 10);
+            PerfClock.NoteTicks(PerfPhase.CacheKey, 10);
+            try
+            {
+                Ksp1ImportedPartRegistry.BeginImport("perf-reset-test");
+                Assert.AreEqual(0, PerfClock.Clock.Get(PerfPhase.Translate).Calls);
+                Assert.AreEqual(1, PerfClock.Clock.Get(PerfPhase.CacheKey).Calls);
+            }
+            finally
+            {
+                Ksp1ImportedPartRegistry.Clear();
+            }
         }
 
         // ------------------------------------------------------------------ our importers

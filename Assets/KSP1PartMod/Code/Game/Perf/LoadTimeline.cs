@@ -49,6 +49,8 @@ namespace KSP1PartMod.Game.Perf
             public PerfPhase Phase;
             public MethodBase Method;
             public string Prefix, Postfix;
+            /// <summary>A <c>void</c> finalizer that only clears a flag the prefix set (the exception passes unchanged).</summary>
+            public string Finalizer;
             public bool Found => Method != null;
         }
 
@@ -154,7 +156,7 @@ namespace KSP1PartMod.Game.Perf
                     "MarkImportComplete", new[] { typeof(Ksp1EnginePlumeCatalog) }, null, nameof(AfterMarkImportComplete)),
                 M("Ksp1PartTranslator.TryTranslatePart", PerfPhase.Translate, translator, "TryTranslatePart",
                     new[] { typeof(Ksp1ConfigFile), typeof(Ksp1ConfigNode), typeof(Ksp1ImportReport), typeof(PartCore).MakeByRefType(),
-                        typeof(string).MakeByRefType() }, nameof(BeforeTranslate), nameof(AfterTranslate)),
+                        typeof(string).MakeByRefType() }, nameof(BeforeTranslate), nameof(AfterTranslate), nameof(TranslateDone)),
                 M("Ksp1PartModuleImporterRegistry.TryImport", PerfPhase.ReduxImporters, importers, "TryImport",
                     new[] { typeof(Ksp1ConfigNode), typeof(Ksp1PartImportContext), module }, begin, nameof(EndReduxImporters)),
                 M("Ksp1PartModuleImporterRegistry.TryImportEngineModes", PerfPhase.ReduxImporters, importers, "TryImportEngineModes",
@@ -176,13 +178,14 @@ namespace KSP1PartMod.Game.Perf
                 M("Ksp1ImportedPartRegistry.ReleaseResidentPrefabs", PerfPhase.Release, registry, "ReleaseResidentPrefabs", Type.EmptyTypes,
                     begin, nameof(EndRelease)),
                 M("Ksp1ImportedPartRegistry.RebuildPrefab(Entry)", PerfPhase.Rebuild, registry, "RebuildPrefab",
-                    new[] { typeof(Ksp1ImportedPartRegistry.Entry) }, nameof(BeforeRebuild), nameof(AfterRebuild)),
+                    new[] { typeof(Ksp1ImportedPartRegistry.Entry) }, nameof(BeforeRebuild), nameof(AfterRebuild), nameof(RebuildDone)),
                 M("Ksp1ImportPartsFlowAction.RestoreCachedImport(PartProvider)", PerfPhase.ImportWall, flowAction, "RestoreCachedImport",
                     new[] { typeof(PartProvider) }, begin, nameof(AfterRestoreCachedImport)),
             };
         }
 
-        private static Member M(string label, PerfPhase phase, Type owner, string name, Type[] args, string prefix, string postfix) =>
+        private static Member M(string label, PerfPhase phase, Type owner, string name, Type[] args, string prefix, string postfix,
+            string finalizer = null) =>
             new Member
             {
                 Label = label,
@@ -190,6 +193,7 @@ namespace KSP1PartMod.Game.Perf
                 Method = owner == null ? null : AccessTools.DeclaredMethod(owner, name, args),
                 Prefix = prefix,
                 Postfix = postfix,
+                Finalizer = finalizer,
             };
 
         /// <summary>The flow-step members and the rebuild part name.</summary>
@@ -256,7 +260,8 @@ namespace KSP1PartMod.Game.Perf
                 {
                     harmony.Patch(m.Method,
                         prefix: m.Prefix == null ? null : new HarmonyMethod(typeof(LoadTimeline), m.Prefix) { priority = Priority.First },
-                        postfix: m.Postfix == null ? null : new HarmonyMethod(typeof(LoadTimeline), m.Postfix) { priority = Priority.Last });
+                        postfix: m.Postfix == null ? null : new HarmonyMethod(typeof(LoadTimeline), m.Postfix) { priority = Priority.Last },
+                        finalizer: m.Finalizer == null ? null : new HarmonyMethod(typeof(LoadTimeline), m.Finalizer));
                     timed++;
                 }
                 catch (Exception e)
@@ -367,7 +372,9 @@ namespace KSP1PartMod.Game.Perf
         private static void EndReduxImporters(long __state) => Main(PerfPhase.ReduxImporters, __state);
         private static void EndPrefab(long __state) => Main(PerfPhase.Prefab, __state);
         private static void EndMuRead(long __state) => Main(PerfPhase.MuRead, __state);
-        private static void EndTextures(long __state) => Main(PerfPhase.Textures, __state);
+        /// <summary>In a rebuild, a load is counted only when Redux's loader ran (<c>__runOriginal</c>): a hit of our shared
+        /// texture cache (<c>Ksp1Textures</c> prefix) is timed but is not a load.</summary>
+        private static void EndTextures(long __state, bool __runOriginal) => Main(PerfPhase.Textures, __state, __runOriginal);
         private static void EndLocalizationRegister(long __state) => Main(PerfPhase.LocalizationRegister, __state);
         private static void EndIcons(long __state) => Main(PerfPhase.Icons, __state);
         private static void EndRelease(long __state) => Main(PerfPhase.Release, __state);
@@ -403,7 +410,7 @@ namespace KSP1PartMod.Game.Perf
 
         /// <summary>A main-thread phase: inside a rebuild it feeds the rebuild figures; otherwise it counts only while an import
         /// is open, and the prefab and texture shares also go to the part being translated.</summary>
-        private static void Main(PerfPhase phase, long state)
+        private static void Main(PerfPhase phase, long state, bool ranOriginal = true)
         {
             if (state == 0L || _stopped) return;
             try
@@ -414,7 +421,7 @@ namespace KSP1PartMod.Game.Perf
                     if (phase == PerfPhase.Textures)
                     {
                         _rebuildTextures += ticks;
-                        _rebuildTextureLoads++;
+                        if (ranOriginal) _rebuildTextureLoads++;
                         _rebuildPartTextures += ticks;
                     }
                     else if (phase == PerfPhase.Prefab) _rebuildPartPrefab += ticks;
@@ -447,12 +454,31 @@ namespace KSP1PartMod.Game.Perf
                 _inPart = false;
                 _slowest.Clear();
                 PerfClock.InRebuild = false;
+                // An import that never completed must not leak into this one; the worker phases (the cache key runs before
+                // BeginImport) are kept.
+                PerfClock.Clock.Reset(MainImportPhases);
             }
             catch (Exception e)
             {
                 Stop(e);
             }
         }
+
+        /// <summary>Redux's main-thread import phases, zeroed at each <c>BeginImport</c>.</summary>
+        private static readonly PerfPhase[] MainImportPhases =
+        {
+            PerfPhase.Translate, PerfPhase.ReduxImporters, PerfPhase.Prefab, PerfPhase.MuRead, PerfPhase.Textures,
+            PerfPhase.LocalizationRegister, PerfPhase.Icons, PerfPhase.Release,
+        };
+
+        /// <summary>Tests: the part flag of <c>TryTranslatePart</c>.</summary>
+        internal static bool InPart => _inPart;
+
+        /// <summary>Runs even when <c>TryTranslatePart</c> throws (postfixes do not): the part flag never stays set.</summary>
+        private static void TranslateDone() => _inPart = false;
+
+        /// <summary>Runs even when <c>RebuildPrefab</c> throws: the rebuild flag never stays set.</summary>
+        private static void RebuildDone() => PerfClock.InRebuild = false;
 
         private static void BeforeTranslate(out long __state)
         {
@@ -617,9 +643,10 @@ namespace KSP1PartMod.Game.Perf
                 var started = _flowStarted(__instance);
                 if (started < 0f || FlowSteps.Count >= MaxFlowSteps) return;
                 var seconds = Time.realtimeSinceStartup - started;
-                var name = __0?.ToString() ?? "?";
-                if (seconds >= 0.1f || name.IndexOf("KSP1", StringComparison.Ordinal) >= 0)
-                    FlowSteps.Add(new FlowStep { Name = name, Seconds = seconds });
+                // The name is built only for a kept step (slow) or for one that may name KSP1: FlowAction.Name is a field read.
+                var raw = seconds >= 0.1f ? null : __0?.Name;
+                if (seconds < 0.1f && (raw == null || raw.IndexOf("KSP1", StringComparison.Ordinal) < 0)) return;
+                FlowSteps.Add(new FlowStep { Name = __0?.ToString() ?? "?", Seconds = seconds });
             }
             catch (Exception e)
             {
