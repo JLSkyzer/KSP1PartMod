@@ -17,19 +17,25 @@ namespace KSP1PartMod.Game.Perf
     internal sealed class PerfReportFile
     {
         public const int Keep = 10;
-        private const string Pattern = "perf-*.md";
+        private const string Pattern = "perf-*";
 
         private readonly string _folder;
-        private readonly Action<string> _info, _debug, _error;
+        private readonly Action<string> _info, _debug, _error, _warn;
+        private static readonly System.Text.RegularExpressions.Regex Report =
+            new System.Text.RegularExpressions.Regex(@"^perf-\d{8}-\d{6}\.md$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+        private static readonly System.Text.RegularExpressions.Regex Temporary =
+            new System.Text.RegularExpressions.Regex(@"^perf-\d{8}-\d{6}\.md\.tmp$", System.Text.RegularExpressions.RegexOptions.CultureInvariant);
         private bool _written;
 
-        public PerfReportFile(string folder, DateTime sessionStart, Action<string> info, Action<string> debug, Action<string> error)
+        public PerfReportFile(string folder, DateTime sessionStart, Action<string> info, Action<string> debug, Action<string> error,
+            Action<string> warn = null)
         {
             _folder = folder ?? throw new ArgumentNullException(nameof(folder));
             FullPath = Path.Combine(folder, FileName(sessionStart));
             _info = info ?? (_ => { });
             _debug = debug ?? (_ => { });
             _error = error ?? (_ => { });
+            _warn = warn ?? (_ => { });
         }
 
         public string FullPath { get; }
@@ -51,7 +57,6 @@ namespace KSP1PartMod.Game.Perf
                 File.WriteAllText(temporary, content ?? "", new UTF8Encoding(false));
                 if (File.Exists(FullPath)) File.Replace(temporary, FullPath, null);
                 else File.Move(temporary, FullPath);
-                if (!_written) Prune();
             }
             catch (Exception e)
             {
@@ -67,6 +72,18 @@ namespace KSP1PartMod.Game.Perf
                 _error(PerfLines.ReportOff(e.GetType().Name + ": " + e.Message));
                 return false;
             }
+            if (!_written)
+            {
+                // Once a session; a failure leaves the report on (it was written).
+                try
+                {
+                    Prune();
+                }
+                catch (Exception e)
+                {
+                    _warn(PerfLines.Prefix + "old reports not pruned: " + e.GetType().Name + ": " + e.Message);
+                }
+            }
             var line = PerfLines.ReportWritten(FullPath, when);
             if (_written) _debug(line);
             else _info(line);
@@ -74,17 +91,18 @@ namespace KSP1PartMod.Game.Perf
             return true;
         }
 
-        /// <summary>Deletes all but the <see cref="Keep"/> newest reports (by the session stamp in the name); this session's is
-        /// always kept.</summary>
+        /// <summary>Deletes all but the <see cref="Keep"/> newest reports (<c>perf-yyyyMMdd-HHmmss.md</c> only, by that stamp;
+        /// this session's is always kept), and the temporary files other sessions left.</summary>
         private void Prune()
         {
             var own = Path.GetFileName(FullPath);
-            var others = Directory.GetFiles(_folder, Pattern)
-                .Select(Path.GetFileName)
-                .Where(n => n.EndsWith(".md", StringComparison.OrdinalIgnoreCase) && !string.Equals(n, own, StringComparison.OrdinalIgnoreCase))
+            var names = Directory.GetFiles(_folder, Pattern).Select(Path.GetFileName).ToList();
+            var old = names
+                .Where(n => Report.IsMatch(n) && !string.Equals(n, own, StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(n => n, StringComparer.Ordinal)
                 .Skip(Keep - 1);
-            foreach (var name in others) File.Delete(Path.Combine(_folder, name));
+            var leftovers = names.Where(n => Temporary.IsMatch(n) && !string.Equals(n, own + ".tmp", StringComparison.OrdinalIgnoreCase));
+            foreach (var name in old.Concat(leftovers).ToList()) File.Delete(Path.Combine(_folder, name));
         }
     }
 
@@ -141,7 +159,8 @@ namespace KSP1PartMod.Game.Perf
             try
             {
                 _file ??= new PerfReportFile(Path.Combine(KSP1PartModPlugin.ModFolder, Folder), _sessionStart,
-                    l => KSP1PartModPlugin.Log?.LogInfo(l), l => KSP1PartModPlugin.Log?.LogDebug(l), l => KSP1PartModPlugin.Log?.LogError(l));
+                    l => KSP1PartModPlugin.Log?.LogInfo(l), l => KSP1PartModPlugin.Log?.LogDebug(l), l => KSP1PartModPlugin.Log?.LogError(l),
+                    l => KSP1PartModPlugin.Log?.LogWarning(l));
                 if (_file.Off) return;
                 _file.Write(Build(settings), moment);
             }

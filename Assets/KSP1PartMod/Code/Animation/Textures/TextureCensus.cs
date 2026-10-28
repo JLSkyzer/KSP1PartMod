@@ -67,7 +67,15 @@ namespace KSP1PartMod.Animation.Textures
 
         public IEnumerable<CensusTexture> Largest => _largest.Take(LargestCount);
 
-        public void Add(string name, int width, int height, string formatName, int bits, bool block, int mipCount, bool readable)
+        public void Add(string name, int width, int height, string formatName, int bits, bool block, int mipCount, bool readable) =>
+            Add(name, Identity, width, height, formatName, bits, block, mipCount, readable);
+
+        private static readonly Func<string, string> Identity = n => n;
+
+        /// <summary>The same, with the name built from <paramref name="source"/> only when the texture enters the largest
+        /// list.</summary>
+        public void Add<T>(T source, Func<T, string> nameOf, int width, int height, string formatName, int bits, bool block,
+            int mipCount, bool readable)
         {
             var bytes = TextureMemory.Estimate(width, height, mipCount, bits, block);
             var format = string.IsNullOrEmpty(formatName) ? "?" : formatName;
@@ -82,8 +90,11 @@ namespace KSP1PartMod.Animation.Textures
             if (!block) _uncompressed.Add(bytes);
             if (!IsPowerOfTwo(width) || !IsPowerOfTwo(height)) _npot.Add(bytes);
             if (readable) _readable.Add(bytes);
-            Offer(new CensusTexture { Name = name ?? "?", Width = width, Height = height, Format = format, Bytes = bytes });
+            if (!WouldEnterLargest(bytes)) return;
+            Offer(new CensusTexture { Name = nameOf(source) ?? "?", Width = width, Height = height, Format = format, Bytes = bytes });
         }
+
+        private bool WouldEnterLargest(long bytes) => LargestCount < _largest.Length || bytes > _largest[LargestCount - 1].Bytes;
 
         public static int SizeClass(int longestSide) =>
             longestSide <= 256 ? 0 : longestSide <= 512 ? 1 : longestSide <= 1024 ? 2 : longestSide <= 2048 ? 3 : 4;
@@ -93,7 +104,6 @@ namespace KSP1PartMod.Animation.Textures
         /// <summary>Largest first; an equal size keeps the texture seen first.</summary>
         private void Offer(CensusTexture t)
         {
-            if (LargestCount == _largest.Length && t.Bytes <= _largest[LargestCount - 1].Bytes) return;
             var at = 0;
             while (at < LargestCount && _largest[at].Bytes >= t.Bytes) at++;
             var last = LargestCount < _largest.Length ? LargestCount : _largest.Length - 1;

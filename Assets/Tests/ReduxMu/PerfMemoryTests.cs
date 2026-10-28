@@ -17,7 +17,8 @@ namespace KSP1PartMod.Tests.ReduxMu
     public class PerfMemoryTests
     {
         private string _folder;
-        private readonly List<string> _info = new List<string>(), _debug = new List<string>(), _error = new List<string>();
+        private readonly List<string> _info = new List<string>(), _debug = new List<string>(), _error = new List<string>(),
+            _warn = new List<string>();
         private readonly List<Texture2D> _textures = new List<Texture2D>();
 
         [SetUp] public void SetUp()
@@ -26,6 +27,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             _info.Clear();
             _debug.Clear();
             _error.Clear();
+            _warn.Clear();
             PerfReportWriter.Reset();
         }
 
@@ -41,7 +43,7 @@ namespace KSP1PartMod.Tests.ReduxMu
 
         private static readonly DateTime Start = new DateTime(2026, 10, 28, 20, 0, 0);
 
-        private PerfReportFile File_() => new PerfReportFile(_folder, Start, _info.Add, _debug.Add, _error.Add);
+        private PerfReportFile File_() => new PerfReportFile(_folder, Start, _info.Add, _debug.Add, _error.Add, _warn.Add);
 
         // ------------------------------------------------------------------ report file
 
@@ -75,11 +77,14 @@ namespace KSP1PartMod.Tests.ReduxMu
             File.WriteAllText(Path.Combine(_folder, "perf-20261029-080000.md"), "newer");
             File.WriteAllText(Path.Combine(_folder, "notes.md"), "mine");
             File.WriteAllText(Path.Combine(_folder, "perf-20261001-000000.txt"), "not a report");
+            File.WriteAllText(Path.Combine(_folder, "perf-foo.md"), "stray");
+            File.WriteAllText(Path.Combine(_folder, "perf-zzzzzzzz-zzzzzz.md"), "stray, sorts after every stamp");
+            File.WriteAllText(Path.Combine(_folder, "perf-20261020-120000.md.tmp"), "left by a crashed session");
 
             var file = File_();
             file.Write("# now\n", "end of import");
 
-            var reports = Directory.GetFiles(_folder, "perf-*.md").Select(Path.GetFileName).OrderByDescending(n => n, StringComparer.Ordinal).ToList();
+            var reports = Directory.GetFiles(_folder, "perf-2026*.md").Select(Path.GetFileName).OrderByDescending(n => n, StringComparer.Ordinal).ToList();
             Assert.AreEqual(PerfReportFile.Keep, reports.Count);
             CollectionAssert.Contains(reports, "perf-20261028-200000.md");
             CollectionAssert.Contains(reports, "perf-20261029-080000.md");
@@ -87,7 +92,29 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.DoesNotContain(reports, "perf-20261013-120000.md");
             Assert.IsTrue(File.Exists(Path.Combine(_folder, "notes.md")));
             Assert.IsTrue(File.Exists(Path.Combine(_folder, "perf-20261001-000000.txt")));
+            Assert.IsTrue(File.Exists(Path.Combine(_folder, "perf-foo.md")), "a stray name is neither counted nor deleted");
+            Assert.IsTrue(File.Exists(Path.Combine(_folder, "perf-zzzzzzzz-zzzzzz.md")));
+            Assert.IsFalse(File.Exists(Path.Combine(_folder, "perf-20261020-120000.md.tmp")), "another session's temporary file goes");
             CollectionAssert.IsEmpty(_error);
+            CollectionAssert.IsEmpty(_warn);
+        }
+
+        [Test] public void Write_PruneFailure_OneWarning_ReportStaysOn()
+        {
+            Directory.CreateDirectory(_folder);
+            for (var i = 0; i < 11; i++) File.WriteAllText(Path.Combine(_folder, $"perf-202610{10 + i:00}-120000.md"), "old");
+            var oldest = Path.Combine(_folder, "perf-20261010-120000.md");
+            File.SetAttributes(oldest, FileAttributes.ReadOnly);
+
+            var file = File_();
+            Assert.IsTrue(file.Write("# one\n", "a"));
+            Assert.IsTrue(file.Write("# two\n", "b"));
+
+            Assert.IsFalse(file.Off);
+            Assert.AreEqual(1, _warn.Count, string.Join("\n", _warn));
+            StringAssert.StartsWith("[KSP1PartMod] perf: old reports not pruned: ", _warn[0]);
+            CollectionAssert.IsEmpty(_error);
+            Assert.AreEqual("# two\n", File.ReadAllText(file.FullPath));
         }
 
         [Test] public void Write_ReadOnlyReport_OneErrorLine_ThenOffForTheSession()
@@ -198,6 +225,19 @@ namespace KSP1PartMod.Tests.ReduxMu
         }
 
         // ------------------------------------------------------------------ moments
+
+        [Test] public void FiveSecondMoment_SkippedOnceTheSceneIsLeft()
+        {
+            var vab = Ksp1Textures.NoteSceneChange(GameState.VehicleAssemblyBuilder, GameState.KerbalSpaceCenter);
+            Assert.IsTrue(Ksp1Textures.StillInScene(vab));
+            var flight = Ksp1Textures.NoteSceneChange(GameState.FlightView, GameState.VehicleAssemblyBuilder);
+            Assert.IsFalse(Ksp1Textures.StillInScene(vab), "VAB to flight within 5 s: the VAB +5 s moment is skipped");
+            Assert.IsTrue(Ksp1Textures.StillInScene(flight));
+            Ksp1Textures.NoteSceneChange(GameState.Map3DView, GameState.FlightView);
+            Ksp1Textures.NoteSceneChange(GameState.FlightView, GameState.Map3DView);
+            Assert.IsTrue(Ksp1Textures.StillInScene(flight), "the map view is part of the flight scene");
+            Assert.AreEqual(flight, Ksp1Textures.NoteSceneChange(GameState.FlightView, GameState.FlightView));
+        }
 
         [Test] public void Moments_VabFlightAndMainMenu()
         {

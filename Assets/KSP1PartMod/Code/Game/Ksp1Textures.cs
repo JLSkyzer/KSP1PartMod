@@ -40,6 +40,7 @@ namespace KSP1PartMod.Game
     {
         public const string MeasureHarmonyId = "KSP1PartMod.Ksp1Textures.Measure";
         public const string ShareHarmonyId = "KSP1PartMod.Ksp1Textures.Share";
+        public const string SourceHarmonyId = "KSP1PartMod.Ksp1Textures.Source";
         private const string Prefix = "[KSP1PartMod] textures: ";
         private const int MaxUsageLines = 20;
         private const float SettledSeconds = 5f;
@@ -90,11 +91,6 @@ namespace KSP1PartMod.Game
             {
                 var measure = new Harmony(MeasureHarmonyId);
                 measure.Patch(load, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterLoad)));
-                // The source file of each fresh load (its extension, for the census): the path Redux resolved last. Optional.
-                var resolvePath = AccessTools.Method(loader, "ResolveTexturePath", new[] { typeof(string), typeof(string), typeof(string) });
-                if (resolvePath != null && resolvePath.ReturnType == typeof(string))
-                    measure.Patch(resolvePath, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterResolve)));
-                else log.LogWarning(Prefix + "Ksp1TextureLoader.ResolveTexturePath not found, the census names its textures without the source extension");
                 var complete = AccessTools.Method(registry, "MarkImportComplete");
                 if (complete != null)
                     measure.Patch(complete, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterImportComplete)));
@@ -106,6 +102,7 @@ namespace KSP1PartMod.Game
                 log.LogError(Prefix + "measure not armed, sharing and quality off: " + e);
                 return;
             }
+            ArmSourceExtension(loader);
             log.LogInfo(Prefix + (followQuality
                 ? "quality armed: readable KSP1 textures follow the game's texture quality"
                 : "quality disabled by " + KSP1PartModPlugin.AnimationSettingsFile));
@@ -118,6 +115,27 @@ namespace KSP1PartMod.Game
                 return;
             }
             ArmSharing(load, loader, registry);
+        }
+
+        /// <summary>The source file of each fresh load (its extension, for the census): the path Redux resolved last. Optional
+        /// and on its own: a failure here only loses the extension, never the measure, sharing or quality.</summary>
+        private static void ArmSourceExtension(Type loader)
+        {
+            var log = KSP1PartModPlugin.Log;
+            try
+            {
+                var resolvePath = AccessTools.Method(loader, "ResolveTexturePath", new[] { typeof(string), typeof(string), typeof(string) });
+                if (resolvePath == null || resolvePath.ReturnType != typeof(string))
+                {
+                    log.LogWarning(Prefix + "Ksp1TextureLoader.ResolveTexturePath not found, the census names its textures without the source extension");
+                    return;
+                }
+                new Harmony(SourceHarmonyId).Patch(resolvePath, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterResolve)));
+            }
+            catch (Exception e)
+            {
+                log.LogWarning(Prefix + "source extension not armed, the census names its textures without it: " + e);
+            }
         }
 
         private static void ArmSharing(MethodInfo load, Type loader, Type registry)
@@ -226,9 +244,12 @@ namespace KSP1PartMod.Game
             }
         }
 
-        /// <summary>Counts, records the usage of a fresh load for sharing, and applies the quality rule.</summary>
-        private static void AfterLoad(Texture2D __result, string textureName)
+        /// <summary>Counts, records the usage of a fresh load for sharing, and applies the quality rule. <c>__1</c> is the
+        /// texture name argument, bound by position (its type is pinned by the signature looked up in <see cref="TryApply"/>),
+        /// so a renamed parameter cannot fail the patch.</summary>
+        private static void AfterLoad(Texture2D __result, string __1)
         {
+            var textureName = __1;
             var path = _pendingPath;
             var resolved = _lastResolved;
             _pendingPath = null;
@@ -424,11 +445,30 @@ namespace KSP1PartMod.Game
             Moment(when, true, false, true);
         }
 
-        private static IEnumerator AfterSeconds(float seconds, string when, bool rebuilds)
+        private static IEnumerator AfterSeconds(float seconds, string when, bool rebuilds, int generation)
         {
             yield return new WaitForSecondsRealtime(seconds);
+            // The scene was left within the 5 s: this moment would claim the next scene's rebuilds and memory.
+            if (!StillInScene(generation))
+            {
+                KSP1PartModPlugin.Log?.LogDebug(Prefix + when + " skipped: the scene was left before");
+                yield break;
+            }
             Moment(when, false, rebuilds, true);
         }
+
+        private static int _sceneGeneration;
+
+        /// <summary>Counts the scene changes: every game-state change but the map view toggles (flight and its map are one
+        /// scene). Returns the generation of the scene now entered.</summary>
+        internal static int NoteSceneChange(GameState current, GameState previous)
+        {
+            if (current == previous || current == GameState.Map3DView || previous == GameState.Map3DView) return _sceneGeneration;
+            return ++_sceneGeneration;
+        }
+
+        /// <summary>No scene change since <paramref name="generation"/>.</summary>
+        internal static bool StillInScene(int generation) => generation == _sceneGeneration;
 
         /// <summary>From <see cref="KSP1PartModPlugin.OnInitialized"/>: memory moments at each VAB or flight entry, and at
         /// each main menu entry with <c>perf_memory_lines</c>.</summary>
@@ -454,12 +494,13 @@ namespace KSP1PartMod.Game
             try
             {
                 if (!(message is GameStateChangedMessage m) || m.CurrentState == m.PreviousState) return;
+                var generation = NoteSceneChange(m.CurrentState, m.PreviousState);
                 var where = MomentOf(m.CurrentState, m.PreviousState, Settings.PerfMemoryLines);
                 if (where == null) return;
                 // The rebuild line (load timeline) belongs to the VAB and flight moments, written once per moment.
                 var vabOrFlight = where != MainMenu;
                 Moment(where + " entry", vabOrFlight, vabOrFlight, true);
-                TechTreeLoadStep.Runner().StartCoroutine(AfterSeconds(SettledSeconds, where + " entry + 5 s", vabOrFlight));
+                TechTreeLoadStep.Runner().StartCoroutine(AfterSeconds(SettledSeconds, where + " entry + 5 s", vabOrFlight, generation));
             }
             catch (Exception e)
             {
@@ -592,9 +633,20 @@ namespace KSP1PartMod.Game
                 if (t == null || !seen.TryGetValue(t.GetEntityId(), out var origin)) continue;
                 var format = t.format;
                 Bits(format, out var bits, out var block);
-                census.Add(origin.CensusName, t.width, t.height, format.ToString(), bits, block, t.mipmapCount, t.isReadable);
+                census.Add(origin, NameOfOrigin, t.width, t.height, FormatName(format), bits, block, t.mipmapCount, t.isReadable);
             }
             return census;
+        }
+
+        /// <summary>Built only for the textures the largest list keeps.</summary>
+        private static readonly Func<TextureOrigin, string> NameOfOrigin = o => o.CensusName;
+
+        private static readonly Dictionary<TextureFormat, string> FormatNames = new Dictionary<TextureFormat, string>();
+
+        private static string FormatName(TextureFormat format)
+        {
+            if (!FormatNames.TryGetValue(format, out var name)) FormatNames[format] = name = format.ToString();
+            return name;
         }
 
         /// <summary>Process memory now. Each API in its own try: a failing one is null ("n/a").</summary>
