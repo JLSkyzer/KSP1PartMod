@@ -68,6 +68,22 @@ namespace KSP1PartMod.Native.Science
             return Prefix + $"store: {present} of {generated} KSP1 definition(s) present; KSP2 experiments: {ids.Count} ({string.Join(", ", ids)})";
         }
 
+        public static string StoreDiffers(IEnumerable<string> added, IEnumerable<string> removed, IEnumerable<string> changed)
+        {
+            string L(IEnumerable<string> x) { var l = (x ?? Enumerable.Empty<string>()).ToList(); return l.Count == 0 ? "none" : string.Join(", ", l); }
+            return Prefix + $"store: KSP2 experiments differ from 26w42c: added {L(added)}; removed {L(removed)}; changed {L(changed)}";
+        }
+
+        public const string StoreNotReady =
+            Prefix + "store: the experiment store is not initialized after 'Loading Science Data', not checked";
+
+        public static string StoreAdded(int added, int existing) =>
+            Prefix + $"store: {added} KSP1 definition(s) added to the experiment store, {existing} already there (skipped)";
+
+        public static string ReadFailed(string path, string error) => Prefix + $"definitions: {path} not read: {error}";
+
+        public static string Failed(string what, string error) => Prefix + $"{what} failed: {error}";
+
         public const string StoreOff = Prefix + "store: KSP1PartMod is off in this campaign, no KSP1 definition added";
 
         // ---- Task 4: the importer

@@ -76,6 +76,27 @@ namespace KSP1PartMod.Native.Science
 
         public NativeExperiment Find(string id) => id != null && _byId.TryGetValue(id, out var e) ? e : null;
 
+        /// <summary>How <paramref name="live"/> differs from <paramref name="expected"/>: ids added, ids removed, and ids whose type, EVA flag or
+        /// set of situations (with their region flags) changed. Each list in the order of its source.</summary>
+        public static (IReadOnlyList<string> Added, IReadOnlyList<string> Removed, IReadOnlyList<string> Changed) Diff(NativeExperiments expected,
+            NativeExperiments live)
+        {
+            var a = expected?.All ?? (IReadOnlyList<NativeExperiment>)Array.Empty<NativeExperiment>();
+            var b = live?.All ?? (IReadOnlyList<NativeExperiment>)Array.Empty<NativeExperiment>();
+            var added = b.Where(e => expected == null || !expected.Contains(e.Id)).Select(e => e.Id).ToList();
+            var removed = a.Where(e => live == null || !live.Contains(e.Id)).Select(e => e.Id).ToList();
+            var changed = new List<string>();
+            foreach (var e in a)
+            {
+                var other = live?.Find(e.Id);
+                if (other == null) continue;
+                var sa = new HashSet<(Ksp2Situation, bool)>(e.Locations.Select(l => (l.Situation, l.RequiresRegion)));
+                var sb = new HashSet<(Ksp2Situation, bool)>(other.Locations.Select(l => (l.Situation, l.RequiresRegion)));
+                if (e.Type != other.Type || e.RequiresEva != other.RequiresEva || !sa.SetEquals(sb)) changed.Add(e.Id);
+            }
+            return (added, removed, changed);
+        }
+
         /// <summary>Jaccard index between the situations of a KSP1 mask and those of a KSP2 experiment (regions ignored).</summary>
         public static double Jaccard(int ksp1SituationMask, NativeExperiment native)
         {

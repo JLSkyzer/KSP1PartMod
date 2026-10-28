@@ -104,6 +104,16 @@ namespace KSP1PartMod
             }
             try
             {
+                // Before NativeModules (the science importer reads the definitions) and before Patch Manager runs its patch
+                // flow (route A registers duplicates); independent of enabled.
+                ScienceDefinitions.TryApply(new Harmony(ScienceDefinitions.HarmonyId), Animations, SWMetadata?.Guid ?? ModId);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.Science.ScienceLines.Failed("definitions", e.ToString()));
+            }
+            try
+            {
                 // Before Redux's import, which builds its module importer registries; independent of enabled.
                 NativeModules.TryApply(new Harmony(NativeModules.HarmonyId), Animations);
             }

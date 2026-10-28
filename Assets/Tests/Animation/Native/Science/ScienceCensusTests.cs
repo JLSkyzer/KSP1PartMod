@@ -201,9 +201,16 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
         /// modules, the Ranger gamma-ray spectrometer); the distinct id and mask pairs.</summary>
         private const int VariantsInstalled = 3;
 
+        /// <summary>The stock definitions the user copies from his own KSP1 (<c>node tools/ksp1-layout.mjs --science</c>).</summary>
+        private static bool IsStockScienceDefs(string path) =>
+            path.Replace('\\', '/').EndsWith("/Squad/Resources/ScienceDefs.cfg", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The installed cfgs without the copied stock <c>ScienceDefs.cfg</c>: the counts of plan (g).</summary>
+        private static string[] InstalledWithoutStockDefs() => InstalledKsp1.AllCfg().Where(p => !IsStockScienceDefs(p)).ToArray();
+
         [Test] public void Installed_EveryDefinitionBuilds_EveryPartResolves_ExpectedCounts()
         {
-            var c = Run(InstalledKsp1.Root, InstalledKsp1.AllCfg());
+            var c = Run(InstalledKsp1.Root, InstalledWithoutStockDefs());
             Print("installed mods/KSP1", c);
             CollectionAssert.IsEmpty(c.Failures);
             var t = c.Total;
@@ -218,6 +225,32 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             Assert.AreEqual(18, t.Skipped, "kerbal experiments, ROCScience, bd_GooLab");
             Assert.AreEqual(VariantsInstalled, c.Variants, "the DMagic modules with sitMask = 48 get their own definitions");
             Assert.IsTrue(c.Definitions.Values.Where(d => d.IsVariant).All(d => d.IsBuilt && d.SituationMask == 48));
+        }
+
+        /// <summary>With the stock <c>ScienceDefs.cfg</c> copied under <c>mods/KSP1/Squad/Resources/</c> (18 definitions): the stock
+        /// instruments get their own generated definitions instead of the closest KSP2 experiment.</summary>
+        [Test] public void Installed_WithTheStockScienceDefs()
+        {
+            var all = InstalledKsp1.AllCfg();
+            Assume.That(all.Any(IsStockScienceDefs), "the stock ScienceDefs.cfg is not under mods/KSP1/Squad/Resources");
+            var c = Run(InstalledKsp1.Root, all);
+            Print("installed mods/KSP1 with the stock ScienceDefs.cfg", c);
+            CollectionAssert.IsEmpty(c.Failures);
+            var t = c.Total;
+            Assert.AreEqual(73, t.Definitions, "55 BDB + 18 stock");
+            Assert.AreEqual(18, c.PerMod["Squad"].Definitions);
+            Assert.AreEqual(298, t.Parts);
+            var b = Run(InstalledKsp1.Root, InstalledWithoutStockDefs()).Total;
+            Assert.AreEqual(b.Generated + b.Identical + b.Closest + b.Skipped, t.Generated + t.Identical + t.Closest + t.Skipped,
+                "the same KSP1 ids are resolved, only their kind changes");
+            TestContext.WriteLine($"with the stock file: {t.WithModule} with module, {t.Generated} generated, {t.Identical} identical, " +
+                                  $"{t.Closest} closest, {t.Skipped} skipped");
+            // Counted on 2026-10-28 with the stock file of the user's KSP1 1.12 install.
+            Assert.AreEqual(286, t.WithModule);
+            Assert.AreEqual(310, t.Generated, "269 + the 41 stock instruments");
+            Assert.AreEqual(48, t.Identical);
+            Assert.AreEqual(0, t.Closest, "every stock instrument now has its definition");
+            Assert.AreEqual(18, t.Skipped);
         }
 
         [Test] public void Installed_StorageParts()
