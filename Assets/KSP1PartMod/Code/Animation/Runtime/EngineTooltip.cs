@@ -39,7 +39,7 @@ namespace KSP1PartMod.Animation.Runtime
                 lines.Add(new KeyValuePair<string, string>(string.Join(separator ?? "", label, e.Name), e.Value));
         }
 
-        /// <summary>Puts the engine lines first in <paramref name="info"/>, unless its first line already carries the first
+        /// <summary>Puts the engine lines first in <paramref name="info"/>, unless any of its lines already carries the first
         /// engine key (a Redux that shows them itself). Returns the number of lines added.</summary>
         public static int Merge(List<KeyValuePair<string, string>> info, List<KeyValuePair<string, string>> engineLines)
         {

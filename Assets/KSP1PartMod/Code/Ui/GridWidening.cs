@@ -53,6 +53,14 @@ namespace KSP1PartMod.Ui
             return 1 + (int)Math.Floor((inner - cellWidth + 0.01f) / (cellWidth + spacing));
         }
 
+        /// <summary>The once-per-session diagnostic of the grid during a search (bar hidden, nothing of ours applied).</summary>
+        public static string SearchLine(float viewport, float cellWidth, float cellHeight, float spacing, int paddingLeft,
+            int paddingRight, string constraint, int constraintCount, int columns, float contentWidth) =>
+            string.Format(CultureInfo.InvariantCulture,
+                "[KSP1PartMod] ui: grid during search: viewport {0:0.#}, cell {1:0.#}x{2:0.#}, spacing {3:0.#}, padding {4}/{5}, " +
+                "constraint {6} {7}, columns that fit {8}, content width {9:0.#}",
+                viewport, cellWidth, cellHeight, spacing, paddingLeft, paddingRight, constraint, constraintCount, columns, contentWidth);
+
         /// <summary>The once-per-session line.</summary>
         public static string Line(string owner, float ownerBefore, float ownerAfter, string background, float backgroundBefore,
             float backgroundAfter, float gridWidth, string gridLayout)

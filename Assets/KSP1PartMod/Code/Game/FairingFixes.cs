@@ -89,8 +89,7 @@ namespace KSP1PartMod.Game
             if (_broken) return;
             try
             {
-                if (!IsKsp1(__instance, out _)) return;
-                if (FairingRule.NeedsEmptyColliders(true, _baseColliders.GetValue(__instance) == null))
+                if (FairingRule.NeedsEmptyColliders(IsKsp1(__instance, out _), _baseColliders.GetValue(__instance) == null))
                     _baseColliders.SetValue(__instance, Empty);
             }
             catch (Exception e)
@@ -119,9 +118,9 @@ namespace KSP1PartMod.Game
             if (_broken) return true;
             try
             {
-                if (!IsKsp1(__instance, out var part)) return true;
-                var color = _moduleColor.GetValue(__instance) as UnityEngine.Object;
-                if (!FairingRule.SkipMaterialLoaded(true, color != null, __0 != null)) return true;
+                var ksp1 = IsKsp1(__instance, out var part);
+                var color = ksp1 ? _moduleColor.GetValue(__instance) as UnityEngine.Object : null;
+                if (!FairingRule.SkipMaterialLoaded(ksp1, color != null, __0 != null)) return true;
                 _fairingMaterial.SetValue(__instance, __0);
                 _fairingConeMaterial.SetValue(__instance, __0);
                 if (FairingRule.FirstTime(LoggedMaterials, part)) KSP1PartModPlugin.Log?.LogInfo(FairingRule.MaterialLine(part));

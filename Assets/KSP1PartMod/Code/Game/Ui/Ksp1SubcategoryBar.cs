@@ -107,6 +107,7 @@ namespace KSP1PartMod.Game.Ui
             if (!want)
             {
                 Hide();
+                LogSearchGridOnce();
                 return;
             }
             if (_root == null && !Create())
@@ -478,10 +479,94 @@ namespace KSP1PartMod.Game.Ui
             var widenBackground = background != null && background != _owner && !_owner.IsChildOf(background)
                 && !background.IsChildOf(content) && IsFixedWidth(background);
             Widen(_backgroundWidening, widenBackground ? background : null, worldWidth, widenBackground);
+            // HUD elements outside the panel that Redux places from the panel's width (ExpandCollapsePartsWindow moves the
+            // ship toolbar by partContentRT's width): they move right with the panel's right edge, back on restore.
+            var toolbar = _picker.manipulateShipToolbarRT;
+            var moveToolbar = toolbar != null && !toolbar.IsChildOf(_owner);
+            Nudge(_toolbarNudge, moveToolbar ? toolbar : null, worldWidth);
+            var trash = _picker.trashCanWidget != null ? _picker.trashCanWidget.transform : null;
+            var moveTrash = trash != null && !trash.IsChildOf(_owner);
+            Nudge(_trashNudge, moveTrash ? trash : null, worldWidth);
             if (_gridLogged) return;
             LogGridOnce(GridWidening.Line(_owner.name, _ownerWidening.Before, _owner.sizeDelta.x,
                 widenBackground ? background.name : null, _backgroundWidening.Before, widenBackground ? background.sizeDelta.x : 0f,
-                content.rect.width, DescribeGrid()));
+                content.rect.width, DescribeGrid()) + string.Format(CultureInfo.InvariantCulture,
+                "; ship toolbar {0}; trash can {1}",
+                toolbar == null ? "missing" : moveToolbar ? $"moved right by {worldWidth:0.#} (world)" : "inside the panel, follows it",
+                trash == null ? "missing" : moveTrash ? $"under '{(trash.parent != null ? trash.parent.name : "-")}', moved right by {worldWidth:0.#} (world)" : "inside the panel, follows it"));
+        }
+
+        /// <summary>A HUD element moved along x (world) while the panel is widened.</summary>
+        private sealed class Moved
+        {
+            public Transform T;
+            public bool Active;
+            public float Applied, Expected;
+        }
+
+        private readonly Moved _toolbarNudge = new Moved(), _trashNudge = new Moved();
+
+        /// <summary>Moves t right by worldDelta while set; a position someone else wrote in between (Redux's
+        /// expand/collapse) is taken as the new base.</summary>
+        private static void Nudge(Moved m, Transform t, float worldDelta)
+        {
+            if (m.T != t)
+            {
+                Unnudge(m);
+                m.T = t;
+            }
+            if (t == null) return;
+            var p = t.position;
+            if (m.Active && Mathf.Abs(p.x - m.Expected) > 0.01f) m.Applied = 0f;
+            m.Active = true;
+            if (Mathf.Abs(m.Applied - worldDelta) <= 0.01f)
+            {
+                m.Expected = p.x;
+                return;
+            }
+            p.x += worldDelta - m.Applied;
+            t.position = p;
+            m.Applied = worldDelta;
+            m.Expected = p.x;
+        }
+
+        private static void Unnudge(Moved m)
+        {
+            if (m.Active && m.T != null && Mathf.Abs(m.T.position.x - m.Expected) <= 0.01f && m.Applied != 0f)
+            {
+                var p = m.T.position;
+                p.x -= m.Applied;
+                m.T.position = p;
+            }
+            m.Active = false;
+            m.Applied = 0f;
+        }
+
+        private bool _searchGridLogged;
+
+        /// <summary>Diagnostic (0.4.1): the grid as Redux lays it out during a search, our bar hidden and nothing of ours
+        /// applied, logged once the first time the search shows parts.</summary>
+        private void LogSearchGridOnce()
+        {
+            if (_searchGridLogged || _picker == null || _picker.currentCategory != PartCategories.none) return;
+            var content = _picker.partContentRT;
+            var scroll = _picker.partsPickerScrollRect;
+            if (content == null || !content.gameObject.activeInHierarchy || scroll == null || scroll.content == null) return;
+            GridLayoutGroup shown = null;
+            foreach (var g in scroll.content.GetComponentsInChildren<GridLayoutGroup>(false))
+            {
+                for (var i = 0; i < g.transform.childCount && shown == null; i++)
+                    if (g.transform.GetChild(i).gameObject.activeSelf) shown = g;
+                if (shown != null) break;
+            }
+            if (shown == null) return; // no result shown yet
+            _searchGridLogged = true;
+            var viewport = scroll.viewport != null ? scroll.viewport : (RectTransform)scroll.transform;
+            var gridWidth = ((RectTransform)shown.transform).rect.width;
+            KSP1PartModPlugin.Log?.LogInfo(GridWidening.SearchLine(viewport.rect.width, shown.cellSize.x, shown.cellSize.y,
+                shown.spacing.x, shown.padding.left, shown.padding.right, shown.constraint.ToString(), shown.constraintCount,
+                GridWidening.Columns(gridWidth, shown.padding.left, shown.padding.right, shown.cellSize.x, shown.spacing.x),
+                scroll.content.rect.width) + $" (grid '{shown.name}' {gridWidth.ToString("0.#", CultureInfo.InvariantCulture)} wide)");
         }
 
         private void LogGridOnce(string line)
@@ -613,6 +698,8 @@ namespace KSP1PartMod.Game.Ui
             Restore(_searchShift);
             Unwiden(_ownerWidening);
             Unwiden(_backgroundWidening);
+            Unnudge(_toolbarNudge);
+            Unnudge(_trashNudge);
         }
 
         private void OnDisable()
@@ -694,6 +781,7 @@ namespace KSP1PartMod.Game.Ui
             Rt("SearchFilterSortRT", _picker.SearchFilterSortRT);
             Rt("partsPickerScrollRect", _picker.partsPickerScrollRect != null ? _picker.partsPickerScrollRect.transform as RectTransform : null);
             Rt("manipulateShipToolbarRT", _picker.manipulateShipToolbarRT);
+            Rt("trashCanWidget", _picker.trashCanWidget != null ? _picker.trashCanWidget.transform as RectTransform : null);
             var sprites = new StringBuilder();
             foreach (var sub in Ksp1Subcategories.Ordered)
                 foreach (var name in Ksp1Subcategories.StockIconCategories(sub))

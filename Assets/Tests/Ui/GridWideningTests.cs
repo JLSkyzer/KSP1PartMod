@@ -46,6 +46,11 @@ namespace KSP1PartMod.Tests.Ui
         public void Columns(float width, float left, float right, float cell, float spacing, int expected) =>
             Assert.AreEqual(expected, GridWidening.Columns(width, left, right, cell, spacing));
 
+        [Test] public void SearchLine() =>
+            Assert.AreEqual("[KSP1PartMod] ui: grid during search: viewport 389, cell 120x140, spacing 8, padding 4/4, " +
+                            "constraint FixedColumnCount 3, columns that fit 2, content width 389.5",
+                GridWidening.SearchLine(389f, 120f, 140f, 8f, 4, 4, "FixedColumnCount", 3, 2, 389.5f));
+
         [Test] public void Line()
         {
             Assert.AreEqual("[KSP1PartMod] ui: grid kept 397 wide: picker widened by 40 for the bar " +
