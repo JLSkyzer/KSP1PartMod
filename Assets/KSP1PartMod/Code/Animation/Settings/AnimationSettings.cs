@@ -130,6 +130,46 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>Sets (and a <c>Module_PartSwitch</c>) for the B9 modules Redux skips (<c>b9_new_part_switches</c>).</summary>
         public bool B9NewPartSwitches => _b9.NewPartSwitches;
 
+        /// <summary>KSP1 <c>ModuleResourceConverter</c>s imported as one native <c>Module_ResourceConverter</c>, one mode each
+        /// (<c>ksp1_converters</c>, default true).</summary>
+        public bool Ksp1Converters => _isru.Converters;
+        /// <summary>Planetary KSP1 <c>ModuleResourceHarvester</c>s imported as Redux's <c>Module_Mine</c> (<c>ksp1_drills</c>).</summary>
+        public bool Ksp1Drills => _isru.Drills;
+        /// <summary>KSP1 <c>ModuleOrbitalSurveyor</c> imported as Redux's <c>Module_ResourceScanner</c> (<c>ksp1_survey_scanners</c>).</summary>
+        public bool Ksp1SurveyScanners => _isru.SurveyScanners;
+        /// <summary>KSP1 <c>ModuleResourceScanner</c> with <c>RequiresUnlock = false</c> imported as Redux's
+        /// <c>Module_ResourceScanner</c> (<c>ksp1_resource_scanners</c>).</summary>
+        public bool Ksp1ResourceScanners => _isru.ResourceScanners;
+        /// <summary>The native resource KSP1 Ore becomes (<c>ksp1_ore_resource</c>, default <c>CarbonRegolith</c>), trimmed.</summary>
+        public string Ksp1OreResource => _isru.OreResource;
+        /// <summary>The resource the Ore remap sets, or null when <see cref="Ksp1OreResource"/> is empty or <c>TestRocks</c>
+        /// (Redux's own mapping kept).</summary>
+        public string OreRemapTarget =>
+            _isru.OreResource.Length == 0 || string.Equals(_isru.OreResource, ReduxOreResource, StringComparison.OrdinalIgnoreCase)
+                ? null
+                : _isru.OreResource;
+        /// <summary>The KSP1 abundance a density-map value of 1 stands for (<c>harvest_abundance_at_full_density</c>, default
+        /// 0.05, 0.001 to 1).</summary>
+        public double HarvestAbundanceAtFullDensity => _isru.HarvestAbundance;
+        /// <summary>Multiplies the heat of converters and drills (<c>isru_heat_scale</c>, default 1, 0 to 10; 0 = no heat).</summary>
+        public double IsruHeatScale => _isru.HeatScale;
+        /// <summary>A <c>ModuleAnimationGroup</c> active clip plays while the part's native module runs
+        /// (<c>isru_active_animation</c>, default true; needs <see cref="Enabled"/>).</summary>
+        public bool IsruActiveAnimation => _isru.ActiveAnimation;
+
+        /// <summary>Redux's own mapping of KSP1 Ore.</summary>
+        public const string ReduxOreResource = "TestRocks";
+
+        /// <summary>The ISRU keys of 0.10.0, read together.</summary>
+        private sealed class SwitchesIsru
+        {
+            public bool Converters = true, Drills = true, SurveyScanners = true, ResourceScanners = true, ActiveAnimation = true;
+            public string OreResource = "CarbonRegolith";
+            public double HarvestAbundance = 0.05, HeatScale = 1.0;
+        }
+
+        private readonly SwitchesIsru _isru;
+
         /// <summary>The <c>b9_*</c> keys of 0.9.0, read together.</summary>
         private sealed class SwitchesB9
         {
@@ -197,13 +237,14 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
-            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9)
+            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru)
         {
+            _isru = isru;
             _b9 = b9;
             _mm = mm;
             _audit = audit;
@@ -247,6 +288,7 @@ namespace KSP1PartMod.Animation.Settings
                 var audit = new SwitchesAudit();
                 var mm = new SwitchesMm();
                 var b9 = new SwitchesB9();
+                var isru = new SwitchesIsru();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -294,6 +336,14 @@ namespace KSP1PartMod.Animation.Settings
                         case "b9_module_active": ReadBool(p, ref b9.ModuleActive, problems); break;
                         case "b9_part_scalars": ReadBool(p, ref b9.PartScalars, problems); break;
                         case "b9_new_part_switches": ReadBool(p, ref b9.NewPartSwitches, problems); break;
+                        case "ksp1_converters": ReadBool(p, ref isru.Converters, problems); break;
+                        case "ksp1_drills": ReadBool(p, ref isru.Drills, problems); break;
+                        case "ksp1_survey_scanners": ReadBool(p, ref isru.SurveyScanners, problems); break;
+                        case "ksp1_resource_scanners": ReadBool(p, ref isru.ResourceScanners, problems); break;
+                        case "ksp1_ore_resource": ReadString(p, ref isru.OreResource, problems); break;
+                        case "harvest_abundance_at_full_density": ReadClampedDouble(p, 0.001, 1, ref isru.HarvestAbundance, problems); break;
+                        case "isru_heat_scale": ReadClampedDouble(p, 0, 10, ref isru.HeatScale, problems); break;
+                        case "isru_active_animation": ReadBool(p, ref isru.ActiveAnimation, problems); break;
                         case "mm_plugin_folders": mm.PluginFolders = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.PluginFolders; break;
                         case "mm_needs_keep": mm.NeedsKeep = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.NeedsKeep; break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
@@ -304,7 +354,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru);
             }
             catch (Exception e)
             {
@@ -337,6 +387,18 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>A finite number, clamped to min..max (reported when it was outside).</summary>
         private static void ReadClampedFloat(JProperty p, double min, double max, ref float value, List<string> problems)
         {
+            if (TryReadClamped(p, min, max, out var v, problems)) value = (float)v;
+        }
+
+        /// <summary>As <see cref="ReadClampedFloat"/>, kept as a double.</summary>
+        private static void ReadClampedDouble(JProperty p, double min, double max, ref double value, List<string> problems)
+        {
+            if (TryReadClamped(p, min, max, out var v, problems)) value = v;
+        }
+
+        private static bool TryReadClamped(JProperty p, double min, double max, out double value, List<string> problems)
+        {
+            value = 0;
             if (p.Value.Type == JTokenType.Integer || p.Value.Type == JTokenType.Float)
             {
                 var v = (double)p.Value;
@@ -344,11 +406,19 @@ namespace KSP1PartMod.Animation.Settings
                 {
                     var c = Math.Min(max, Math.Max(min, v));
                     if (c != v) problems.Add($"\"{p.Name}\" is outside {Inv(min)} to {Inv(max)}, clamped to {Inv(c)}");
-                    value = (float)c;
-                    return;
+                    value = c;
+                    return true;
                 }
             }
             problems.Add($"\"{p.Name}\" is not a number of {Inv(min)} to {Inv(max)}, default kept");
+            return false;
+        }
+
+        /// <summary>A string, trimmed (empty allowed).</summary>
+        private static void ReadString(JProperty p, ref string value, List<string> problems)
+        {
+            if (p.Value.Type == JTokenType.String) value = ((string)p.Value).Trim();
+            else problems.Add($"\"{p.Name}\" is not a string, default kept");
         }
 
         /// <summary>A whole number, clamped to min..max (reported when it was outside). 0 is refused and the default kept.</summary>

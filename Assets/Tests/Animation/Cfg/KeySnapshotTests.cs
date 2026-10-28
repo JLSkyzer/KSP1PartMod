@@ -45,14 +45,16 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             modules.Any(m => "ModuleDeployableSolarPanel".Equals(m.GetValue("name"), StringComparison.OrdinalIgnoreCase));
 
         /// <summary>The sorted keys of the entries of kinds up to <paramref name="lastKind"/>, under each switch pair.</summary>
-        private static string KeysOf(IReadOnlyList<IKsp1Node> modules, EntryKind lastKind)
+        private static string KeysOf(IReadOnlyList<IKsp1Node> modules, EntryKind lastKind, ISet<string> native = null,
+            bool shrouds = false, bool ablatorChar = false)
         {
             var sb = new StringBuilder();
             foreach (var own in new[] { false, true })
             foreach (var follow in new[] { false, true })
             {
                 // Plugin modules and B9 gates on (the 0.5.0 defaults): the keys of the older kinds must not move.
-                var plan = OwnershipPlanner.Plan(modules, HasNativeSolar(modules), new HashSet<string>(), own, follow, null, true, true);
+                var plan = OwnershipPlanner.Plan(modules, HasNativeSolar(modules), native ?? new HashSet<string>(), own, follow, null, true, true,
+                    shrouds, ablatorChar);
                 sb.Append("own=").Append(own).Append(" follow=").Append(follow).Append(':');
                 foreach (var key in plan.Entries.Where(e => e.Kind <= lastKind).Select(e => e.Key).OrderBy(k => k, StringComparer.Ordinal))
                     sb.Append('\n').Append(key);
@@ -139,6 +141,34 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             TestContext.WriteLine($"{partsWithChar} real part(s) get an ablator char, {partsKeepingTheirLight} keep their light instead");
             Assert.AreEqual(6, partsWithChar, "the 6 installed _BurnColor shields with useChar = True and a shieldChar");
             Assert.AreEqual(3, partsKeepingTheirLight, "the KV1, KV2 and KV3 pods");
+        }
+
+        /// <summary>0.10.0: the ISRU importers add <c>Module_ResourceConverter</c>, <c>Module_Mine</c> and
+        /// <c>Module_ResourceScanner</c> to the part's native modules; no planner input is added. The keys of the stock ISRU
+        /// parts are those of the 0.3.2 and 0.4.0 snapshots, and every key (2b kinds included) is the same with those native
+        /// modules present (the ISRU switches on) and absent (off), with or without shrouds and ablator chars.</summary>
+        [Test] public void Plan_IsruParts_KeysUnchanged_WithIsruSwitchesOnAndOff()
+        {
+            var on = new HashSet<string>(StringComparer.Ordinal) { "Module_ResourceConverter", "Module_Mine", "Module_ResourceScanner" };
+            var snapshot032 = new HashSet<string>(Snapshot(), StringComparer.Ordinal);
+            var snapshot040 = new HashSet<string>(Snapshot(Snapshot040Name), StringComparer.Ordinal);
+            foreach (var name in new[] { "ISRU", "RadialDrill", "MiniDrill", "OrbitalScanner", "SurveyScanner", "MiniISRU" })
+            {
+                var parts = RealParts().Where(p => p.Name == name).ToList();
+                Assert.AreEqual(1, parts.Count, name + " installed once");
+                var modules = parts[0].Modules;
+                foreach (var native in new[] { null, on })
+                {
+                    var line = Hex(name, 12) + " " + Hex(KeysOf(modules, Last032Kind, native), 16);
+                    Assert.IsTrue(snapshot032.Contains(line), $"{name}: 0.3.2 keys, native modules {(native == null ? "off" : "on")}");
+                    Assert.IsTrue(snapshot040.Contains(line), $"{name}: 0.4.0 keys, native modules {(native == null ? "off" : "on")}");
+                }
+                foreach (var shrouds in new[] { false, true })
+                foreach (var ablatorChar in new[] { false, true })
+                    Assert.AreEqual(KeysOf(modules, (EntryKind)int.MaxValue, null, shrouds, ablatorChar),
+                        KeysOf(modules, (EntryKind)int.MaxValue, on, shrouds, ablatorChar), $"{name}: every key, switches on and off");
+                TestContext.WriteLine($"{name}: keys unchanged, ISRU native modules on and off");
+            }
         }
 
         /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0
