@@ -34,8 +34,8 @@ namespace KSP1PartMod.Game
     {
         private const string FlagNotReproduced = "drill:nr:";
 
-        private readonly double _abundance, _heatScale;
-        private readonly bool _abundanceIsDefault;
+        private readonly double _multiplier, _heatScale;
+        private readonly bool _multiplierIsDefault;
 
         /// <summary>Tests: called after Redux's <c>CreateSerialized</c>, before the drill is counted (a throw = a failure).</summary>
         internal static Action<string> FaultForTests;
@@ -51,13 +51,13 @@ namespace KSP1PartMod.Game
         private static readonly ConditionalWeakTable<Ksp1PartImportContext, object> Seen = new ConditionalWeakTable<Ksp1PartImportContext, object>();
         private static readonly object SeenMark = new object();
         private static readonly Dictionary<string, PartStats> Stats = new Dictionary<string, PartStats>(StringComparer.Ordinal);
-        private static bool _abundanceLogged;
+        private static bool _multiplierLogged;
 
-        public HarvesterImporter(double abundance, double heatScale, bool abundanceIsDefault)
+        public HarvesterImporter(double multiplier, double heatScale, bool multiplierIsDefault)
         {
-            _abundance = abundance;
+            _multiplier = multiplier;
             _heatScale = heatScale;
-            _abundanceIsDefault = abundanceIsDefault;
+            _multiplierIsDefault = multiplierIsDefault;
         }
 
         internal static List<string> MissingMembers() => new List<string>(IsruAccess.Get().MissingDrill);
@@ -110,7 +110,7 @@ namespace KSP1PartMod.Game
 
                 var db = ConverterImporter.CurrentDatabase();
                 var r = ConverterImporter.Resources(db, IsruReference.Minable());
-                var map = HarvesterMapping.From(harvesters, r, _abundance, reference.Drill.HeatPerEc, _heatScale);
+                var map = HarvesterMapping.From(harvesters, r, reference, _multiplier, reference.Drill.HeatPerEc, _heatScale);
                 var stats = new PartStats
                 {
                     Ocean = map.SkippedOcean,
@@ -126,7 +126,7 @@ namespace KSP1PartMod.Game
                     if (asteroids > 0) NativeModules.Note(part, IsruLines.AsteroidDrillIgnored(asteroids));
                     return false;
                 }
-                LogAbundanceOnce(map.Abundance);
+                LogMultiplierOnce(map.Multiplier);
 
                 var f = map.Formula;
                 var label = IsruReference.DrillFormulaKey();
@@ -179,15 +179,15 @@ namespace KSP1PartMod.Game
             }
         }
 
-        private void LogAbundanceOnce(double abundance)
+        private void LogMultiplierOnce(double multiplier)
         {
             bool first;
             lock (Lock)
             {
-                first = !_abundanceLogged;
-                _abundanceLogged = true;
+                first = !_multiplierLogged;
+                _multiplierLogged = true;
             }
-            if (first) NativeModules.Info(IsruLines.HarvestAbundance(abundance, _abundanceIsDefault));
+            if (first) NativeModules.Info(IsruLines.HarvestMultiplier(multiplier, _multiplierIsDefault));
         }
 
         private static List<PartModuleResourceSetting> Settings(IEnumerable<IsruFlow> flows) =>
@@ -215,7 +215,7 @@ namespace KSP1PartMod.Game
             lock (Lock)
             {
                 Stats.Clear();
-                _abundanceLogged = false;
+                _multiplierLogged = false;
             }
             FaultForTests = null;
         }

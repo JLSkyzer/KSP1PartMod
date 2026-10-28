@@ -87,7 +87,7 @@ namespace KSP1PartMod.Tests.Animation.Native
             var harvesters = modules.Where(x => Named(x, HarvesterMapping.Ksp1Module)).ToList();
             if (harvesters.Count > 0)
             {
-                var map = HarvesterMapping.From(harvesters, r, 0.05, NativeIsruRef.FallbackDrill.HeatPerEc, 1);
+                var map = HarvesterMapping.From(harvesters, r, NativeIsruRef.Fallback, 1, NativeIsruRef.FallbackDrill.HeatPerEc, 1);
                 Both(x =>
                 {
                     x.Harvesters += harvesters.Count;

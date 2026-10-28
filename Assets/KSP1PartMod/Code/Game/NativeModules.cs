@@ -98,8 +98,8 @@ namespace KSP1PartMod.Game
                 SwitchKey = "ksp1_drills",
                 IsOn = s => s.Ksp1Drills,
                 MissingMembers = HarvesterImporter.MissingMembers,
-                Create = () => new HarvesterImporter(_settings?.HarvestAbundanceAtFullDensity ?? HarvesterMapping.DefaultAbundance,
-                    _settings?.IsruHeatScale ?? 1.0, AbundanceIsDefault(_settings)),
+                Create = () => new HarvesterImporter(_settings?.HarvestMultiplier ?? HarvesterMapping.DefaultMultiplier,
+                    _settings?.IsruHeatScale ?? 1.0, MultiplierIsDefault(_settings)),
                 Summary = HarvesterImporter.Summary,
             },
             new Converter
@@ -124,8 +124,8 @@ namespace KSP1PartMod.Game
             },
         };
 
-        private static bool AbundanceIsDefault(AnimationSettings s) =>
-            s == null || Math.Abs(s.HarvestAbundanceAtFullDensity - HarvesterMapping.DefaultAbundance) < 1e-12;
+        private static bool MultiplierIsDefault(AnimationSettings s) =>
+            s == null || Math.Abs(s.HarvestMultiplier - HarvesterMapping.DefaultMultiplier) < 1e-12;
 
         /// <summary>By part name: the native modules our importers added this session (read by the audit), the notes
         /// logged, and the summary flags.</summary>

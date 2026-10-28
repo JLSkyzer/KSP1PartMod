@@ -249,7 +249,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual("ElectricCharge", f.InputResources.Single().ResourceName);
             Assert.AreEqual(15f, f.InputResources.Single().Rate, "EC never converted");
             Assert.AreEqual("CarbonRegolith", f.OutputResources.Single().ResourceName, "Ore through the remap");
-            Assert.AreEqual(0.00375f, f.OutputResources.Single().Rate, 1e-9f, "1.5 x 0.05 KSP1 Ore x 0.05 t / 1 t");
+            Assert.AreEqual(5.556e-5f / 20 * 15, f.OutputResources.Single().Rate, 1e-11f, "the native drill's CarbonRegolith per EC/s x 15 EC/s (a stock drill)");
             Assert.AreEqual(262.5f, f.FluxGenerated, 1e-4f, "17.5 kW per EC/s x 15");
 
             Assert.IsTrue(NativeModules.Isru.TryGetDrill("RadialDrill", out var impact));
@@ -259,16 +259,17 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.AreEqual(new[] { HarvesterMapping.NativeModule }, NativeModules.Record.ConvertedModules("RadialDrill"));
 
             CollectionAssert.Contains(_lines,
-                "[KSP1PartMod] native: RadialDrill: drill: Ore -> CarbonRegolith at 0.00375 units/s at density 1 (Efficiency 1.5 x abundance 0.05), " +
-                "EC 15/s, heat 262.5 kW, impact 'ImpactTransform' 5.42 m; KSP2 drill: 5.556E-05 units/s for 20 EC/s");
+                "[KSP1PartMod] native: RadialDrill: drill: Ore -> CarbonRegolith at 4.167E-05 units/s at density 1 (KSP2 yield 2.778E-06 per EC/s from drill_2v_radial " +
+                "x 15 EC/s x Efficiency factor 1 (1.5 / (0.1 x 15)) x harvest_multiplier 1); per EC/s: KSP1 drill 2.778E-06, KSP2 drill 2.778E-06; " +
+                "EC 15/s, heat 262.5 kW, impact 'ImpactTransform' 5.42 m");
             CollectionAssert.Contains(_lines,
-                "[KSP1PartMod] native: drills: a density of 1 counts as a KSP1 abundance of 0.05 (harvest_abundance_at_full_density, default; a guess, to calibrate in game)");
+                "[KSP1PartMod] native: drills: a KSP1 drill yields what a KSP2 drill mines per EC/s x its EC/s x Efficiency / (0.1 x EC/s) x 1 (harvest_multiplier, default)");
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: RadialDrill: " + IsruLines.AsteroidDrillIgnored(2));
 
             // A rebuild logs and counts nothing twice.
             Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(harvester, Context(part), out _));
             Assert.AreEqual(1, _lines.Count(l => l.StartsWith("[KSP1PartMod] native: RadialDrill: drill: ")));
-            Assert.AreEqual(1, _lines.Count(l => l.Contains("a density of 1 counts as")));
+            Assert.AreEqual(1, _lines.Count(l => l.Contains("(harvest_multiplier")));
 
             NativeModules.LogImportSummaryOnce();
             CollectionAssert.Contains(_lines,
@@ -277,15 +278,15 @@ namespace KSP1PartMod.Tests.ReduxMu
                 "not reproduced: ThermalEfficiency 1");
         }
 
-        [Test] public void Drill_AbundanceSetting_Used_AndLogged()
+        [Test] public void Drill_MultiplierSetting_Used_AndLogged()
         {
-            Assert.IsTrue(Arm(Database(), "{\"harvest_abundance_at_full_density\": 0.2}"));
+            Assert.IsTrue(Arm(Database(), "{\"harvest_multiplier\": 4}"));
             var part = Part(RadialDrillModules, "RadialDrill");
             var context = Context(part);
             Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(Modules(part, "ModuleResourceHarvester")[0], context, out _));
-            Assert.AreEqual(0.015f, context.ModuleData.OfType<Data_Mine>().Single().MiningFormulaDefinition.OutputResources[0].Rate, 1e-9f);
+            Assert.AreEqual(5.556e-5f / 20 * 15 * 4, context.ModuleData.OfType<Data_Mine>().Single().MiningFormulaDefinition.OutputResources[0].Rate, 1e-10f);
             CollectionAssert.Contains(_lines,
-                "[KSP1PartMod] native: drills: a density of 1 counts as a KSP1 abundance of 0.2 (harvest_abundance_at_full_density; a guess, to calibrate in game)");
+                "[KSP1PartMod] native: drills: a KSP1 drill yields what a KSP2 drill mines per EC/s x its EC/s x Efficiency / (0.1 x EC/s) x 4 (harvest_multiplier)");
         }
 
         [Test] public void AtmosphericHarvester_False_Noted_Counted()
@@ -352,7 +353,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(edited, scratch, out _));
             var outputs = scratch.ModuleData.OfType<Data_Mine>().Single().MiningFormulaDefinition.OutputResources;
             Assert.AreEqual(1, outputs.Count, "replaced, not appended");
-            Assert.AreEqual(0.0075f, outputs[0].Rate, 1e-9f);
+            Assert.AreEqual(5.556e-5f / 20 * 15 * 2, outputs[0].Rate, 1e-10f, "Efficiency 3 for 15 EC/s: twice a stock drill per EC/s");
         }
 
         // ------------------------------------------------------------------ scanners

@@ -120,7 +120,7 @@ namespace KSP1PartMod.Native
         /// <summary>The minable set when neither the density maps nor the native drill can be read (26w42c).</summary>
         public static readonly IReadOnlyList<string> FallbackMinable = new[] { "Water", "Ammonia", "CarbonRegolith", "Uranium" };
 
-        public static readonly NativeIsruRef Fallback = new NativeIsruRef(FallbackDrill, FallbackConverterHeatPerEc, 0, NativeScannerRef.Fallback);
+        public static readonly NativeIsruRef Fallback = new NativeIsruRef(FallbackDrill, null, FallbackConverterHeatPerEc, 0, NativeScannerRef.Fallback);
 
         public NativeDrillRef Drill { get; }
         public double ConverterHeatPerEc { get; }
@@ -129,15 +129,53 @@ namespace KSP1PartMod.Native
         public bool ConvertersAreFallback => ConverterModes == 0;
         public NativeScannerRef Scanner { get; }
 
-        /// <summary>The native drill's outputs, the second source of the minable set.</summary>
-        public IReadOnlyList<string> MinableFromDrill => Drill.Outputs.Select(o => o.Name).Distinct(StringComparer.Ordinal).ToList();
+        /// <summary>Every native drill read (the reference included), by heat per EC/s then part name; the fallback drill alone
+        /// when none was read.</summary>
+        public IReadOnlyList<NativeDrillRef> Drills { get; }
 
-        private NativeIsruRef(NativeDrillRef drill, double converterHeatPerEc, int converterModes, NativeScannerRef scanner)
+        /// <summary>The outputs of every native drill (the reference drill's first, in its order), the second source of the
+        /// minable set.</summary>
+        public IReadOnlyList<string> MinableFromDrill =>
+            new[] { Drill }.Concat(Drills).SelectMany(d => d.Outputs).Select(o => o.Name).Distinct(StringComparer.Ordinal).ToList();
+
+        private NativeIsruRef(NativeDrillRef drill, IReadOnlyList<NativeDrillRef> drills, double converterHeatPerEc, int converterModes,
+            NativeScannerRef scanner)
         {
             Drill = drill;
+            Drills = drills ?? new[] { drill };
             ConverterHeatPerEc = converterHeatPerEc;
             ConverterModes = converterModes;
             Scanner = scanner;
+        }
+
+        /// <summary>What a native drill yields of <paramref name="resource"/> per EC/s at density 1 (units/s per EC/s): the
+        /// reference drill's when it mines it, else the first other native drill that does; <paramref name="from"/> names that
+        /// drill. 0 and null when no native drill mines it.</summary>
+        public double YieldPerEc(string resource, out string from)
+        {
+            foreach (var d in new[] { Drill }.Concat(Drills))
+            {
+                var rate = d.RateOf(resource);
+                if (rate > 0 && Positive(d.Ec))
+                {
+                    from = d.Part;
+                    return rate / d.Ec;
+                }
+            }
+            from = null;
+            return 0;
+        }
+
+        /// <summary>The reference drill's median yield per EC/s over its outputs (the lower one for an even count), 0 when it
+        /// has none: the yield of a minable resource that no native drill mines.</summary>
+        public double MedianYieldPerEc
+        {
+            get
+            {
+                if (!Positive(Drill.Ec)) return 0;
+                var rates = Drill.Outputs.Where(o => o.Rate > 0).Select(o => o.Rate / Drill.Ec).OrderBy(r => r).ToList();
+                return rates.Count == 0 ? 0 : rates[(rates.Count - 1) / 2];
+            }
         }
 
         private static bool Positive(double v) => v > 0 && !double.IsInfinity(v) && !double.IsNaN(v);
@@ -149,11 +187,8 @@ namespace KSP1PartMod.Native
             var drills = all.Where(f => f.Kind == NativeIsruKind.Mine && Positive(f.Ec) && Positive(f.FluxGenerated) && f.Outputs.Count > 0)
                 .OrderBy(f => f.FluxGenerated / f.Ec).ThenBy(f => f.Part, StringComparer.Ordinal).ToList();
             var drill = FallbackDrill;
-            if (drills.Count > 0)
-            {
-                var d = drills[(drills.Count - 1) / 2];
-                drill = new NativeDrillRef(d.Part, d.Ec, d.FluxGenerated / d.Ec, d.Outputs, false);
-            }
+            var drillRefs = drills.Select(d => new NativeDrillRef(d.Part, d.Ec, d.FluxGenerated / d.Ec, d.Outputs, false)).ToList();
+            if (drillRefs.Count > 0) drill = drillRefs[(drillRefs.Count - 1) / 2];
 
             var heats = all.Where(f => f.Kind == NativeIsruKind.Converter && Positive(f.Ec) && Positive(f.FluxGenerated))
                 .Select(f => f.FluxGenerated / f.Ec).OrderBy(h => h).ToList();
@@ -166,7 +201,7 @@ namespace KSP1PartMod.Native
                 : new NativeScannerRef(scanner.Part, scanner.Ec, scanner.Outputs.Select(o => o.Name).ToList(), scanner.TimeToComplete,
                     scanner.MinAltitude, scanner.MaxAltitude, scanner.MinInclination, scanner.MaxInclination);
 
-            return new NativeIsruRef(drill, converterHeat, heats.Count, scannerRef);
+            return new NativeIsruRef(drill, drillRefs.Count > 0 ? drillRefs : null, converterHeat, heats.Count, scannerRef);
         }
     }
 }

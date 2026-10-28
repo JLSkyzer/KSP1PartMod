@@ -5,6 +5,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using KSP1PartMod.Animation.Behaviours;
 using KSP1PartMod.Animation.Cfg;
 using NUnit.Framework;
 
@@ -149,8 +150,8 @@ namespace KSP1PartMod.Tests.Animation.Cfg
         /// modules present (the ISRU switches on) and absent (off), with or without shrouds and ablator chars.
         /// <para>The snapshot half is a real check. The on/off half is a regression guard, not a proof: no native counterpart
         /// is listed in the planner today, so the native set is not read and no setting reaches the planner. It catches a
-        /// future counterparts entry that would move a key. The real on/off check of <c>isru_active_animation</c> comes with
-        /// Task 4.</para></summary>
+        /// future counterparts entry that would move a key. The real on/off check of <c>isru_active_animation</c> is
+        /// <see cref="IsruActiveAnimation_OnAndOff_NoKeyMoves"/>.</para></summary>
         [Test] public void Plan_IsruParts_KeysUnchanged_WithIsruSwitchesOnAndOff()
         {
             var on = new HashSet<string>(StringComparer.Ordinal) { "Module_ResourceConverter", "Module_Mine", "Module_ResourceScanner" };
@@ -173,6 +174,46 @@ namespace KSP1PartMod.Tests.Animation.Cfg
                         KeysOf(modules, (EntryKind)int.MaxValue, on, shrouds, ablatorChar), $"{name}: every key, switches on and off");
                 TestContext.WriteLine($"{name}: keys unchanged, ISRU native modules on and off");
             }
+        }
+
+        /// <summary>Task 4: <c>isru_active_animation</c> acts at run time only, on the Group entries' machines (an activity input
+        /// bound by <see cref="IsruAnimRules.WantsActiveInput"/>). On the real stock ISRU parts, with the switch on and off:
+        /// the planned keys are the same, and every Group machine, deployed and run in flight with its native module running,
+        /// saves the same keys and values (<c>.deployed</c> only). The switch does act: with it on, the drills' active clips
+        /// play; off, they do not.</summary>
+        [Test] public void IsruActiveAnimation_OnAndOff_NoKeyMoves()
+        {
+            var playedOn = 0;
+            foreach (var name in new[] { "ISRU", "RadialDrill", "MiniDrill", "OrbitalScanner", "SurveyScanner", "MiniISRU" })
+            {
+                var parts = RealParts().Where(p => p.Name == name).ToList();
+                Assert.AreEqual(1, parts.Count, name + " installed once");
+                var modules = parts[0].Modules;
+                var results = new List<(string Keys, Dictionary<string, float> Saved, int Playing)>();
+                foreach (var on in new[] { false, true })
+                {
+                    var plan = OwnershipPlanner.Plan(modules, HasNativeSolar(modules), new HashSet<string>(), false, true, null, true, true, true, true);
+                    var keys = string.Join("\n", plan.Entries.Select(e => e.Key).OrderBy(k => k, StringComparer.Ordinal));
+                    var saved = new Dictionary<string, float>(StringComparer.Ordinal);
+                    var playing = 0;
+                    foreach (var def in plan.Entries.Where(e => e.Kind == EntryKind.Group))
+                    {
+                        var g = new GroupMachine(def, 2f, 3f);
+                        if (IsruAnimRules.WantsActiveInput(def, on)) g.ActiveInput = () => true;
+                        g.Deploy(false);
+                        for (var t = 0; t < 300; t++) g.Tick(0.02f, false);
+                        if (g.ActivePose.Enabled) playing++;
+                        g.Save(saved);
+                    }
+                    results.Add((keys, saved, playing));
+                }
+                Assert.AreEqual(results[0].Keys, results[1].Keys, name + ": planned keys, switch off and on");
+                CollectionAssert.AreEquivalent(results[0].Saved, results[1].Saved, name + ": saved keys and values, switch off and on");
+                Assert.IsTrue(results[1].Saved.Keys.All(k => k.EndsWith(".deployed", StringComparison.Ordinal)), name);
+                if (results[1].Playing > results[0].Playing) playedOn++;
+                TestContext.WriteLine($"{name}: {results[1].Saved.Count} group key(s), active clips playing off {results[0].Playing}, on {results[1].Playing}");
+            }
+            Assert.That(playedOn, Is.GreaterThanOrEqualTo(2), "the switch plays the drills' active clips (RadialDrill, MiniDrill)");
         }
 
         /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0

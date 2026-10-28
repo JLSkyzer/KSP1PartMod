@@ -108,6 +108,7 @@ namespace KSP1PartMod.Game.Animation
             {
                 KSP1PartModPlugin.Log?.LogError($"[KSP1PartMod] anim: {SafePartName()} module init failed: {e}");
             }
+            FinishIsruInit(); // the deploy bridge of a native drill or scanner, whether Setup ran or not
         }
 
         protected override void OnModuleUpdate(float deltaTime) => Drive(deltaTime, false);
@@ -362,6 +363,7 @@ namespace KSP1PartMod.Game.Animation
                     if (activeNote != null) note = note == null ? "active: " + activeNote : note + "; active: " + activeNote;
                     if (!deploy && !active) return null;
                     e.Machine = e.Group = new GroupMachine(def, deploy ? deployLength : 0f, active ? activeLength : 0f, editorSpeed);
+                    if (active) BindActiveInput(e, settings);
                     break;
                 }
                 case EntryKind.AeroGate:
@@ -779,6 +781,7 @@ namespace KSP1PartMod.Game.Animation
                 var e = _entries[i];
                 if (!e.Disabled) Step(e, dt, inEditor, catchErrors: true);
             }
+            StepBridge();
             try
             {
                 DriveReduxTracks();

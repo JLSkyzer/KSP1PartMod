@@ -46,5 +46,32 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
             Assert.AreEqual(DeployState.Extending, deploy.State, "the measured Deploy is still moving");
             Assert.That(Frames, Is.Not.AllocatingGCMemory());
         }
+
+        /// <summary>0.10.0: the Group's active input (bound once) and the deploy bridge's state rule, 10 000 steps.</summary>
+        [Test] public void Group_ActiveInput_AndBridgeRule_DoNotAllocate()
+        {
+            var running = false;
+            var group = new GroupMachine(new AnimEntryDef { Kind = EntryKind.Group, Key = "a", Clip = "d", SecondClip = "x" }, 1f, 1f)
+            {
+                ActiveInput = () => running,
+            };
+            group.Deploy(false);
+            var state = BridgeDeploy.Retracted;
+            var i = 0;
+            void Steps()
+            {
+                for (var k = 0; k < 10000; k++, i++)
+                {
+                    running = (i / 50 & 1) == 0;
+                    group.Tick(0.02f, false);
+                    _ = group.ActivePose;
+                    state = IsruAnimRules.StateOf(group.Deployed, group.IsMoving, (i & 7) == 0);
+                }
+            }
+
+            Steps(); // warm up (JIT)
+            Assert.AreEqual(BridgeDeploy.Extended, state);
+            Assert.That(Steps, Is.Not.AllocatingGCMemory());
+        }
     }
 }

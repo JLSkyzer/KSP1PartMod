@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using KSP1PartMod.Animation.Cfg;
 
@@ -11,9 +12,10 @@ namespace KSP1PartMod.Animation.Behaviours
     /// deploy clip from its end at −1. In the editor both run at ±<see cref="AnimEntryDef.EditorSpeedMult"/>
     /// (≥ 1000: at once).</item>
     /// <item>In flight only, once the deploy clip has stopped, the active clip plays while deployed with
-    /// <see cref="AnimEntryDef.AlwaysActive"/>; it loops (KSP1 restarts it whenever it is not playing). Phase 1
-    /// has no converter or harvester activity input, so without AlwaysActive the active clip never plays, and the
-    /// deactivate clip is not driven.</item>
+    /// <see cref="AnimEntryDef.AlwaysActive"/>, or while the optional <see cref="ActiveInput"/> (0.10.0,
+    /// <c>isru_active_animation</c>: the part's native converter, drill or scanner runs) returns true; it loops (KSP1
+    /// restarts it whenever it is not playing) and stops at once when the input turns false. Without either, the active
+    /// clip never plays. The deactivate clip is not driven.</item>
     /// </list>
     /// An entry without a deploy clip deploys and retracts at once (<see cref="DeployPose"/> is off). Saved:
     /// <c>.deployed</c>.</summary>
@@ -40,6 +42,13 @@ namespace KSP1PartMod.Animation.Behaviours
             _deployLength = Machine.Length(deployClipLength);
             _activeLength = Machine.Length(activeClipLength);
         }
+
+        /// <summary>Optional activity input (0.10.0): the active clip plays while it returns true (and the part is deployed,
+        /// in flight). Bound once by the glue; it must not allocate. <see cref="AnimEntryDef.AlwaysActive"/> wins.</summary>
+        public Func<bool> ActiveInput { get; set; }
+
+        /// <summary>The entry has a deploy clip (its <see cref="DeployPose"/> moves).</summary>
+        public bool HasDeploy => _hasDeploy;
 
         /// <summary>KSP1 <c>isDeployed</c>: true from the start of a deploy, false from the start of a retract.</summary>
         public bool Deployed { get; private set; }
@@ -82,7 +91,12 @@ namespace KSP1PartMod.Animation.Behaviours
                 if (_deployT >= 1f || _deployT <= 0f) Settle();
                 return;
             }
-            if (inEditor || !Deployed || !_hasActive || !_alwaysActive) return;
+            if (inEditor || !Deployed || !_hasActive) return;
+            if (!_alwaysActive && (ActiveInput == null || !ActiveInput()))
+            {
+                _activePlaying = false;
+                return;
+            }
             if (!_activePlaying)
             {
                 _activePlaying = true;

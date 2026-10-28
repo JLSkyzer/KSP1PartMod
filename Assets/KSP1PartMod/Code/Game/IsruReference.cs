@@ -149,8 +149,14 @@ namespace KSP1PartMod.Game
         private static IEnumerable<NativeIsruFormula> GameFormulas()
         {
             var parts = GameManager.Instance?.Game?.Parts?.PartData;
-            if (parts == null) yield break;
-            foreach (var kv in parts.ToList())
+            return parts == null ? Enumerable.Empty<NativeIsruFormula>() : FormulasOf(parts.ToList());
+        }
+
+        /// <summary>The ISRU formulas of <paramref name="parts"/> (part name → <c>PartCore</c>), the KSP1 imports and the
+        /// variants with '+' left out. Tests: real <c>PartCore</c>s.</summary>
+        internal static IEnumerable<NativeIsruFormula> FormulasOf(IEnumerable<KeyValuePair<string, PartCore>> parts)
+        {
+            foreach (var kv in parts)
             {
                 var core = kv.Value;
                 if (kv.Key == null || kv.Key.Contains('+') || core?.data == null) continue;

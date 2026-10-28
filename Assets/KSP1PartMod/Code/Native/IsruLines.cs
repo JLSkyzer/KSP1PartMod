@@ -137,15 +137,20 @@ namespace KSP1PartMod.Native
             }).ToList();
         }
 
-        /// <summary>One harvested resource of a converted drill, compared with the native drill.</summary>
+        /// <summary>One harvested resource of a converted drill: its yield, how it was derived from the native drill, and both
+        /// yields per EC/s side by side (ruling of 2026-10-28).</summary>
         public static string Drill(string part, HarvesterMapping m, HarvestOutput o, NativeDrillRef native)
         {
             native = native ?? NativeIsruRef.FallbackDrill;
             var transform = string.IsNullOrEmpty(m.ImpactTransform) ? "(none)" : m.ImpactTransform;
+            var from = o.NativeFrom ?? "the median of " + native.Part;
+            var factor = o.Ec > 0
+                ? $"Efficiency factor {Inv(o.EfficiencyFactor)} ({Inv(o.Efficiency)} / ({Inv(HarvesterMapping.Ksp1EfficiencyPerEc)} x {Inv(o.Ec)}))"
+                : $"Efficiency {Inv(o.Efficiency)} / {Inv(HarvesterMapping.Ksp1EfficiencyPerEc)}, no EC input";
             return Prefix + $"{part}: drill: {o.Ksp1Name} -> {o.Name} at {Inv(o.Rate)} units/s at density 1 " +
-                   $"(Efficiency {Inv(o.Efficiency)} x abundance {Inv(m.Abundance)}), EC {Inv(m.Formula.EcInput)}/s, " +
-                   $"heat {Inv(m.Formula.FluxGenerated)} kW, impact '{transform}' {Inv(m.ImpactRange)} m; " +
-                   $"KSP2 drill: {Inv(native.RateOf(o.Name))} units/s for {Inv(native.Ec)} EC/s";
+                   $"(KSP2 yield {Inv(o.NativePerEc)} per EC/s from {from} x {Inv(o.Ec)} EC/s x {factor} x harvest_multiplier {Inv(m.Multiplier)}); " +
+                   $"per EC/s: KSP1 drill {Inv(o.PerEc)}, KSP2 drill {Inv(o.NativePerEc)}; " +
+                   $"EC {Inv(m.Formula.EcInput)}/s, heat {Inv(m.Formula.FluxGenerated)} kW, impact '{transform}' {Inv(m.ImpactRange)} m";
         }
 
         public static string DrillsSummary(int parts, IEnumerable<string> resources, int ocean, int atmospheric, int exospheric, int noMap,
@@ -160,10 +165,10 @@ namespace KSP1PartMod.Native
             $"{string.Join(", ", s.ScannableResources)}, {Inv(s.RequiredResources.Where(f => IsruResources.IsElectricCharge(f.Name)).Sum(f => f.Rate))} EC/s, " +
             $"{Inv(s.TimeToComplete)} s, altitude {Altitude(s.MinAltitude, s.MaxAltitude)}, inclination {Inclination(s.MinInclination, s.MaxInclination)}";
 
-        /// <summary>Not in the plan's list (ruling: the abundance is a guess, so its value is logged once, at the first drill).</summary>
-        public static string HarvestAbundance(double abundance, bool isDefault) =>
-            Prefix + $"drills: a density of 1 counts as a KSP1 abundance of {Inv(abundance)} " +
-            $"(harvest_abundance_at_full_density{(isDefault ? ", default" : "")}; a guess, to calibrate in game)";
+        /// <summary>Not in the plan's list (ruling of 2026-10-28: the yield rule and the multiplier, logged once, at the first drill).</summary>
+        public static string HarvestMultiplier(double multiplier, bool isDefault) =>
+            Prefix + $"drills: a KSP1 drill yields what a KSP2 drill mines per EC/s x its EC/s x Efficiency / " +
+            $"({Inv(HarvesterMapping.Ksp1EfficiencyPerEc)} x EC/s) x {Inv(multiplier)} (harvest_multiplier{(isDefault ? ", default" : "")})";
 
         /// <summary>A part that already holds a <c>Data_Mine</c> (a future Redux importer, or a rebuild): nothing added.</summary>
         public const string ExistingMineNote = HarvesterMapping.Ksp1Module + ": the part already has a Data_Mine, ours not added";
@@ -199,8 +204,10 @@ namespace KSP1PartMod.Native
         public static string DrillProbeFound(string part, string transform, double range) =>
             RuntimePrefix + $"{part}: drill probe '{transform}' found, {Inv(range)} m along +Z";
 
+        /// <summary>Ruling of 2026-10-28: a drill without its arm transforms gets no deploy bridge (Redux's ground check would
+        /// throw on every frame once landed and extended), so it stays NotDeployed rather than the plan's TooHigh.</summary>
         public static string DrillProbeNotFound(string part, string transform) =>
-            RuntimePrefix + $"{part}: drill probe '{transform}' not found on the part, the drill will report TooHigh";
+            RuntimePrefix + $"{part}: drill probe '{transform}' not found on the part, the drill stays not deployed (no deploy bridge)";
 
         public static string DeployFollows(string part, string nativeModule, string entryKey) =>
             RuntimePrefix + $"{part}: {nativeModule} deploy follows {entryKey}";

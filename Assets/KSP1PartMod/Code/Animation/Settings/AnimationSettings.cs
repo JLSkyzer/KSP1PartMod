@@ -148,9 +148,9 @@ namespace KSP1PartMod.Animation.Settings
             _isru.OreResource.Length == 0 || string.Equals(_isru.OreResource, ReduxOreResource, StringComparison.OrdinalIgnoreCase)
                 ? null
                 : _isru.OreResource;
-        /// <summary>The KSP1 abundance a density-map value of 1 stands for (<c>harvest_abundance_at_full_density</c>, default
-        /// 0.05, 0.001 to 1).</summary>
-        public double HarvestAbundanceAtFullDensity => _isru.HarvestAbundance;
+        /// <summary>Multiplies the yield of KSP1 drills, which is derived from the KSP2 drill per EC/s (<c>harvest_multiplier</c>, default
+        /// 1, 0.01 to 100).</summary>
+        public double HarvestMultiplier => _isru.HarvestMultiplier;
         /// <summary>Multiplies the heat of converters and drills (<c>isru_heat_scale</c>, default 1, 0 to 10; 0 = no heat).</summary>
         public double IsruHeatScale => _isru.HeatScale;
         /// <summary>A <c>ModuleAnimationGroup</c> active clip plays while the part's native module runs
@@ -165,7 +165,7 @@ namespace KSP1PartMod.Animation.Settings
         {
             public bool Converters = true, Drills = true, SurveyScanners = true, ResourceScanners = true, ActiveAnimation = true;
             public string OreResource = "CarbonRegolith";
-            public double HarvestAbundance = 0.05, HeatScale = 1.0;
+            public double HarvestMultiplier = 1.0, HeatScale = 1.0;
         }
 
         private readonly SwitchesIsru _isru;
@@ -341,7 +341,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "ksp1_survey_scanners": ReadBool(p, ref isru.SurveyScanners, problems); break;
                         case "ksp1_resource_scanners": ReadBool(p, ref isru.ResourceScanners, problems); break;
                         case "ksp1_ore_resource": ReadString(p, ref isru.OreResource, problems); break;
-                        case "harvest_abundance_at_full_density": ReadClampedDouble(p, 0.001, 1, ref isru.HarvestAbundance, problems); break;
+                        case "harvest_multiplier": ReadClampedDouble(p, 0.01, 100, ref isru.HarvestMultiplier, problems); break;
                         case "isru_heat_scale": ReadClampedDouble(p, 0, 10, ref isru.HeatScale, problems); break;
                         case "isru_active_animation": ReadBool(p, ref isru.ActiveAnimation, problems); break;
                         case "mm_plugin_folders": mm.PluginFolders = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.PluginFolders; break;

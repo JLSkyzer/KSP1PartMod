@@ -107,12 +107,14 @@ namespace KSP1PartMod.Tests.Animation.Native
             var m = HarvesterMapping.From(new[] { Module(
                 "name = ModuleResourceHarvester\nHarvesterType = 0\nEfficiency = 1.5\nResourceName = Ore\nImpactTransform = ImpactTransform\n" +
                 "ImpactRange = 5.42\nGeneratesHeat = true\nINPUT_RESOURCE\n{\nResourceName = ElectricCharge\nRatio = 15\n}") },
-                IsruFakes.Table(), 0.05, 17.5, 1);
+                IsruFakes.Table(), NativeIsruRef.From(NativeIsruRefTests.NativeParts()), 1, 17.5, 1);
             var native = NativeIsruRef.From(NativeIsruRefTests.NativeParts()).Drill;
-            Assert.AreEqual("[KSP1PartMod] native: RadialDrill: drill: Ore -> CarbonRegolith at 0.00375 units/s at density 1 " +
-                            "(Efficiency 1.5 x abundance 0.05), EC 15/s, heat 262.5 kW, impact 'ImpactTransform' 5.42 m; " +
-                            "KSP2 drill: 5.556E-05 units/s for 20 EC/s",
+            Assert.AreEqual("[KSP1PartMod] native: RadialDrill: drill: Ore -> CarbonRegolith at 4.167E-05 units/s at density 1 " +
+                            "(KSP2 yield 2.778E-06 per EC/s from drill_2v_radial x 15 EC/s x Efficiency factor 1 (1.5 / (0.1 x 15)) x harvest_multiplier 1); " +
+                            "per EC/s: KSP1 drill 2.778E-06, KSP2 drill 2.778E-06; EC 15/s, heat 262.5 kW, impact 'ImpactTransform' 5.42 m",
                 IsruLines.Drill("RadialDrill", m, m.Outputs[0], native));
+            Assert.AreEqual("[KSP1PartMod] native: drills: a KSP1 drill yields what a KSP2 drill mines per EC/s x its EC/s x Efficiency / " +
+                            "(0.1 x EC/s) x 1 (harvest_multiplier, default)", IsruLines.HarvestMultiplier(1, true));
             Assert.AreEqual("[KSP1PartMod] native: drills: 2 part(s) got Module_Mine (CarbonRegolith); skipped: 3 ocean, 4 atmospheric, " +
                             "0 exospheric, 1 resource without a map; ModuleAsteroidDrill/ModuleCometDrill ignored on 2 part(s) " +
                             "(no asteroids or comets in KSP2); not reproduced: ThermalEfficiency 2",
@@ -150,7 +152,7 @@ namespace KSP1PartMod.Tests.Animation.Native
                 IsruLines.MemberNotFound("Module_Mine.vfxArmTopTransform", "impact transforms"));
             Assert.AreEqual("[KSP1PartMod] isru: RadialDrill: drill probe 'ImpactTransform' found, 5.42 m along +Z",
                 IsruLines.DrillProbeFound("RadialDrill", "ImpactTransform", 5.42));
-            Assert.AreEqual("[KSP1PartMod] isru: RadialDrill: drill probe 'ImpactTransform' not found on the part, the drill will report TooHigh",
+            Assert.AreEqual("[KSP1PartMod] isru: RadialDrill: drill probe 'ImpactTransform' not found on the part, the drill stays not deployed (no deploy bridge)",
                 IsruLines.DrillProbeNotFound("RadialDrill", "ImpactTransform"));
             Assert.AreEqual("[KSP1PartMod] isru: RadialDrill: Module_Mine deploy follows MODULE[4].group",
                 IsruLines.DeployFollows("RadialDrill", "Module_Mine", "MODULE[4].group"));

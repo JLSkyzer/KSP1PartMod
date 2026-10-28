@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace KSP1PartMod.Tests.Animation.Settings
 {
-    /// <summary>The ISRU keys of 0.10.0 (converters, drills, scanners, Ore remap, harvest abundance, heat, active clip).</summary>
+    /// <summary>The ISRU keys of 0.10.0 (converters, drills, scanners, Ore remap, harvest multiplier, heat, active clip).</summary>
     public class IsruSettingsTests
     {
         private static readonly string ShippedPath =
@@ -14,7 +14,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
         private static readonly string[] Keys =
         {
             "ksp1_converters", "ksp1_drills", "ksp1_survey_scanners", "ksp1_resource_scanners", "ksp1_ore_resource",
-            "harvest_abundance_at_full_density", "isru_heat_scale", "isru_active_animation",
+            "harvest_multiplier", "isru_heat_scale", "isru_active_animation",
         };
 
         private static void AssertDefaults(AnimationSettings s)
@@ -25,7 +25,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
             Assert.IsTrue(s.Ksp1ResourceScanners);
             Assert.AreEqual("CarbonRegolith", s.Ksp1OreResource);
             Assert.AreEqual("CarbonRegolith", s.OreRemapTarget);
-            Assert.AreEqual(0.05, s.HarvestAbundanceAtFullDensity, 1e-12);
+            Assert.AreEqual(1.0, s.HarvestMultiplier, 1e-12);
             Assert.AreEqual(1.0, s.IsruHeatScale);
             Assert.IsTrue(s.IsruActiveAnimation);
         }
@@ -43,7 +43,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
         {
             var s = AnimationSettings.Parse("{\"ksp1_converters\": false, \"ksp1_drills\": false, \"ksp1_survey_scanners\": false, " +
                                             "\"ksp1_resource_scanners\": false, \"ksp1_ore_resource\": \"  Water \", " +
-                                            "\"harvest_abundance_at_full_density\": 0.2, \"isru_heat_scale\": 0, \"isru_active_animation\": false}", out var e);
+                                            "\"harvest_multiplier\": 0.2, \"isru_heat_scale\": 0, \"isru_active_animation\": false}", out var e);
             Assert.IsNull(e);
             Assert.IsFalse(s.Ksp1Converters);
             Assert.IsFalse(s.Ksp1Drills);
@@ -51,7 +51,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
             Assert.IsFalse(s.Ksp1ResourceScanners);
             Assert.AreEqual("Water", s.Ksp1OreResource, "trimmed");
             Assert.AreEqual("Water", s.OreRemapTarget);
-            Assert.AreEqual(0.2, s.HarvestAbundanceAtFullDensity, 1e-12);
+            Assert.AreEqual(0.2, s.HarvestMultiplier, 1e-12);
             Assert.AreEqual(0, s.IsruHeatScale, "0 = no heat");
             Assert.IsFalse(s.IsruActiveAnimation);
         }
@@ -70,14 +70,14 @@ namespace KSP1PartMod.Tests.Animation.Settings
 
         [Test] public void Clamped_WrongTypes_KeepTheDefault()
         {
-            var low = AnimationSettings.Parse("{\"harvest_abundance_at_full_density\": 0, \"isru_heat_scale\": -1}", out var e);
-            Assert.AreEqual(0.001, low.HarvestAbundanceAtFullDensity, 1e-12);
+            var low = AnimationSettings.Parse("{\"harvest_multiplier\": 0, \"isru_heat_scale\": -1}", out var e);
+            Assert.AreEqual(0.01, low.HarvestMultiplier, 1e-12);
             Assert.AreEqual(0, low.IsruHeatScale);
-            StringAssert.Contains("harvest_abundance_at_full_density", e);
+            StringAssert.Contains("harvest_multiplier", e);
             StringAssert.Contains("isru_heat_scale", e);
 
-            var high = AnimationSettings.Parse("{\"harvest_abundance_at_full_density\": 3, \"isru_heat_scale\": 50}", out _);
-            Assert.AreEqual(1, high.HarvestAbundanceAtFullDensity);
+            var high = AnimationSettings.Parse("{\"harvest_multiplier\": 300, \"isru_heat_scale\": 50}", out _);
+            Assert.AreEqual(100, high.HarvestMultiplier);
             Assert.AreEqual(10, high.IsruHeatScale);
 
             var wrong = AnimationSettings.Parse("{\"ksp1_converters\": 1, \"ksp1_ore_resource\": 3, \"isru_heat_scale\": \"x\"}", out var e3);
@@ -87,6 +87,15 @@ namespace KSP1PartMod.Tests.Animation.Settings
             StringAssert.Contains("ksp1_converters", e3);
             StringAssert.Contains("ksp1_ore_resource", e3);
             StringAssert.Contains("isru_heat_scale", e3);
+        }
+
+        /// <summary>The 0.05 abundance guess of the first drill importer is gone (ruling of 2026-10-28): its key is reported as
+        /// unknown and the multiplier keeps its default.</summary>
+        [Test] public void OldAbundanceKey_ReportedUnknown_MultiplierDefault()
+        {
+            var s = AnimationSettings.Parse("{\"harvest_abundance_at_full_density\": 0.2}", out var e);
+            Assert.AreEqual(1.0, s.HarvestMultiplier, 1e-12);
+            StringAssert.Contains("harvest_abundance_at_full_density", e);
         }
 
         [Test] public void ShippedFile_DefaultsAndDocumented()

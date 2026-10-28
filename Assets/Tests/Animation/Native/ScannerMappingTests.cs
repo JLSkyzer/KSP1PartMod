@@ -97,5 +97,27 @@ namespace KSP1PartMod.Tests.Animation.Native
             Assert.AreEqual(4, s.ScannableResources.Count);
             Assert.AreEqual(7, s.TimeToComplete);
         }
+
+        /// <summary>Task 3 review: merged resource scanners take the widest window, the longest time and the highest power,
+        /// not the first scanner's.</summary>
+        [Test] public void MergeResources_WidestWindow_LongestTime()
+        {
+            var quick = new NativeScannerRef("a", 0, new[] { "Water" }, 5, 0, 1, 0, 1);
+            var slow = new NativeScannerRef("b", 0, new[] { "Water" }, 9, 0, 70000, 0, 1);
+            var low = ScannerMapping.Resource(Module("ModuleResourceScanner",
+                "ScannerType = 0\nResourceName = Ore\nMaxAbundanceAltitude = 1000\nRequiresUnlock = false"), IsruFakes.Table(), quick);
+            var high = ScannerMapping.Resource(Module("ModuleResourceScanner",
+                "ScannerType = 0\nResourceName = Water\nRequiresUnlock = false"), IsruFakes.Table(), slow);
+            var m = ScannerMapping.MergeResources(new[] { low, high });
+            CollectionAssert.AreEqual(new[] { "CarbonRegolith", "Water" }, m.ScannableResources);
+            Assert.AreEqual(9, m.TimeToComplete, "the longest");
+            Assert.AreEqual(0, m.MinAltitude);
+            Assert.AreEqual(70000, m.MaxAltitude, "the second's (MaxAbundanceAltitude missing: its native bound)");
+            Assert.AreEqual(-180, m.MinInclination);
+            Assert.AreEqual(180, m.MaxInclination);
+            Assert.That(m.Notes, Has.Some.EqualTo("ModuleResourceScanner x2 merged into one Module_ResourceScanner (one per part), " +
+                                                  "the widest altitude and inclination window, the longest scan time and the highest power used"));
+            Assert.AreSame(low, ScannerMapping.MergeResources(new[] { low }));
+        }
     }
 }

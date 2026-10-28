@@ -226,8 +226,11 @@ namespace KSP1PartMod.Game
                 foreach (var m in maps.Where(m => !m.HasModule))
                     foreach (var note in m.Notes) NativeModules.Note(part, note);
 
-                var surveyorArmed = NativeModules.IsConverterArmed(ScannerMapping.SurveyorModule);
-                if (kept.Count > 0 && surveyorArmed && ScannerImporters.Nodes(context.PartNode, ScannerMapping.SurveyorModule).Count > 0)
+                // The surveyor wins only when it builds its scanner (the same pure mapping its importer runs).
+                var surveyorBuilds = NativeModules.IsConverterArmed(ScannerMapping.SurveyorModule) &&
+                                     ScannerImporters.Nodes(context.PartNode, ScannerMapping.SurveyorModule)
+                                         .Any(n => ScannerMapping.Surveyor(new Ksp1NodeAdapter(n), reference.Scanner).HasModule);
+                if (kept.Count > 0 && surveyorBuilds)
                 {
                     // One native scanner per part: the surveyor's, whatever the module order.
                     ScannerImporters.SetStats(part, false, stats);
