@@ -103,7 +103,13 @@ namespace KSP1PartMod.Game
             else
             {
                 var db = IsruAccess.Database();
-                if (db == null) return; // too early, or outside the game: checked later
+                if (db == null)
+                {
+                    // Too early, or outside the game: checked at the next registry or the first converter. Tanks converted
+                    // until then already use the target.
+                    LogDeferredOnce(target);
+                    return;
+                }
                 exists = IsruAccess.Exists(db, target);
             }
             lock (Lock)
@@ -114,6 +120,18 @@ namespace KSP1PartMod.Game
                 RestoreLocked();
             }
             NativeModules.Warn(IsruLines.OreNotAResource(target));
+        }
+
+        private static bool _deferredLogged;
+
+        private static void LogDeferredOnce(string target)
+        {
+            lock (Lock)
+            {
+                if (_deferredLogged) return;
+                _deferredLogged = true;
+            }
+            NativeModules.Info(IsruLines.OreCheckDeferred(target));
         }
 
         private static void RestoreLocked()
@@ -130,7 +148,7 @@ namespace KSP1PartMod.Game
             {
                 RestoreLocked();
                 _previous = _target = null;
-                _verified = false;
+                _verified = _deferredLogged = false;
             }
             ExistsOverride = null;
         }

@@ -45,6 +45,11 @@ namespace KSP1PartMod.Native
         /// install. Only for the log.</summary>
         public const double Ksp1OreTonnesPerUnit = 0.01;
 
+        /// <summary>The target check waits for the game's resource database (not in the plan's list).</summary>
+        public static string OreCheckDeferred(string resource) =>
+            Prefix + $"ore: resource database not ready, the check of {resource} waits for the next importer registry or the first converter " +
+            "(parts imported until then already hold it)";
+
         /// <summary>One mode of a converted part; <paramref name="mode"/> is its position in the native formula list. A mode
         /// that moves KSP1 Ore gets Redux's Ore unit mass (<paramref name="oreTonnesPerUnit"/>, t per KSP1 unit, null when
         /// unknown) against KSP1's: its mass in and out then differ by that ratio.</summary>
@@ -60,6 +65,10 @@ namespace KSP1PartMod.Native
             Prefix + $"converters: {parts} part(s) got {ConverterMapping.NativeModule} with {modes} mode(s) " +
             $"({severalConverters} part(s) with several KSP1 converters, one runs at a time); modes dropped: {dropped} (unknown resource); " +
             $"not reproduced: {Fields(notReproduced)}";
+
+        /// <summary>A converter that failed on a part: Redux's result, no converter at all on that part.</summary>
+        public static string ConverterFailed(string error) =>
+            "no Module_ResourceConverter on this part (every KSP1 converter of it dropped, as Redux 0.9.0 does): " + error;
 
         public static string ConverterNamesAdded(int terms) =>
             Prefix + $"converter names: {terms} term(s) added to Redux's part localization";

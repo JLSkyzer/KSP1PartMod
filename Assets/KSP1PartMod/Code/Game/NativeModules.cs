@@ -268,6 +268,11 @@ namespace KSP1PartMod.Game
         }
 
         /// <summary>One converter failed on one part: logged once per part, Redux's 0.7.0 result kept for it.</summary>
+        internal static void ImporterFailed(string part, string ksp1Module, string error)
+        {
+            if (Record.AddNote(part, "failed:" + ksp1Module)) Error(NativeLines.ImporterFailed(part, ksp1Module, error));
+        }
+
         internal static void ImporterFailed(string part, string ksp1Module, Exception e)
         {
             if (Record.AddNote(part, "failed:" + ksp1Module)) Error(NativeLines.ImporterFailed(part, ksp1Module, e.ToString()));

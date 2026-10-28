@@ -5,6 +5,7 @@ using HarmonyLib;
 using KSP.Modules;
 using KSP.Sim.Definitions;
 using KSP.Sim.ResourceSystem;
+using KSP.Sim.State;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Game;
 using KSP1PartMod.Native;
@@ -40,8 +41,10 @@ namespace KSP1PartMod.Tests.ReduxMu
         {
             new Harmony(NativeModules.HarmonyId).UnpatchAll(NativeModules.HarmonyId);
             new Harmony(OreRemap.HarmonyId).UnpatchAll(OreRemap.HarmonyId);
+            new Harmony(OreMigration.HarmonyId).UnpatchAll(OreMigration.HarmonyId);
             NativeModules.Reset();
             OreRemap.Reset();
+            OreMigration.Reset();
         }
 
         /// <summary>Arms the hook (and the Ore remap, as the plugin does, first); the importer then reads <paramref name="db"/>.</summary>
@@ -175,7 +178,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             OreRemap.ExistsOverride = name => name == "CarbonRegolith";
             OreRemap.EnsureVerified();
             Assert.AreEqual("CarbonRegolith", Ksp1ResourceMapper.MapResourceName("Ore"));
-            Assert.AreEqual(1, _lines.Count);
+            CollectionAssert.AreEqual(new[] { IsruLines.OreImported("CarbonRegolith"), IsruLines.OreCheckDeferred("CarbonRegolith") }, _lines, "no restore line; the deferral once");
         }
 
         // ------------------------------------------------------------------ Redux's real import
@@ -318,11 +321,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         [Test] public void ImporterException_LeavesTheModuleDataAsBefore()
         {
             Assert.IsTrue(Arm(Database()));
-            NativeModules.Sink = l =>
-            {
-                if (l.Contains("converter 'Monoprop'")) throw new InvalidOperationException("sink");
-                _lines.Add(l);
-            };
+            ConverterImporter.FaultForTests = p => throw new InvalidOperationException("fault");
             var part = Part(Isru());
             var context = Context(part);
             var other = new Data_ToggleCrossFeed();
@@ -330,9 +329,138 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsFalse(new Ksp1PartModuleImporterRegistry().TryImport(Modules(part)[0], context, out var module));
             Assert.IsNull(module.ModuleData);
             Assert.AreSame(other, context.ModuleData.Single(), "no orphan Data_ResourceConverter");
-            Assert.AreEqual(1, _lines.Count(l => l.Contains("testPart: ModuleResourceConverter not converted")));
+            Assert.AreEqual(1, _lines.Count(l => l.Contains("testPart: ModuleResourceConverter not converted") &&
+                                                 l.Contains("no Module_ResourceConverter on this part")));
             CollectionAssert.IsEmpty(NativeModules.Record.ConvertedModules("testPart"), "not counted");
+            Assert.That(_lines, Has.None.Contains("testPart: converter '"), "no mode line for a failed part");
+            Assert.IsFalse(new Ksp1PartModuleImporterRegistry().TryImport(Modules(part)[1], context, out _), "the part has no converter at all");
         }
+
+        [Test] public void LogFailure_AfterTheConversion_KeepsTheModule()
+        {
+            Assert.IsTrue(Arm(Database()));
+            NativeModules.Sink = l =>
+            {
+                if (l.Contains("converter 'Monoprop'")) throw new InvalidOperationException("sink");
+                _lines.Add(l);
+            };
+            var part = Part(Isru());
+            var context = Context(part);
+            Assert.IsTrue(new Ksp1PartModuleImporterRegistry().TryImport(Modules(part)[0], context, out _));
+            Assert.AreEqual(4, context.ModuleData.OfType<Data_ResourceConverter>().Single().FormulaDefinitions.Count);
+            CollectionAssert.AreEqual(new[] { ConverterMapping.NativeModule }, NativeModules.Record.ConvertedModules("testPart"));
+            Assert.AreEqual(1, _lines.Count(l => l.Contains("testPart: converter lines not logged")));
+        }
+
+        // ------------------------------------------------------------------ old saves
+
+        [Test] public void OreMigration_TargetsResolve()
+        {
+            CollectionAssert.IsEmpty(OreMigration.MissingMembers());
+            Assert.IsFalse(OreMigration.Arm(new Harmony(OreMigration.HarmonyId)), "the remap is not active: nothing armed");
+            Assert.IsTrue(OreRemap.Arm(new Harmony(OreRemap.HarmonyId), "CarbonRegolith"));
+            Assert.IsTrue(OreMigration.Arm(new Harmony(OreMigration.HarmonyId)));
+        }
+
+        private static ResourceContainer Container(ResourceDefinitionDatabase db, params (string Name, double Capacity)[] resources) =>
+            new ResourceContainer(db, resources.Select(r => new ContainedResourceDefinition(r.Capacity, r.Name) { initialUnits = r.Capacity }).ToArray());
+
+        private static Dictionary<string, ContainedResourceState> Saved(params (string Name, double Units)[] resources) =>
+            resources.ToDictionary(r => r.Name, r => new ContainedResourceState { name = r.Name, storedUnits = r.Units, capacityUnits = r.Units });
+
+        /// <summary>Redux's <c>ResourceContainer</c> keeps its slots on an ECS entity of the default world: a world of the
+        /// test's own, set as the default for <paramref name="body"/> (by reflection, as <c>EcsTypeRegistrationTests</c>).</summary>
+        private static void WithWorld(Action body)
+        {
+            var entities = AppDomain.CurrentDomain.GetAssemblies().First(a => a.GetName().Name == "Unity.Entities");
+            entities.GetType("Unity.Entities.TypeManager").GetMethod("Initialize", Type.EmptyTypes).Invoke(null, null);
+            var worldType = entities.GetType("Unity.Entities.World");
+            var ctor = worldType.GetConstructors().First(c => c.GetParameters().Length >= 1 && c.GetParameters()[0].ParameterType == typeof(string)
+                                                              && c.GetParameters().Skip(1).All(p => p.IsOptional));
+            var args = new object[ctor.GetParameters().Length];
+            args[0] = "KSP1PartMod.Tests.OreMigration";
+            for (var i = 1; i < args.Length; i++) args[i] = ctor.GetParameters()[i].DefaultValue;
+            var world = (IDisposable)ctor.Invoke(args);
+            var property = worldType.GetProperty("DefaultGameObjectInjectionWorld");
+            var previous = property.GetValue(null);
+            property.SetValue(null, world);
+            try
+            {
+                body();
+            }
+            finally
+            {
+                property.SetValue(null, previous);
+                world.Dispose();
+            }
+        }
+
+        [Test] public void OreMigration_MovesTheSavedTestRocks_ByMass_OnReduxsContainer() => WithWorld(() =>
+        {
+            var db = Database();
+            var id = db.GetResourceIDFromName("CarbonRegolith");
+            var container = Container(db, ("CarbonRegolith", 100));
+            Assert.AreEqual(100, container.GetResourceStoredUnits(id), "the definition's initial units, as after UpdateSavedVesselPartDefinitions");
+            var r = OreMigration.Migrate(Saved(("TestRocks", 1500)), container, db, "CarbonRegolith");
+            Assert.IsTrue(r.Migrated);
+            Assert.AreEqual(75, container.GetResourceStoredUnits(id), 1e-9, "1500 x 0.05 t / 1 t: the stored mass kept");
+            Assert.IsFalse(r.Capped);
+
+            var small = Container(db, ("CarbonRegolith", 50));
+            r = OreMigration.Migrate(Saved(("TestRocks", 1500)), small, db, "CarbonRegolith");
+            Assert.IsTrue(r.Capped);
+            Assert.AreEqual(50, small.GetResourceStoredUnits(id), "capped at the capacity");
+        });
+
+        [Test] public void OreMigration_LeavesEverythingElse() => WithWorld(() =>
+        {
+            var db = Database();
+            var id = db.GetResourceIDFromName("CarbonRegolith");
+            void Untouched(Dictionary<string, ContainedResourceState> saved, ResourceContainer c, string target, string why)
+            {
+                var before = c.IsResourceContained(id) ? c.GetResourceStoredUnits(id) : -1;
+                Assert.IsFalse(OreMigration.Migrate(saved, c, db, target).Migrated, why);
+                Assert.AreEqual(before, c.IsResourceContained(id) ? c.GetResourceStoredUnits(id) : -1, why);
+            }
+            Untouched(Saved(("TestRocks", 1500), ("CarbonRegolith", 10)), Container(db, ("CarbonRegolith", 100)), "CarbonRegolith", "saved after the remap");
+            Untouched(Saved(("TestRocks", 1500)), Container(db, ("CarbonRegolith", 100), ("TestRocks", 100)), "CarbonRegolith", "the container still holds TestRocks");
+            Untouched(Saved(("TestRocks", 1500)), Container(db, ("Methane", 100)), "CarbonRegolith", "no target in the container");
+            Untouched(Saved(("TestRocks", 0)), Container(db, ("CarbonRegolith", 100)), "CarbonRegolith", "nothing stored");
+            Untouched(Saved(("Methane", 5)), Container(db, ("CarbonRegolith", 100)), "CarbonRegolith", "no TestRocks saved");
+            Untouched(Saved(("TestRocks", 1500)), Container(db, ("CarbonRegolith", 100)), "Unobtainium", "unknown target");
+            Assert.IsFalse(OreMigration.Migrate(Saved(("TestRocks", 1500)), Container(db, ("CarbonRegolith", 100)), null, "CarbonRegolith").Migrated, "no database");
+        });
+
+        [Test] public void OreMigration_OneLinePerPartType_AndASessionTotal()
+        {
+            Assert.IsTrue(OreRemap.Arm(new Harmony(OreRemap.HarmonyId), "CarbonRegolith"));
+            var scheduled = 0;
+            OreMigration.ScheduleTotal = () => scheduled++;
+            var r = new OreMigration.Result { Migrated = true, SourceUnits = 1500, TargetUnits = 75, Capacity = 100 };
+            OreMigration.Count("RadialOreTank", "CarbonRegolith", r);
+            OreMigration.Count("RadialOreTank", "CarbonRegolith", r);
+            OreMigration.Count("SmallTank", "CarbonRegolith", new OreMigration.Result { Migrated = true, SourceUnits = 300, TargetUnits = 10, Capacity = 10, Capped = true });
+            Assert.AreEqual(1, scheduled, "one total per batch");
+            OreMigration.LogTotal();
+            CollectionAssert.AreEqual(new[]
+            {
+                IsruLines.OreImported("CarbonRegolith"),
+                "[KSP1PartMod] native: ore: old save: RadialOreTank: saved TestRocks 1500 moved to CarbonRegolith 75 (mass kept)",
+                "[KSP1PartMod] native: ore: old save: SmallTank: saved TestRocks 300 moved to CarbonRegolith 10 (mass kept, capped at the capacity 10)",
+                "[KSP1PartMod] native: ore: old saves: 3 part(s) migrated this session, TestRocks 3300 -> CarbonRegolith 160",
+            }, _lines);
+            OreMigration.Count("SmallTank", "CarbonRegolith", r);
+            Assert.AreEqual(2, scheduled, "a later batch schedules a new total");
+        }
+
+        [Test] public void OreRemap_DeferredCheck_Logged()
+        {
+            Assert.IsTrue(OreRemap.Arm(new Harmony(OreRemap.HarmonyId), "CarbonRegolith"));
+            OreRemap.EnsureVerified();
+            OreRemap.EnsureVerified();
+            Assert.AreEqual(1, _lines.Count(l => l == IsruLines.OreCheckDeferred("CarbonRegolith")));
+        }
+
 
         // ------------------------------------------------------------------ mode names
 
@@ -354,6 +482,16 @@ namespace KSP1PartMod.Tests.ReduxMu
 
             NativeModules.LogImportSummaryOnce();
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: converter names: 5 term(s) added to Redux's part localization");
+        }
+
+        [Test] public void AddPart_AutoLocName_ResolvedByReduxsCatalog()
+        {
+            Assert.IsTrue(Arm(Database()));
+            var dictionary = Ksp1ConfigNode.Parse("Localization\n{\nen-us\n{\n#autoLOC_6002401 = Lf+Ox Converter\n}\n}\n");
+            var catalog = Ksp1LocalizationCatalog.FromFiles(new[] { new Ksp1ConfigFile(null, "Localization/en-us.cfg", "Squad", dictionary) });
+            var builder = new Ksp1PartLocalizationBuilder(catalog);
+            builder.AddPart(Part(Converter("#autoLOC_6002401", Flow("OUTPUT_RESOURCE", "ElectricCharge", "1"))), "testPart");
+            StringAssert.Contains("\"Parts/Ksp1Converter/testPart/0\",Text,,\"Lf+Ox Converter\",", builder.BuildCsv());
         }
 
         [Test] public void ConvertersOff_NoNameRows()

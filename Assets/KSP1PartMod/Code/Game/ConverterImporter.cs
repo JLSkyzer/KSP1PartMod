@@ -38,6 +38,8 @@ namespace KSP1PartMod.Game
         internal static Func<ResourceDefinitionDatabase> DatabaseSource;
         /// <summary>The native converters' median heat per EC/s; Task 3 reads it from the game. Default: the 26w42c fallback.</summary>
         internal static Func<double> HeatPerEc = () => NativeIsruRef.FallbackConverterHeatPerEc;
+        /// <summary>Tests: called after Redux's <c>CreateSerialized</c>, before the conversion is counted (a throw = a failure).</summary>
+        internal static Action<string> FaultForTests;
 
         private sealed class PartStats
         {
@@ -189,19 +191,30 @@ namespace KSP1PartMod.Game
 
                 var record = NativeModules.Record;
                 var oreTonnes = OreTonnesPerUnit(r, db);
+                var lines = new List<string>(map.Formulas.Count);
                 for (var i = 0; i < map.Formulas.Count; i++)
                 {
                     var f = map.Formulas[i];
                     var withOre = f.Inputs.Concat(f.Outputs).Any(x => string.Equals(x.Ksp1Name, OreRemap.Key, StringComparison.OrdinalIgnoreCase));
-                    var line = IsruLines.ConverterMode(part, f, i, withOre ? oreTonnes : (double?)null);
-                    if (record.AddNote(part, line)) NativeModules.Info(line);
+                    lines.Add(IsruLines.ConverterMode(part, f, i, withOre ? oreTonnes : (double?)null));
                 }
-                foreach (var note in map.Notes) NativeModules.Note(part, note);
-                // Counted last: a failure above leaves no trace in the summary.
+                FaultForTests?.Invoke(part);
+                // The conversion is complete: counted, then logged (a failed part leaves no mode line and no count).
                 record.AddConversion(part, ConverterMapping.NativeModule);
                 foreach (var field in map.NotReproduced) record.Flag(part, FlagNotReproduced + field);
                 lock (Lock) Stats[part] = stats;
                 added = -1;
+                try
+                {
+                    foreach (var line in lines)
+                        if (record.AddNote(part, line)) NativeModules.Info(line);
+                    foreach (var note in map.Notes) NativeModules.Note(part, note);
+                }
+                catch (Exception e)
+                {
+                    // Only the log failed: the module stays.
+                    NativeModules.Error(NativeLines.Prefix + part + ": converter lines not logged: " + e.Message);
+                }
                 return true;
             }
             catch (Exception e)
@@ -210,7 +223,7 @@ namespace KSP1PartMod.Game
                 if (added >= 0 && context != null)
                     while (context.ModuleData.Count > added) context.ModuleData.RemoveAt(context.ModuleData.Count - 1);
                 serializedModule = default;
-                NativeModules.ImporterFailed(part, ConverterMapping.Ksp1Module, e);
+                NativeModules.ImporterFailed(part, ConverterMapping.Ksp1Module, IsruLines.ConverterFailed(e.ToString()));
                 return false;
             }
         }
@@ -286,6 +299,7 @@ namespace KSP1PartMod.Game
             _add = null;
             _catalog = null;
             DatabaseSource = null;
+            FaultForTests = null;
             HeatPerEc = () => NativeIsruRef.FallbackConverterHeatPerEc;
         }
     }

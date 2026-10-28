@@ -95,6 +95,8 @@ namespace KSP1PartMod
             {
                 // Before Redux's import (tanks, B9 tank types, converters) and before NativeModules; independent of enabled.
                 OreRemap.Arm(new Harmony(OreRemap.HarmonyId), Animations.OreRemapTarget);
+                // Old saves: their Ore was stored as TestRocks; moved to the target on load (KSP1 parts only).
+                OreMigration.Arm(new Harmony(OreMigration.HarmonyId));
             }
             catch (Exception e)
             {
