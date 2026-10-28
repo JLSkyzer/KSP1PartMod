@@ -176,7 +176,7 @@ PART
                 NativeLines.HeatshieldSummary(0, 0, null));
             Assert.AreEqual("ModuleAblator: the part has no Ablator resource, no Module_Heatshield (nothing to burn)",
                 AblatorMapping.NoResourceNote("Ablator"));
-            Assert.AreEqual("[KSP1PartMod] native: import hook failed, no native module is added for the rest of this session: boom",
+            Assert.AreEqual("[KSP1PartMod] native: import hook failed, no native importer is added to new registries this session: boom",
                 NativeLines.PatchFailed("boom"));
         }
 

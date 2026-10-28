@@ -228,6 +228,7 @@ namespace KSP1PartMod.Game
                 {
                     lines.Add(MmLines.UnindexedMultiMatch(_c.UnindexedMultiMatch, _firstMatch));
                     lines.Add(MmLines.Variables(_c.VariableValues));
+                    lines.Add(MmLines.DeleteWildcards(_c.DeleteWildcards));
                 }
                 LastSummary = lines;
                 foreach (var line in lines) Info(line);
@@ -442,7 +443,10 @@ namespace KSP1PartMod.Game
             var a = _a;
             var n = a.Values(node).Count;
             for (var i = 0; i < n; i++)
+            {
                 if (MmValueEditor.HasVariable(a.ValueRaw(node, i))) _c.VariableValues++;
+                if (MmKeyEdit.IsDeleteWildcard(a.ValueName(node, i))) _c.DeleteWildcards++;
+            }
             var children = a.Nodes(node);
             for (var i = 0; i < children.Count; i++) CountVariables(children[i]);
         }

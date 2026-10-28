@@ -168,7 +168,9 @@ namespace KSP1PartMod.Game.Animation
                 // Shroud entries only when the import kept the meshes: otherwise Redux destroyed them.
                 shrouds: ShroudImport.IsArmed,
                 // The char follows the ablator only when our heat shield importer is armed (ksp1_heatshields).
-                ablatorChar: KSP1PartModPlugin.Animations.AblatorChar && NativeModules.IsConverterArmed(KSP1PartMod.Native.AblatorMapping.Ksp1Module));
+                ablatorChar: KSP1PartModPlugin.Animations.AblatorChar && NativeModules.IsConverterArmed(KSP1PartMod.Native.AblatorMapping.Ksp1Module),
+                // A char never takes a slot another entry writes (the KV pods' lights), compared through this map.
+                shaderPropertyMap: KSP1PartModPlugin.Animations.ShaderPropertyMap);
             action = ModuleInjection.Decide(modules.Select(m => m.Name).ToList(), plan, ModuleName);
             // From here on the caller rewrites PartJson, even if an edit below throws. Notes once per session: on
             // the first load (Add), not on each reload that refreshes the same core.

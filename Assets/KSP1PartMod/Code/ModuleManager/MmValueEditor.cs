@@ -17,6 +17,9 @@ namespace KSP1PartMod.ModuleManager
         public int VariableValues;
         /// <summary>Vector-component edits with an operator (<c>@key[1,,] *= x</c>), skipped.</summary>
         public int VectorComponentSkipped;
+        /// <summary>Delete lines whose key holds a wildcard (<c>!key* = delete</c>), once per surviving patch line: left to
+        /// Redux, which deletes only a value of that exact name, so they delete nothing.</summary>
+        public int DeleteWildcards;
 
         public int ArithmeticApplied => ArithmeticMul + ArithmeticAdd + ArithmeticSub + ArithmeticDiv;
     }
@@ -25,8 +28,8 @@ namespace KSP1PartMod.ModuleManager
     /// Redux's code: plain lines give Redux's observed result (edit every match under the patch's spelling, create-or-edit
     /// appends when missing, add appends, delete removes every match; keys match case-insensitively); an explicit index
     /// picks one match (or all); unindexed edits hit every match, or the first with <c>firstMatchDefault</c>; deletes
-    /// without an index always hit all. Arithmetic parses both sides as invariant <c>double</c> and writes
-    /// <c>G15</c>.</summary>
+    /// without an index always hit all. Arithmetic parses both sides as invariant <c>double</c> (a <c>NaN</c> or an
+    /// infinity on either side is counted as non-numeric and left as it is) and writes <c>G15</c>.</summary>
     public static class MmValueEditor
     {
         private const NumberStyles Number = NumberStyles.Float;
@@ -96,7 +99,7 @@ namespace KSP1PartMod.ModuleManager
             double operand = 0;
             if (arithmetic)
             {
-                if (!double.TryParse(edit.Value, Number, CultureInfo.InvariantCulture, out operand))
+                if (!TryFinite(edit.Value, out operand))
                 {
                     c.NonNumeric++;
                     return false;
@@ -115,7 +118,7 @@ namespace KSP1PartMod.ModuleManager
                 if (pick.Contains(ordinal))
                 {
                     if (!arithmetic) values[i] = new KeyValuePair<string, string>(edit.Key, edit.Value);
-                    else if (double.TryParse(values[i].Value, Number, CultureInfo.InvariantCulture, out var current))
+                    else if (TryFinite(values[i].Value, out var current))
                     {
                         values[i] = new KeyValuePair<string, string>(edit.Key,
                             Compute(current, edit.Operator, operand).ToString("G15", CultureInfo.InvariantCulture));
@@ -155,6 +158,10 @@ namespace KSP1PartMod.ModuleManager
             if (edit.Index.Kind != MmIndexKind.None) c.IndexValueEdits++;
             return true;
         }
+
+        /// <summary>An invariant number that is neither <c>NaN</c> nor an infinity (<c>double.TryParse</c> accepts both).</summary>
+        private static bool TryFinite(string text, out double value) =>
+            double.TryParse(text, Number, CultureInfo.InvariantCulture, out value) && !double.IsNaN(value) && !double.IsInfinity(value);
 
         private static double Compute(double current, MmOperator op, double operand)
         {

@@ -77,6 +77,27 @@ namespace KSP1PartMod.Tests.ModuleManager
             Assert.AreEqual(1, c.NonNumeric);
         }
 
+        [TestCase("NaN")]
+        [TestCase("Infinity")]
+        [TestCase("-Infinity")]
+        [TestCase("1e999")]
+        public void Arithmetic_NonFiniteOperand_CountedAsNonNumeric(string operand)
+        {
+            var c = new MmCounters();
+            CollectionAssert.AreEqual(new[] { "mass", "1" }, Flat(Apply(Values("mass", "1"), "@mass *", operand, c)));
+            Assert.AreEqual(1, c.NonNumeric);
+            Assert.AreEqual(0, c.ArithmeticApplied);
+        }
+
+        [Test] public void Arithmetic_NonFiniteValue_CountedAsNonNumeric_LeftAsItIs()
+        {
+            var c = new MmCounters();
+            CollectionAssert.AreEqual(new[] { "mass", "NaN", "mass", "2" },
+                Flat(Apply(Values("mass", "NaN", "mass", "1"), "@mass *", "2", c)));
+            Assert.AreEqual(1, c.NonNumeric);
+            Assert.AreEqual(1, c.ArithmeticMul);
+        }
+
         [Test] public void Arithmetic_MissingKey_Counted()
         {
             var c = new MmCounters();

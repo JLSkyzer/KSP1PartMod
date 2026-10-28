@@ -382,9 +382,9 @@ MODULE
             Assert.AreEqual("myChar", other.Entries.Single().ModuleId);
         }
 
-        /// <summary>A KV pod: its shieldChar and a light changer drive the same shader property. The light's key is the one it
-        /// had in 0.7.0; the char comes after it.</summary>
-        [Test] public void AblatorChar_KvPodLike_TheLightKeyIsUnchanged()
+        /// <summary>A KV pod: its shieldChar and a light changer drive the same shader property. The char is not planned (it
+        /// would outrank the light every frame); the light keeps the key it had in 0.7.0, and the note says why.</summary>
+        [Test] public void AblatorChar_KvPodLike_NotPlanned_TheLightKeepsItsKeyAndSlot()
         {
             var modules = Modules(StockShield.Replace("_BurnColor", "_EmissiveColor")).Concat(new[]
             {
@@ -393,11 +393,46 @@ MODULE
             var before = PlanChar(false, modules);
             var after = PlanChar(true, modules);
             Assert.AreEqual("color:_EmissiveColor:0", before.Entries.Single().Key);
-            CollectionAssert.AreEqual(new[] { "color:_EmissiveColor:0", "color:_EmissiveColor:1" }, after.Entries.Select(e => e.Key));
-            Assert.AreEqual(2, after.Entries[0].ModuleIndex, "the light keeps ordinal 0");
-            Assert.AreEqual(ScalarSource.None, after.Entries[0].ScalarSource);
-            Assert.AreEqual(1, after.Entries[1].ModuleIndex);
-            Assert.AreEqual(ScalarSource.Ablator, after.Entries[1].ScalarSource);
+            var light = after.Entries.Single();
+            Assert.AreEqual("color:_EmissiveColor:0", light.Key);
+            Assert.AreEqual(2, light.ModuleIndex);
+            Assert.AreEqual(ScalarSource.None, light.ScalarSource);
+            CollectionAssert.Contains(after.Notes, "MODULE[1] ModuleColorChanger: moduleID 'shieldChar' not planned, MODULE[2] " +
+                                                   "ModuleColorChanger writes the same shader property (_EmissiveColor): it keeps it");
+            Assert.IsFalse(after.Notes.Any(n => n.Contains("follows the ablator")));
+        }
+
+        /// <summary>The comparison goes through <c>shader_property_map</c>: <c>_EmissiveColor</c> and <c>_EmissionColor</c> share a
+        /// KSP2 slot under the built-in map, and a custom map that keeps them apart lets the char through.</summary>
+        [Test] public void AblatorChar_SlotComparedThroughTheShaderPropertyMap()
+        {
+            var modules = Modules(StockShield.Replace("_BurnColor", "_EmissiveColor")).Concat(new[]
+            {
+                Color("_EmissionColor"),
+            }).ToArray();
+            Assert.AreEqual(1, PlanChar(true, modules).Entries.Count, "built-in map: same slot");
+            var apart = new Dictionary<string, string[]> { ["_EmissiveColor"] = new[] { "_EmissiveColor" } };
+            var p = OwnershipPlanner.Plan(modules, false, new HashSet<string>(), false, true, null, true, true, false, true, apart);
+            Assert.AreEqual(2, p.Entries.Count);
+            Assert.AreEqual(ScalarSource.Ablator, p.Entries[1].ScalarSource);
+        }
+
+        /// <summary>A light on another property does not stop the char; one on the same property does, whatever its kind (a
+        /// BDB RCS glow writes <c>_EmissiveColor</c> too), unless <c>skip_modules</c> drops that rival.</summary>
+        [Test] public void AblatorChar_OtherPropertyOrSkippedRival_StillPlanned()
+        {
+            var other = PlanChar(true, Modules(StockShield).Concat(new[] { Color("_EmissiveColor") }).ToArray());
+            Assert.AreEqual(1, other.Entries.Count(e => e.ScalarSource == ScalarSource.Ablator), "another property");
+
+            var kv = Modules(StockShield.Replace("_BurnColor", "_EmissiveColor"));
+            var glow = CfgText.Module("name = ModuleBdbRcsEmissive\nalphaCurve\n{\nkey = 0 0\nkey = 1 1\n}");
+            var modules = kv.Concat(new[] { glow }).ToArray();
+            var p = PlanChar(true, modules);
+            Assert.AreEqual(EntryKind.RcsEmissive, p.Entries.Single().Kind, "the glow keeps the slot");
+
+            var skipped = OwnershipPlanner.Plan(modules, false, new HashSet<string>(), false, true,
+                new HashSet<string> { "ModuleBdbRcsEmissive" }, true, true, false, true);
+            Assert.AreEqual(ScalarSource.Ablator, skipped.Entries.Single().ScalarSource, "the rival is skipped: the char is planned");
         }
 
         [Test] public void AblatorChar_AThrottleSetterNamingIt_DoesNotLinkIt()

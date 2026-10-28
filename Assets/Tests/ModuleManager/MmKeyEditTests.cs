@@ -19,6 +19,16 @@ namespace KSP1PartMod.Tests.ModuleManager
             Assert.AreEqual(passedBack, e.PassedBack, "passed back");
         }
 
+        [TestCase("!node_stack_interstage*", true)]
+        [TestCase(" -key? ", true)]
+        [TestCase("!MODULE*:NEEDS[X]", true)]
+        [TestCase("!key,*", false)]
+        [TestCase("!key", false)]
+        [TestCase("@key*", false)]
+        [TestCase("!", false)]
+        [TestCase(null, false)]
+        public void IsDeleteWildcard(string name, bool expected) => Assert.AreEqual(expected, MmKeyEdit.IsDeleteWildcard(name));
+
         [Test] public void Parse_MulWithSpace() =>
             AssertEdit(MmKeyEdit.Parse("@mass *", "2"), MmCommand.Edit, "mass", MmIndexKind.None, 0, MmOperator.Mul, true, false);
 

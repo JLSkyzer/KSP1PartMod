@@ -73,7 +73,7 @@ namespace KSP1PartMod.Tests.ModuleManager
             var operators = new Dictionary<MmOperator, int>();
             var valueIndex = new Dictionary<MmIndexKind, int>();
             var nodeIndex = new Dictionary<MmIndexKind, int>();
-            int ours = 0, countedOnly = 0, vector = 0, vectorWithOperator = 0, plain = 0;
+            int ours = 0, countedOnly = 0, vector = 0, vectorWithOperator = 0, plain = 0, deleteWildcards = 0;
             var failures = new List<string>();
             foreach (var file in files)
             foreach (var node in new[] { file.Root }.Concat(Descendants(file.Root)))
@@ -83,6 +83,7 @@ namespace KSP1PartMod.Tests.ModuleManager
                 foreach (var v in node.AllValues)
                 {
                     var name = MmPluginRule.WithoutNeeds(v.Key).Trim();
+                    if (MmKeyEdit.IsDeleteWildcard(name)) deleteWildcards++;
                     if (!MmKeyEdit.MightNeedUs(name)) continue;
                     var e = MmKeyEdit.Parse(name, v.Value);
                     if (e.IsOurs || e.CountedOnly)
@@ -108,12 +109,14 @@ namespace KSP1PartMod.Tests.ModuleManager
             TestContext.WriteLine($"  value indices {valueIndex.Values.Sum()}: {Format(valueIndex)}");
             TestContext.WriteLine($"  node indices {nodeIndex.Values.Sum()}: {Format(nodeIndex)}");
             TestContext.WriteLine($"  indices total {valueIndex.Values.Sum() + nodeIndex.Values.Sum()}");
+            TestContext.WriteLine($"  delete lines with a wildcard (raw cfg lines, NEEDS not applied) {deleteWildcards}");
             Assert.IsEmpty(failures, "lines passed back:\n" + string.Join("\n", failures.Take(30)));
             AssertNear(475, supported, "supported operators");
             AssertNear(141, unsupported, "counted-only operators");
             AssertNear(40, valueIndex.Values.Sum(), "value indices");
             AssertNear(310, nodeIndex.Values.Sum(), "node indices");
             AssertNear(8, vectorWithOperator, "vector component edits skipped");
+            AssertNear(1, deleteWildcards, "delete lines with a wildcard");
         }
 
         // ---- 2. the plugin rule over the user's whole GameData ----

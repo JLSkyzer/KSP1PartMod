@@ -46,7 +46,7 @@ namespace KSP1PartMod.Native
             string.Concat((others ?? Enumerable.Empty<(string, int)>()).Select(o => $", {o.Item1} on {o.Item2}"));
 
         public static string PatchFailed(string error) =>
-            Prefix + "import hook failed, no native module is added for the rest of this session: " + error;
+            Prefix + "import hook failed, no native importer is added to new registries this session: " + error;
 
         public static string ImporterFailed(string part, string ksp1Module, string error) =>
             Prefix + part + ": " + ksp1Module + " not converted (Redux drops it, as in 0.7.0): " + error;

@@ -63,6 +63,10 @@ namespace KSP1PartMod.Tests.ModuleManager
         [Test] public void Variables() =>
             Assert.AreEqual("[KSP1PartMod] mm: 7 value(s) with #$ variables left as text (not supported yet)", MmLines.Variables(7));
 
+        [Test] public void DeleteWildcards() =>
+            Assert.AreEqual("[KSP1PartMod] mm: 3 delete line(s) with a wildcard (!key*) left to Redux, which deletes only that exact name (not supported)",
+                MmLines.DeleteWildcards(3));
+
         [Test] public void VectorComponentsSkipped() =>
             Assert.AreEqual("[KSP1PartMod] mm: 12 vector component edit(s) (key[i] op= x) skipped, not supported (Redux would write the operand over every value of the key)",
                 MmLines.VectorComponentsSkipped(12));

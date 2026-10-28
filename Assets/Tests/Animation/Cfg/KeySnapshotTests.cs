@@ -104,13 +104,16 @@ namespace KSP1PartMod.Tests.Animation.Cfg
 
         /// <summary>0.8.0: with <c>ablator_char</c> on, every key of the plan without it is still there, on the same module, and
         /// the only new entries are the ablator chars (planned last). The snapshot tests above run with it off, so they also
-        /// hold the keys of the plan with it on.</summary>
+        /// hold the keys of the plan with it on. The KV pods (shieldChar and a light on <c>_EmissiveColor</c>) get no char:
+        /// their light keeps the slot, with a note.</summary>
         [Test] public void Plan_AblatorChar_KeepsEveryKey_AddsOnlyAblatorEntries_AllRealParts()
         {
             var partsWithChar = 0;
+            var partsKeepingTheirLight = 0;
             foreach (var (name, modules) in RealParts())
             {
                 var withChar = false;
+                var keepsLight = false;
                 foreach (var own in new[] { false, true })
                 foreach (var follow in new[] { false, true })
                 foreach (var shrouds in new[] { false, true })
@@ -127,11 +130,15 @@ namespace KSP1PartMod.Tests.Animation.Cfg
                     Assert.IsTrue(added.All(e => e.ScalarSource == ScalarSource.Ablator), $"{name}: only ablator chars are new");
                     Assert.AreEqual(off.Entries.Count + added.Count, on.Entries.Count, name);
                     if (added.Count > 0) withChar = true;
+                    if (on.Notes.Any(n => n.Contains("writes the same shader property"))) keepsLight = true;
                 }
                 if (withChar) partsWithChar++;
+                if (keepsLight) partsKeepingTheirLight++;
+                Assert.IsFalse(withChar && keepsLight, $"{name}: a char and a light on the same slot");
             }
-            TestContext.WriteLine($"{partsWithChar} real part(s) get an ablator char");
-            Assert.AreEqual(9, partsWithChar, "the 9 installed shields with useChar = True and a shieldChar");
+            TestContext.WriteLine($"{partsWithChar} real part(s) get an ablator char, {partsKeepingTheirLight} keep their light instead");
+            Assert.AreEqual(6, partsWithChar, "the 6 installed _BurnColor shields with useChar = True and a shieldChar");
+            Assert.AreEqual(3, partsKeepingTheirLight, "the KV1, KV2 and KV3 pods");
         }
 
         /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0

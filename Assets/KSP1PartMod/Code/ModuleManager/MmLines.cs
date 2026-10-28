@@ -56,6 +56,9 @@ namespace KSP1PartMod.ModuleManager
         public static string VectorComponentsSkipped(int count) =>
             $"{Prefix}{count} vector component edit(s) (key[i] op= x) skipped, not supported (Redux would write the operand over every value of the key)";
 
+        public static string DeleteWildcards(int count) =>
+            $"{Prefix}{count} delete line(s) with a wildcard (!key*) left to Redux, which deletes only that exact name (not supported)";
+
         public static string PatchFailed(string exception) =>
             $"{Prefix}patch failed, stopped for this session: {exception}";
     }

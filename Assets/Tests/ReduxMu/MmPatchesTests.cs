@@ -225,6 +225,15 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.Contains(_lines, MmLines.Variables(2));
         }
 
+        [Test] public void DeleteWildcards_AreCountedOncePerLine_AndLeftToRedux()
+        {
+            Arm();
+            var part = Run(File("Squad", Part), File("Mine", "@PART[*]\n{\n!node_stack* = delete\n!volume,* = delete\n}\n"));
+            Assert.AreEqual(1, MmPatches.Counters.DeleteWildcards);
+            Assert.AreEqual("0, 1, 0", part.GetValue("node_stack_top"), "Redux deletes only the exact name");
+            CollectionAssert.Contains(_lines, MmLines.DeleteWildcards(1));
+        }
+
         // ------------------------------------------------------------------ parity
 
         private const string PlainPatch =

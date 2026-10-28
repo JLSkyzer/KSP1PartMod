@@ -175,6 +175,16 @@ namespace KSP1PartMod.ModuleManager
             return true;
         }
 
+        /// <summary>A delete line (<c>!</c> or <c>-</c>) whose key, as Redux reads it, holds a wildcard (<c>!key* = delete</c>).
+        /// MM deletes every matching value; Redux deletes only a value of that exact name (parity, counted).</summary>
+        public static bool IsDeleteWildcard(string rawName)
+        {
+            var name = (rawName ?? "").Trim();
+            if (name.Length < 2 || CommandOf(name[0]) != MmCommand.Delete) return false;
+            var key = ReduxBaseName(name.Substring(1));
+            return key.IndexOf('*') >= 0 || key.IndexOf('?') >= 0;
+        }
+
         /// <summary>The base name Redux reads from a value name (observed behaviour, plan (a)): the text before the first
         /// bracket when that bracket is closed (an unclosed one is kept, as Redux keeps it), then before the first comma,
         /// then before the first colon, trimmed.</summary>

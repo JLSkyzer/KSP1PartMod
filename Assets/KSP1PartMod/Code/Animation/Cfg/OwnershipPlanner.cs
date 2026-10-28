@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using KSP1PartMod.Animation.Runtime;
+using KSP1PartMod.Animation.Settings;
 
 namespace KSP1PartMod.Animation.Cfg
 {
@@ -85,19 +87,23 @@ namespace KSP1PartMod.Animation.Cfg
         /// <param name="ablatorChar">Settings <c>ablator_char</c> with <c>ksp1_heatshields</c> (0.8.0): a colour changer that a
         /// <c>ModuleAblator</c> with <c>useChar</c> drives (<c>shieldChar</c>) becomes a Color entry whose scalar is the part's
         /// ablator fraction (<see cref="ScalarSource.Ablator"/>). Those entries are planned after every other one, so no
-        /// older key moves. Off: the 0.7.0 note, no entry.</param>
+        /// older key moves. A char is not planned when another entry of the part writes the same shader property
+        /// (compared through <paramref name="shaderPropertyMap"/>): the KV pods keep their light changer, and the note says
+        /// so. Off: the 0.7.0 note, no entry.</param>
+        /// <param name="shaderPropertyMap">Settings <c>shader_property_map</c>; null: the built-in map.</param>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules,
-            bool pluginModules, bool b9Gates, bool shrouds = false, bool ablatorChar = false) =>
+            bool pluginModules, bool b9Gates, bool shrouds = false, bool ablatorChar = false,
+            IReadOnlyDictionary<string, string[]> shaderPropertyMap = null) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules,
-                pluginModules, b9Gates, shrouds, ablatorChar);
+                pluginModules, b9Gates, shrouds, ablatorChar, shaderPropertyMap);
 
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
         /// table. The plugin modules and the B9 gates are off unless asked for: older callers keep the 0.4.0 plan.</summary>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
             bool followRedux = false, ISet<string> skipModules = null, bool pluginModules = false, bool b9Gates = false,
-            bool shrouds = false, bool ablatorChar = false)
+            bool shrouds = false, bool ablatorChar = false, IReadOnlyDictionary<string, string[]> shaderPropertyMap = null)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -168,10 +174,7 @@ namespace KSP1PartMod.Animation.Cfg
                 if (kind == EntryKind.Color && DrivenByAblator(modules, module, out var id))
                 {
                     if (ablatorChar && TryCharAblator(modules, id, out var resource))
-                    {
-                        ablatorChars.Add((i, id, resource));
-                        notes.Add($"MODULE[{i}] {name}: moduleID '{id}' follows the ablator (Module_Heatshield)");
-                    }
+                        ablatorChars.Add((i, id, resource)); // its note comes with the plan, below
                     else notes.Add($"MODULE[{i}] {name}: moduleID '{id}' is driven by ModuleAblator, stays at 0, not ours");
                     continue;
                 }
@@ -201,12 +204,23 @@ namespace KSP1PartMod.Animation.Cfg
                 for (var i = 0; i < modules.Count; i++)
                     Add(entries, ShroudParser.Parse(modules[i], i, 0));
 
-            // The ablator char (0.8.0): after the shrouds, last of all, so that no older Color key moves (a KV pod has a
-            // light changer on the same shader property after its shieldChar).
+            // The ablator char (0.8.0): after the shrouds, last of all, so that no older Color key moves. It is not planned
+            // when another entry of the part writes the same shader property (a KV pod's light changer, which would never
+            // show again: the char submits every frame and outranks it). Dropping the last entries moves no key.
+            var map = shaderPropertyMap ?? AnimationSettings.Defaults.ShaderPropertyMap;
             foreach (var (index, id, resource) in ablatorChars)
             {
                 var e = EntryParser.Parse(modules[index], index, 0);
                 if (e == null || e.Kind != EntryKind.Color) continue;
+                var rival = entries.FirstOrDefault(o => !Skipped(modules, o.ModuleIndex, skipModules)
+                                                        && SameSlot(o.ShaderProperty, e.ShaderProperty, map));
+                if (rival != null)
+                {
+                    notes.Add($"MODULE[{index}] {NameOf(modules[index])}: moduleID '{id}' not planned, MODULE[{rival.ModuleIndex}] " +
+                              $"{NameOf(modules[rival.ModuleIndex])} writes the same shader property ({e.ShaderProperty}): it keeps it");
+                    continue;
+                }
+                notes.Add($"MODULE[{index}] {NameOf(modules[index])}: moduleID '{id}' follows the ablator (Module_Heatshield)");
                 e.ScalarSource = ScalarSource.Ablator;
                 e.ScalarLinked = true; // no ramp, nothing saved: the colour is the fraction
                 e.ScalarResource = resource;
@@ -372,6 +386,18 @@ namespace KSP1PartMod.Animation.Cfg
             EntryParser.SetKey(e, entries.Count(o => o.Kind == e.Kind && EntryParser.KeyName(o) == name));
             entries.Add(e);
         }
+
+        /// <summary>Two KSP1 shader properties can land on the same material slot: their KSP2 candidates
+        /// (<c>shader_property_map</c>) share a name.</summary>
+        private static bool SameSlot(string a, string b, IReadOnlyDictionary<string, string[]> map)
+        {
+            if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+            var mine = MaterialRules.Candidates(b.Trim(), map);
+            return MaterialRules.Candidates(a.Trim(), map).Any(c => !string.IsNullOrEmpty(c) && mine.Contains(c, StringComparer.Ordinal));
+        }
+
+        private static bool Skipped(IReadOnlyList<IKsp1Node> modules, int index, ISet<string> skipModules) =>
+            skipModules != null && index >= 0 && index < modules.Count && NameOf(modules[index]) is string n && skipModules.Contains(n);
 
         private static IEnumerable<string> Clips(AnimEntryDef e) =>
             new[] { e.Clip, e.SecondClip, e.ThirdClip }.Where(c => !string.IsNullOrEmpty(c));
