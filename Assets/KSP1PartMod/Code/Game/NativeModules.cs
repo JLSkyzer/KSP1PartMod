@@ -1,0 +1,272 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using HarmonyLib;
+using KSP.Sim.Definitions;
+using KSP1PartMod.Animation.Settings;
+using KSP1PartMod.Native;
+using Redux.Ksp1Import.Modules;
+
+namespace KSP1PartMod.Game
+{
+    /// <summary>The native import hook (plan (d)): KSP1 modules that Redux drops as unsupported become KSP2's own modules,
+    /// through Redux's own import path.
+    /// <list type="bullet">
+    /// <item>A postfix on the <c>Ksp1PartModuleImporterRegistry</c> constructor adds our importers to its private
+    /// <c>_importers</c> dictionary, each under its KSP1 module name, only when Redux registered none under that name (a
+    /// future Redux converter wins, with one line).</item>
+    /// <item>Our importers build their module through Redux's private static <c>CreateSerialized(Type, ModuleData,
+    /// Ksp1PartImportContext)</c> (bound once), which adds the data to the part and resolves its
+    /// <c>PartComponentModule_*</c> as for Redux's own modules. No module type of ours.</item>
+    /// </list>
+    /// Each converter (<see cref="All"/>) has its own <c>animations.json</c> switch and its own targets; a missing one turns
+    /// off only that converter. A missing hook member turns them all off, and Redux's import runs as in 0.7.0. Session-wide,
+    /// independent of <c>enabled</c>: armed at pre-initialization, before Redux's import. Never throws into the import.</summary>
+    internal static class NativeModules
+    {
+        public const string HarmonyId = "KSP1PartMod.NativeModules";
+        public const string RegistryTypeName = "Redux.Ksp1Import.Modules.Ksp1PartModuleImporterRegistry";
+        public const string ContextTypeName = "Redux.Ksp1Import.Modules.Ksp1PartImportContext";
+        public const string ImportersField = "_importers";
+        public const string CreateSerializedName = "CreateSerialized";
+
+        /// <summary>The hook members, resolved by name against the loaded game.</summary>
+        internal sealed class Targets
+        {
+            public ConstructorInfo Constructor;    // public Ksp1PartModuleImporterRegistry()
+            public FieldInfo Importers;            // private Dictionary<string, IKsp1PartModuleImporter> _importers
+            public MethodInfo CreateSerialized;    // private static SerializedPartModule (Type, ModuleData, Ksp1PartImportContext)
+            public readonly List<string> Missing = new List<string>();
+        }
+
+        /// <summary>One KSP1 module converted to a native one: its switch, its own targets and its importer.</summary>
+        internal sealed class Converter
+        {
+            public string Ksp1Module, NativeModule, SwitchKey;
+            public Func<AnimationSettings, bool> IsOn;
+            /// <summary>The members this converter needs that the game lacks (empty when all are found).</summary>
+            public Func<List<string>> MissingMembers;
+            public Func<IKsp1PartModuleImporter> Create;
+            /// <summary>The converter's summary line, once at the end of the import.</summary>
+            public Func<string> Summary;
+            public string Pair => NativeLines.Pair(Ksp1Module, NativeModule);
+        }
+
+        /// <summary>Every converter, in the order of the log. Task 4 adds the heat shield.</summary>
+        internal static IReadOnlyList<Converter> All() => new[]
+        {
+            new Converter
+            {
+                Ksp1Module = CrossfeedMapping.Ksp1Module,
+                NativeModule = CrossfeedMapping.NativeModule,
+                SwitchKey = "ksp1_crossfeed_toggle",
+                IsOn = s => s.Ksp1CrossfeedToggle,
+                MissingMembers = CrossfeedImporter.MissingMembers,
+                Create = () => new CrossfeedImporter(),
+                Summary = CrossfeedImporter.Summary,
+            },
+        };
+
+        /// <summary>By part name: the native modules our importers added this session (read by the audit), the notes
+        /// logged, and the summary flags.</summary>
+        internal static readonly NativeRecord Record = new NativeRecord();
+
+        /// <summary>Tests: receives every line instead of the game log.</summary>
+        internal static Action<string> Sink;
+
+        private static Func<Type, ModuleData, Ksp1PartImportContext, SerializedPartModule> _createSerialized;
+        private static FieldInfo _importers;
+        private static List<Converter> _armed = new List<Converter>();
+        private static readonly HashSet<string> RejectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private static bool _broken, _summaryLogged;
+
+        /// <summary>The hook is in place and has not failed.</summary>
+        internal static bool IsArmed => _armed.Count > 0 && !_broken;
+
+        /// <summary>The KSP1 module names our importers are offered for this session.</summary>
+        internal static IReadOnlyList<string> ArmedModules => _armed.Select(c => c.Ksp1Module).ToList();
+
+        internal static Targets Resolve()
+        {
+            var t = new Targets();
+            var registry = AccessTools.TypeByName(RegistryTypeName);
+            var context = AccessTools.TypeByName(ContextTypeName);
+            if (registry == null) t.Missing.Add(RegistryTypeName);
+            if (context == null) t.Missing.Add(ContextTypeName);
+            if (registry == null || context == null) return t;
+
+            t.Constructor = AccessTools.Constructor(registry, Type.EmptyTypes);
+            if (t.Constructor == null) t.Missing.Add("Ksp1PartModuleImporterRegistry()");
+
+            t.Importers = AccessTools.Field(registry, ImportersField);
+            if (t.Importers == null || t.Importers.IsStatic ||
+                !typeof(IDictionary<string, IKsp1PartModuleImporter>).IsAssignableFrom(t.Importers.FieldType))
+            {
+                t.Importers = null;
+                t.Missing.Add("Ksp1PartModuleImporterRegistry." + ImportersField);
+            }
+
+            t.CreateSerialized = AccessTools.Method(registry, CreateSerializedName, new[] { typeof(Type), typeof(ModuleData), context });
+            if (t.CreateSerialized == null || !t.CreateSerialized.IsStatic || t.CreateSerialized.ReturnType != typeof(SerializedPartModule))
+            {
+                t.CreateSerialized = null;
+                t.Missing.Add("Ksp1PartModuleImporterRegistry." + CreateSerializedName + "(Type, ModuleData, Ksp1PartImportContext)");
+            }
+            return t;
+        }
+
+        /// <summary>Arms the converters switched on whose targets resolve. Returns true when at least one is armed.</summary>
+        public static bool TryApply(Harmony harmony, AnimationSettings settings)
+        {
+            var wanted = new List<Converter>();
+            foreach (var c in All())
+            {
+                if (!c.IsOn(settings))
+                {
+                    Info(NativeLines.Off(c.Pair, c.SwitchKey));
+                    continue;
+                }
+                List<string> missing;
+                try
+                {
+                    missing = c.MissingMembers();
+                }
+                catch (Exception e)
+                {
+                    missing = new List<string> { c.NativeModule + " (" + e.GetType().Name + ": " + e.Message + ")" };
+                }
+                if (missing.Count > 0)
+                {
+                    foreach (var m in missing) Warn(NativeLines.MemberNotFound(m, c.NativeModule));
+                    continue;
+                }
+                wanted.Add(c);
+            }
+            if (wanted.Count == 0)
+            {
+                Info(NativeLines.NoneArmed);
+                return false;
+            }
+
+            var t = Resolve();
+            if (t.Missing.Count > 0)
+            {
+                foreach (var m in t.Missing) Warn(NativeLines.MemberNotFound(m, "no native module"));
+                return false;
+            }
+            try
+            {
+                _createSerialized = (Func<Type, ModuleData, Ksp1PartImportContext, SerializedPartModule>)Delegate.CreateDelegate(
+                    typeof(Func<Type, ModuleData, Ksp1PartImportContext, SerializedPartModule>), t.CreateSerialized);
+                _importers = t.Importers;
+                _armed = wanted;
+                harmony.Patch(t.Constructor, postfix: new HarmonyMethod(typeof(NativeModules), nameof(AfterRegistryConstructor)));
+            }
+            catch (Exception e)
+            {
+                harmony.UnpatchAll(HarmonyId);
+                _armed = new List<Converter>();
+                _createSerialized = null;
+                Error(NativeLines.PatchFailed(e.ToString()));
+                return false;
+            }
+            Info(NativeLines.Armed(wanted.Select(c => c.Pair)));
+            return true;
+        }
+
+        /// <summary>Back to the state before any arming (tests).</summary>
+        internal static void Reset()
+        {
+            _armed = new List<Converter>();
+            _createSerialized = null;
+            _importers = null;
+            _broken = _summaryLogged = false;
+            RejectedNames.Clear();
+            Record.Clear();
+        }
+
+        /// <summary>Every registry Redux builds (one per translator) gets our importers where its name is free.</summary>
+        private static void AfterRegistryConstructor(object __instance)
+        {
+            if (_broken || __instance == null) return;
+            try
+            {
+                var importers = (IDictionary<string, IKsp1PartModuleImporter>)_importers.GetValue(__instance);
+                if (importers == null) return;
+                foreach (var c in _armed)
+                {
+                    if (importers.ContainsKey(c.Ksp1Module))
+                    {
+                        if (RejectedNames.Add(c.Ksp1Module)) Info(NativeLines.AlreadyRedux(c.Ksp1Module));
+                        continue;
+                    }
+                    importers[c.Ksp1Module] = c.Create();
+                }
+            }
+            catch (Exception e)
+            {
+                Break(e);
+            }
+        }
+
+        /// <summary>Redux's own <c>CreateSerialized</c>: adds <paramref name="data"/> to the part's module data.</summary>
+        internal static SerializedPartModule CreateSerialized(Type behaviourType, ModuleData data, Ksp1PartImportContext context) =>
+            _createSerialized(behaviourType, data, context);
+
+        /// <summary>Logs <paramref name="note"/> once for <paramref name="part"/>.</summary>
+        internal static void Note(string part, string note)
+        {
+            if (Record.AddNote(part, note)) Info(NativeLines.PartNote(part, note));
+        }
+
+        /// <summary>One converter failed on one part: logged once per part, Redux's 0.7.0 result kept for it.</summary>
+        internal static void ImporterFailed(string part, string ksp1Module, Exception e)
+        {
+            if (Record.AddNote(part, "failed:" + ksp1Module)) Error(NativeLines.ImporterFailed(part, ksp1Module, e.ToString()));
+        }
+
+        /// <summary>Once per session, after Redux's import is complete: each armed converter's summary line.</summary>
+        public static void LogImportSummaryOnce()
+        {
+            if (_armed.Count == 0 || _summaryLogged) return;
+            _summaryLogged = true;
+            foreach (var c in _armed)
+            {
+                try
+                {
+                    Info(c.Summary());
+                }
+                catch (Exception e)
+                {
+                    Error(NativeLines.Prefix + c.Ksp1Module + " summary failed: " + e);
+                }
+            }
+        }
+
+        private static void Break(Exception e)
+        {
+            if (_broken) return;
+            _broken = true;
+            Error(NativeLines.PatchFailed(e.ToString()));
+        }
+
+        internal static void Info(string line)
+        {
+            if (Sink != null) Sink(line);
+            else KSP1PartModPlugin.Log?.LogInfo(line);
+        }
+
+        internal static void Warn(string line)
+        {
+            if (Sink != null) Sink(line);
+            else KSP1PartModPlugin.Log?.LogWarning(line);
+        }
+
+        internal static void Error(string line)
+        {
+            if (Sink != null) Sink(line);
+            else KSP1PartModPlugin.Log?.LogError(line);
+        }
+    }
+}

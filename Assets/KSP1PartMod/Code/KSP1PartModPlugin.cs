@@ -92,6 +92,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // Before Redux's import, which builds its module importer registries; independent of enabled.
+                NativeModules.TryApply(new Harmony(NativeModules.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.NativeLines.PatchFailed(e.ToString()));
+            }
+            try
+            {
                 EngineTooltipStats.TryApply(new Harmony(EngineTooltipStats.HarmonyId), Animations.EngineTooltipStats);
             }
             catch (Exception e)

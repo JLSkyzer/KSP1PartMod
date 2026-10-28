@@ -85,7 +85,11 @@ namespace KSP1PartMod.Game.Animation
             var entries = Ksp1ImportedPartRegistry.ImportedParts.ToList();
             log.LogInfo($"[KSP1PartMod] anim: step start, registry complete={complete}, {entries.Count} part(s)");
             // Once per session: after the first import, which our shroud patches watched.
-            if (complete) ShroudImport.LogImportSummaryOnce();
+            if (complete)
+            {
+                ShroudImport.LogImportSummaryOnce();
+                NativeModules.LogImportSummaryOnce();
+            }
             if (!complete)
             {
                 log.LogWarning("[KSP1PartMod] anim: Redux's KSP1 import is not complete, no module added");

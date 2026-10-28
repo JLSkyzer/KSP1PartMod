@@ -165,6 +165,16 @@ namespace KSP1PartMod.Game
 
             try
             {
+                // Redux's import is complete: once per session, independent of the animation switch.
+                NativeModules.LogImportSummaryOnce();
+            }
+            catch (Exception e)
+            {
+                KSP1PartModPlugin.Log.LogError("[KSP1PartMod] native: summary failed: " + e);
+            }
+
+            try
+            {
                 if (generation == _generation) Place(TreeStore());
             }
             catch (Exception e)
