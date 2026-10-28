@@ -239,6 +239,16 @@ namespace KSP1PartMod.Game.Audit
             {
                 try
                 {
+                    // Report storage (0.12.0) is a flag of the part definition, not a module: read on the definition.
+                    rec.NativeModules = AuditNative.WithStorage(rec.NativeModules, ScienceImporter.StoresReports(rec.Part),
+                        ScienceAccess.StorageOf(core?.data));
+                }
+                catch (Exception)
+                {
+                    // read-only bookkeeping: never fails the audit of a part
+                }
+                try
+                {
                     rec.B9Overrides = B9Items(core, rec, present);
                 }
                 catch (Exception e)

@@ -43,6 +43,12 @@ namespace KSP1PartMod.Native
             }
         }
 
+        /// <summary>True when <paramref name="part"/> is marked with <paramref name="flag"/>.</summary>
+        public bool HasFlag(string part, string flag)
+        {
+            lock (_lock) return _flags.TryGetValue(flag, out var parts) && parts.Contains(part ?? "?");
+        }
+
         /// <summary>The number of parts marked with <paramref name="flag"/>.</summary>
         public int CountFlag(string flag)
         {

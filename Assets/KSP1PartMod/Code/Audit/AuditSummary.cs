@@ -62,6 +62,8 @@ namespace KSP1PartMod.Audit
         public int NativeScanners { get; private set; }
         /// <summary>Radiators (0.11.0): parts with a running Module_Cooler or Module_ActiveRadiator.</summary>
         public int NativeRadiators { get; private set; }
+        /// <summary>Science (0.12.0): parts with a running Module_ScienceExperiment or with report storage.</summary>
+        public int NativeScienceParts { get; private set; }
         public int NativeFailedParts { get; private set; }
         /// <summary>B9 overrides (0.9.0): parts with an override set, and parts where the default variant did not apply.</summary>
         public int B9Parts { get; private set; }
@@ -113,6 +115,7 @@ namespace KSP1PartMod.Audit
             s.NativeDrills = parts.Count(r => HasNative(r, AuditNative.Drill));
             s.NativeScanners = parts.Count(r => HasNative(r, AuditNative.Scanner));
             s.NativeRadiators = parts.Count(r => HasNative(r, AuditNative.Cooler) || HasNative(r, AuditNative.ActiveRadiator));
+            s.NativeScienceParts = parts.Count(r => HasNative(r, AuditNative.Science) || HasNative(r, AuditNative.ReportStorage));
             s.NativeFailedParts = parts.Count(r => r.NativeModules != null && r.NativeModules.Any(AuditNative.IsFailed));
             s.B9Parts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides));
             s.B9FailedParts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides) && AuditB9.IsFailed(r.B9Overrides));
@@ -153,7 +156,7 @@ namespace KSP1PartMod.Audit
         public string NativeLine() =>
             $"audit: native modules: {NativeHeatshields} heat shield(s), {NativeCrossfeeds} crossfeed toggle(s), " +
             $"{NativeConverters} converter(s), {NativeDrills} drill(s), {NativeScanners} scanner(s), " +
-            $"{NativeRadiators} radiator(s), {NativeFailedParts} part(s) where one failed to initialize";
+            $"{NativeRadiators} radiator(s), {NativeScienceParts} science part(s), {NativeFailedParts} part(s) where one failed to initialize";
 
         public string B9Line() => B9.B9Lines.AuditSummary(B9Parts, B9FailedParts);
 

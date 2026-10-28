@@ -537,14 +537,14 @@ namespace KSP1PartMod.Tests.Audit
             var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Heatshield" };
             var s = AuditSummary.From(new[] { shield, both, bad, gone, control, Rec("plain") }, 1);
             Assert.AreEqual("audit: native modules: 2 heat shield(s), 1 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), 0 radiator(s), " +
-                            "2 part(s) where one failed to initialize", s.NativeLine());
+                            "0 science part(s), 2 part(s) where one failed to initialize", s.NativeLine());
             StringAssert.Contains("## Native modules\n\n" + s.NativeLine() + "\n", s.Markdown("x"));
         }
 
         [Test] public void Summary_NativeLine_Empty()
         {
             Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), 0 radiator(s), " +
-                            "0 part(s) where one failed to initialize",
+                            "0 science part(s), 0 part(s) where one failed to initialize",
                 AuditSummary.From(new AuditRecord[0], 0).NativeLine());
         }
 
@@ -558,7 +558,7 @@ namespace KSP1PartMod.Tests.Audit
             var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Mine" };
             var s = AuditSummary.From(new[] { isru, drill, scanner, bad, control }, 1);
             Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 2 converter(s), 1 drill(s), 1 scanner(s), 0 radiator(s), " +
-                            "1 part(s) where one failed to initialize", s.NativeLine());
+                            "0 science part(s), 1 part(s) where one failed to initialize", s.NativeLine());
             Assert.AreEqual(AuditNative.Converter, ConverterMapping.NativeModule);
             Assert.AreEqual(AuditNative.Drill, HarvesterMapping.NativeModule);
             Assert.AreEqual(AuditNative.Scanner, ScannerMapping.NativeModule);
@@ -577,11 +577,39 @@ namespace KSP1PartMod.Tests.Audit
             var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_Cooler" };
             var s = AuditSummary.From(new[] { fixedRad, folding, bad, gone, control }, 1);
             Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), " +
-                            "2 radiator(s), 2 part(s) where one failed to initialize", s.NativeLine());
+                            "2 radiator(s), 0 science part(s), 2 part(s) where one failed to initialize", s.NativeLine());
             Assert.AreEqual(AuditNative.Cooler, RadiatorMapping.NativeCooler);
             Assert.AreEqual(AuditNative.ActiveRadiator, RadiatorMapping.NativeActiveRadiator);
             var rows = ReadCsv(AuditCsv.Document(new[] { folding }));
             Assert.AreEqual("Module_ActiveRadiator", rows[1][AuditCsv.Columns.ToList().IndexOf("native_modules")]);
+        }
+
+        /// <summary>0.12.0: a part counts once as a science part, with the experiment module, report storage or both; a
+        /// failed one is a failed part.</summary>
+        [Test] public void Summary_NativeLine_ScienceParts()
+        {
+            var both = Rec("both"); both.NativeModules = new[] { "Module_ScienceExperiment", "report storage" };
+            var module = Rec("module"); module.NativeModules = new[] { "Module_ScienceExperiment" };
+            var container = Rec("container"); container.NativeModules = new[] { "report storage" };
+            var bad = Rec("bad"); bad.NativeModules = new[] { "Module_ScienceExperiment:uninitialized", "report storage" };
+            var lost = Rec("lost"); lost.NativeModules = new[] { "report storage:missing" };
+            var control = Rec("ctrl"); control.Control = true; control.NativeModules = new[] { "Module_ScienceExperiment" };
+            var s = AuditSummary.From(new[] { both, module, container, bad, lost, control }, 1);
+            Assert.AreEqual("audit: native modules: 0 heat shield(s), 0 crossfeed toggle(s), 0 converter(s), 0 drill(s), 0 scanner(s), " +
+                            "0 radiator(s), 4 science part(s), 2 part(s) where one failed to initialize", s.NativeLine());
+            Assert.AreEqual(AuditNative.Science, KSP1PartMod.Native.Science.ScienceMapping.NativeModule);
+            var rows = ReadCsv(AuditCsv.Document(new[] { both }));
+            Assert.AreEqual("Module_ScienceExperiment;report storage", rows[1][AuditCsv.Columns.ToList().IndexOf("native_modules")]);
+        }
+
+        [Test] public void WithStorage_AppendsTheFlag_MissingWhenTheDefinitionLacksIt()
+        {
+            CollectionAssert.AreEqual(new[] { "Module_ScienceExperiment", "report storage" },
+                AuditNative.WithStorage(new[] { "Module_ScienceExperiment" }, true, true));
+            CollectionAssert.AreEqual(new[] { "report storage:missing" }, AuditNative.WithStorage(null, true, false));
+            Assert.IsTrue(AuditNative.IsFailed(AuditNative.WithStorage(null, true, false)[0]));
+            CollectionAssert.AreEqual(new[] { "Module_Cooler" }, AuditNative.WithStorage(new[] { "Module_Cooler" }, false, true));
+            Assert.AreEqual(0, AuditNative.WithStorage(null, false, false).Count);
         }
 
         [Test] public void Markdown_ModuleManagerLines_AreInTheHeader_OnlyWhenGiven()

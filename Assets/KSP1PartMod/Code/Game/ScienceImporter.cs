@@ -72,6 +72,9 @@ namespace KSP1PartMod.Game
         internal static List<string> MissingMembers() => new List<string>(ScienceAccess.Get().MissingExperiment);
 
         /// <summary>The members the container importer needs; empty when all are found.</summary>
+        /// <summary>True when the import gave <paramref name="part"/> report storage (read by the audit).</summary>
+        internal static bool StoresReports(string part) => NativeModules.Record.HasFlag(part, FlagStorage);
+
         internal static List<string> MissingStorageMembers() => new List<string>(ScienceAccess.Get().MissingStorage);
 
         /// <summary>The recorded science of <paramref name="part"/> (configurations, resolutions, clip targets); null when none.</summary>

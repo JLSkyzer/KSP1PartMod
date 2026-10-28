@@ -17,6 +17,10 @@ namespace KSP1PartMod.Audit
         /// <summary>Radiators (0.11.0): fixed ones are a cooler, deployable ones an active radiator.</summary>
         public const string Cooler = "Module_Cooler";
         public const string ActiveRadiator = "Module_ActiveRadiator";
+        /// <summary>Science (0.12.0): the experiment module, and report storage, a flag of the part definition and not a
+        /// module.</summary>
+        public const string Science = "Module_ScienceExperiment";
+        public const string ReportStorage = "report storage";
         public const string UninitializedTag = ":uninitialized";
         public const string MissingTag = ":missing";
 
@@ -28,6 +32,16 @@ namespace KSP1PartMod.Audit
             var have = new HashSet<string>(present ?? Array.Empty<string>(), StringComparer.Ordinal);
             var bad = new HashSet<string>(uninitialized ?? Array.Empty<string>(), StringComparer.Ordinal);
             return converted.Select(c => !have.Contains(c) ? c + MissingTag : bad.Contains(c) ? c + UninitializedTag : c).ToArray();
+        }
+
+        /// <summary><paramref name="tagged"/> with <see cref="ReportStorage"/> appended when the import gave the part report
+        /// storage (<paramref name="recorded"/>), tagged <c>:missing</c> when the part definition does not carry the flag
+        /// (<paramref name="onDefinition"/>). Unchanged when the import gave none.</summary>
+        public static IReadOnlyList<string> WithStorage(IReadOnlyList<string> tagged, bool recorded, bool onDefinition)
+        {
+            tagged = tagged ?? Array.Empty<string>();
+            if (!recorded) return tagged;
+            return tagged.Concat(new[] { onDefinition ? ReportStorage : ReportStorage + MissingTag }).ToArray();
         }
 
         /// <summary>True when the entry carries a failure tag.</summary>
