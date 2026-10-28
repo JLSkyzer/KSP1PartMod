@@ -1,12 +1,16 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.Reflection;
 using HarmonyLib;
 using KSP.Game;
 using KSP.Messages;
+using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Animation.Textures;
+using KSP1PartMod.Game.Perf;
+using KSP1PartMod.Perf;
 using Redux.Ksp1Import.Assets;
 using Redux.Ksp1Import.Model;
 using UnityEngine;
@@ -51,8 +55,10 @@ namespace KSP1PartMod.Game
         private static string _pendingPath;
         private static TextureUsageClass _pendingClass;
 
-        // Measure and quality
-        private static readonly HashSet<EntityId> Seen = new HashSet<EntityId>();
+        // Measure and quality. Seen: every texture a fresh load gave (the keys), with its texture name argument and source
+        // extension for the census.
+        private static readonly Dictionary<EntityId, TextureOrigin> Seen = new Dictionary<EntityId, TextureOrigin>();
+        private static string _lastResolved;
         private static bool _measureBroken, _followQuality;
         private static long _calls, _fresh, _fromCache, _shared, _failed, _evictedDestroyed, _evictedOtherUsage;
         private static long _keptClears, _keptGraphs, _qualityApplied, _qualitySkipped;
@@ -84,6 +90,11 @@ namespace KSP1PartMod.Game
             {
                 var measure = new Harmony(MeasureHarmonyId);
                 measure.Patch(load, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterLoad)));
+                // The source file of each fresh load (its extension, for the census): the path Redux resolved last. Optional.
+                var resolvePath = AccessTools.Method(loader, "ResolveTexturePath", new[] { typeof(string), typeof(string), typeof(string) });
+                if (resolvePath != null && resolvePath.ReturnType == typeof(string))
+                    measure.Patch(resolvePath, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterResolve)));
+                else log.LogWarning(Prefix + "Ksp1TextureLoader.ResolveTexturePath not found, the census names its textures without the source extension");
                 var complete = AccessTools.Method(registry, "MarkImportComplete");
                 if (complete != null)
                     measure.Patch(complete, postfix: new HarmonyMethod(typeof(Ksp1Textures), nameof(AfterImportComplete)));
@@ -216,10 +227,12 @@ namespace KSP1PartMod.Game
         }
 
         /// <summary>Counts, records the usage of a fresh load for sharing, and applies the quality rule.</summary>
-        private static void AfterLoad(Texture2D __result)
+        private static void AfterLoad(Texture2D __result, string textureName)
         {
             var path = _pendingPath;
+            var resolved = _lastResolved;
             _pendingPath = null;
+            _lastResolved = null;
             if (_measureBroken) return;
             try
             {
@@ -229,11 +242,13 @@ namespace KSP1PartMod.Game
                     _failed++;
                     return;
                 }
-                if (!Seen.Add(__result.GetEntityId()))
+                var id = __result.GetEntityId();
+                if (Seen.ContainsKey(id))
                 {
                     _fromCache++;
                     return;
                 }
+                Seen.Add(id, new TextureOrigin(textureName, Extension(path ?? resolved)));
                 _fresh++;
                 if (path != null && SharingActive)
                 {
@@ -246,6 +261,24 @@ namespace KSP1PartMod.Game
             {
                 _measureBroken = true;
                 KSP1PartModPlugin.Log?.LogError(Prefix + "counting failed, stopped for this session: " + e);
+            }
+        }
+
+        /// <summary>Keeps the path Redux resolved last: <c>LoadTexture</c> resolves its path just before it loads (main
+        /// thread), so the measure postfix reads the source of this load.</summary>
+        private static void AfterResolve(string __result) => _lastResolved = __result;
+
+        private static string Extension(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            try
+            {
+                var extension = System.IO.Path.GetExtension(path);
+                return string.IsNullOrEmpty(extension) ? null : extension.ToLowerInvariant();
+            }
+            catch (ArgumentException)
+            {
+                return null;
             }
         }
 
@@ -365,14 +398,16 @@ namespace KSP1PartMod.Game
         /// records only around its own spawn, so the player's VAB loads are never evicted.</summary>
         internal static void RecordFreshLoads(HashSet<string> into) => _recorded = into;
 
-        /// <summary>The memory and cache lines (<c>textures: memory at &lt;when&gt;</c>), for the audit's progress.</summary>
-        internal static void ReportAt(string when) => Report(when);
+        /// <summary>The memory and cache lines (<c>textures: memory at &lt;when&gt;</c>), for the audit's progress: with
+        /// <c>perf_memory_lines</c>, the process memory and census lines too. Not kept for the perf report (the audit writes its
+        /// own report).</summary>
+        internal static void ReportAt(string when) => Moment(when, false, false, false);
 
-        // ---- Memory lines and budget ----
+        // ---- Memory moments (lines, census, budget, rebuild line, report file) ----
 
         private static void AfterImportComplete()
         {
-            Report("end of import (prefabs still resident)");
+            Moment("end of import (prefabs still resident)", false, false, true);
             try
             {
                 TechTreeLoadStep.Runner().StartCoroutine(AfterFrames(2, "after the import released its prefabs"));
@@ -386,17 +421,17 @@ namespace KSP1PartMod.Game
         private static IEnumerator AfterFrames(int frames, string when)
         {
             for (var i = 0; i < frames; i++) yield return null;
-            Report(when);
-            ApplyBudget(when);
+            Moment(when, true, false, true);
         }
 
-        private static IEnumerator AfterSeconds(float seconds, string when)
+        private static IEnumerator AfterSeconds(float seconds, string when, bool rebuilds)
         {
             yield return new WaitForSecondsRealtime(seconds);
-            Report(when);
+            Moment(when, false, rebuilds, true);
         }
 
-        /// <summary>From <see cref="KSP1PartModPlugin.OnInitialized"/>: memory lines at each VAB or flight entry.</summary>
+        /// <summary>From <see cref="KSP1PartModPlugin.OnInitialized"/>: memory moments at each VAB or flight entry, and at
+        /// each main menu entry with <c>perf_memory_lines</c>.</summary>
         public static void SubscribeToGameStates(GameInstance game)
         {
             try
@@ -419,13 +454,12 @@ namespace KSP1PartMod.Game
             try
             {
                 if (!(message is GameStateChangedMessage m) || m.CurrentState == m.PreviousState) return;
-                string where;
-                if (m.CurrentState == GameState.VehicleAssemblyBuilder) where = "VAB";
-                else if (m.CurrentState == GameState.FlightView && m.PreviousState != GameState.Map3DView) where = "flight";
-                else return;
-                Report(where + " entry");
-                ApplyBudget(where + " entry");
-                TechTreeLoadStep.Runner().StartCoroutine(AfterSeconds(SettledSeconds, where + " entry + 5 s"));
+                var where = MomentOf(m.CurrentState, m.PreviousState, Settings.PerfMemoryLines);
+                if (where == null) return;
+                // The rebuild line (load timeline) belongs to the VAB and flight moments, written once per moment.
+                var vabOrFlight = where != MainMenu;
+                Moment(where + " entry", vabOrFlight, vabOrFlight, true);
+                TechTreeLoadStep.Runner().StartCoroutine(AfterSeconds(SettledSeconds, where + " entry + 5 s", vabOrFlight));
             }
             catch (Exception e)
             {
@@ -433,13 +467,78 @@ namespace KSP1PartMod.Game
             }
         }
 
-        private static void Report(string when)
+        private const string MainMenu = "main menu";
+
+        /// <summary>The moment of a game state: VAB, flight (not back from the map), main menu (only with
+        /// <c>perf_memory_lines</c>, after leaving a campaign too), or none.</summary>
+        internal static string MomentOf(GameState current, GameState previous, bool memoryLines)
+        {
+            if (current == GameState.VehicleAssemblyBuilder) return "VAB";
+            if (current == GameState.FlightView && previous != GameState.Map3DView) return "flight";
+            if (current == GameState.MainMenu && memoryLines) return MainMenu;
+            return null;
+        }
+
+        private static AnimationSettings Settings => KSP1PartModPlugin.Animations ?? AnimationSettings.Defaults;
+
+        /// <summary>One memory moment: one census (every live texture scanned once), the 0.12.0 memory and cache lines, the
+        /// opt-in budget, then with <c>perf_memory_lines</c> the process memory, census and largest lines, then the rebuild
+        /// line and the report file. Never throws.</summary>
+        private static void Moment(string when, bool budget, bool rebuilds, bool kept)
+        {
+            var log = KSP1PartModPlugin.Log;
+            if (log == null) return;
+            var settings = Settings;
+            var census = TakeCensus(when, settings.PerfTopN);
+            Report(when, census);
+            if (budget) ApplyBudget(when, census);
+            if (settings.PerfMemoryLines)
+            {
+                try
+                {
+                    var snapshot = Snapshot(when, census);
+                    log.LogInfo(PerfLines.Memory(snapshot));
+                    if (census != null)
+                    {
+                        log.LogInfo(PerfLines.Census(census));
+                        log.LogInfo(PerfLines.Largest(census));
+                    }
+                    if (kept) PerfReportWriter.NoteMoment(snapshot, census);
+                }
+                catch (Exception e)
+                {
+                    log.LogError(PerfLines.Prefix + "memory line failed at " + when + ": " + e);
+                }
+            }
+            if (rebuilds) LoadTimeline.WriteRebuilds(when);
+            if (kept) PerfReportWriter.Write(when);
+        }
+
+        private static TextureCensus TakeCensus(string when, int topN)
+        {
+            try
+            {
+                var clock = Stopwatch.StartNew();
+                var census = Census(when, topN, Resources.FindObjectsOfTypeAll<Texture2D>(), Seen);
+                census.CensusMs = clock.Elapsed.TotalMilliseconds;
+                return census;
+            }
+            catch (Exception e)
+            {
+                KSP1PartModPlugin.Log?.LogError(Prefix + "census failed at " + when + ": " + e);
+                return null;
+            }
+        }
+
+        private static void Report(string when, TextureCensus census)
         {
             var log = KSP1PartModPlugin.Log;
             if (log == null) return;
             try
             {
-                LiveKsp1(out var count, out var bytes, out var readable);
+                var live = census == null
+                    ? "live KSP1 textures n/a"
+                    : $"live KSP1 textures {census.All.Count}, ~{TextureMemory.Mb(census.All.Bytes)} MB with their full mipmap chain, {census.Readable.Count} readable";
                 log.LogInfo(Prefix + $"memory at {when}: budget {F(QualitySettings.streamingMipmapsMemoryBudget)} MB " +
                             $"(streaming {(QualitySettings.streamingMipmapsActive ? "on" : "off")}, mipmap limit {QualitySettings.globalTextureMipmapLimit}), " +
                             $"current {TextureMemory.Mb(Texture.currentTextureMemory)} MB, desired {TextureMemory.Mb(Texture.desiredTextureMemory)} MB, " +
@@ -450,8 +549,7 @@ namespace KSP1PartMod.Game
                             $"({_shared} kept across rebuilds by sharing), {_failed} failed; evicted {_evictedDestroyed} destroyed, " +
                             $"{_evictedOtherUsage} of the other usage; {_keptClears} cache clear(s) and {_keptGraphs} icon prefab(s) kept their textures; " +
                             $"sharing {(_broken ? "stopped" : _sharingArmed ? (SharingActive ? "active" : "armed, waiting for the import") : "off")}; " +
-                            $"quality applied to {_qualityApplied}, {_qualitySkipped} not readable or without mipmaps; " +
-                            $"live KSP1 textures {count}, ~{TextureMemory.Mb(bytes)} MB with their full mipmap chain, {readable} readable");
+                            $"quality applied to {_qualityApplied}, {_qualitySkipped} not readable or without mipmaps; " + live);
             }
             catch (Exception e)
             {
@@ -459,19 +557,91 @@ namespace KSP1PartMod.Game
             }
         }
 
-        /// <summary>The live textures we saw loaded. A scan of every texture: only at the few memory lines.</summary>
-        private static void LiveKsp1(out int count, out long bytes, out int readable)
+        /// <summary>The source of a texture we saw loaded: Redux's texture name argument and the extension of the file it
+        /// resolved to (null when unknown).</summary>
+        internal readonly struct TextureOrigin
         {
-            count = 0;
-            bytes = 0;
-            readable = 0;
-            foreach (var t in Resources.FindObjectsOfTypeAll<Texture2D>())
+            public readonly string Name, Extension;
+
+            public TextureOrigin(string name, string extension)
             {
-                if (t == null || !Seen.Contains(t.GetEntityId())) continue;
-                count++;
-                if (t.isReadable) readable++;
-                Bits(t.format, out var bits, out var block);
-                bytes += TextureMemory.Estimate(t.width, t.height, t.mipmapCount, bits, block);
+                Name = name;
+                Extension = extension;
+            }
+
+            /// <summary>The census name: the texture name, with the source extension when the name does not end with it.</summary>
+            public string CensusName
+            {
+                get
+                {
+                    var name = string.IsNullOrEmpty(Name) ? "?" : Name;
+                    return Extension == null || name.EndsWith(Extension, StringComparison.OrdinalIgnoreCase) ? name : name + Extension;
+                }
+            }
+        }
+
+        /// <summary>The census of the textures we saw loaded, among <paramref name="candidates"/>. It only reads each texture's
+        /// size, format, mipmap count and readable flag: no pixel access, nothing written. In game, the candidates are every
+        /// <c>Texture2D</c> (<c>Resources.FindObjectsOfTypeAll</c>), only at the few memory moments.</summary>
+        internal static TextureCensus Census(string when, int topN, IEnumerable<Texture2D> candidates,
+            IReadOnlyDictionary<EntityId, TextureOrigin> seen)
+        {
+            var census = new TextureCensus(when, Math.Max(1, topN));
+            foreach (var t in candidates)
+            {
+                if (t == null || !seen.TryGetValue(t.GetEntityId(), out var origin)) continue;
+                var format = t.format;
+                Bits(format, out var bits, out var block);
+                census.Add(origin.CensusName, t.width, t.height, format.ToString(), bits, block, t.mipmapCount, t.isReadable);
+            }
+            return census;
+        }
+
+        /// <summary>Process memory now. Each API in its own try: a failing one is null ("n/a").</summary>
+        private static MemorySnapshot Snapshot(string when, TextureCensus census)
+        {
+            var s = new MemorySnapshot { Moment = when, Ksp1Live = census?.All.Bytes };
+            s.Allocated = Read(() => Profiler.GetTotalAllocatedMemoryLong());
+            s.Reserved = Read(() => Profiler.GetTotalReservedMemoryLong());
+            s.MonoUsed = Read(() => Profiler.GetMonoUsedSizeLong());
+            s.MonoHeap = Read(() => Profiler.GetMonoHeapSizeLong());
+            try
+            {
+                using (var process = Process.GetCurrentProcess())
+                {
+                    s.WorkingSet = Read(() => process.WorkingSet64);
+                    s.PrivateBytes = Read(() => process.PrivateMemorySize64);
+                }
+            }
+            catch (Exception)
+            {
+                // Both "n/a".
+            }
+            s.SystemRamMb = Read(() => SystemInfo.systemMemorySize);
+            s.TextureCurrent = Read(() => (long)Texture.currentTextureMemory);
+            s.TextureDesired = Read(() => (long)Texture.desiredTextureMemory);
+            s.TextureNonStreaming = Read(() => (long)Texture.nonStreamingTextureMemory);
+            s.TextureTotal = Read(() => (long)Texture.totalTextureMemory);
+            try
+            {
+                s.BudgetMb = QualitySettings.streamingMipmapsMemoryBudget;
+            }
+            catch (Exception)
+            {
+                // "n/a".
+            }
+            return s;
+        }
+
+        private static long? Read(Func<long> read)
+        {
+            try
+            {
+                return read();
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 
@@ -512,7 +682,7 @@ namespace KSP1PartMod.Game
         }
 
         /// <summary>Opt-in: base + live KSP1 bytes, capped; the base again while the mod's campaign feature is off.</summary>
-        private static void ApplyBudget(string when)
+        private static void ApplyBudget(string when, TextureCensus census)
         {
             if (!_raiseBudget) return;
             var log = KSP1PartModPlugin.Log;
@@ -527,7 +697,12 @@ namespace KSP1PartMod.Game
                 _baseBudget = TextureMemory.BaseBudgetMb(current, _lastSetBudget, _baseBudget);
                 var plugin = KSP1PartModPlugin.Instance;
                 var featureOn = plugin == null || plugin.Enabled;
-                LiveKsp1(out _, out var bytes, out _);
+                if (census == null)
+                {
+                    log?.LogInfo(Prefix + $"budget at {when}: the KSP1 texture size is unknown (census failed), budget left alone");
+                    return;
+                }
+                var bytes = census.All.Bytes;
                 var capped = false;
                 var target = featureOn
                     ? TextureMemory.RaisedBudgetMb(_baseBudget, bytes, SystemInfo.graphicsMemorySize, out capped)

@@ -46,6 +46,7 @@ namespace KSP1PartMod
             // First: nothing about animations may cost the tech-tree placement.
             TechTreeLoadStep.Register();
             Animations = ReadAnimationSettings();
+            global::KSP1PartMod.Game.Perf.PerfReportWriter.Begin(DateTime.Now);
             try
             {
                 // Right after the settings and before every other patch: each later patch's cost falls inside a timed phase.
@@ -260,8 +261,9 @@ namespace KSP1PartMod
         {
             Log = SWLogger;
             Log.LogInfo("[KSP1PartMod] loaded " + Version);
-            Ksp1Textures.SubscribeToGameStates(Game);
+            // The timeline first: its campaign load and ours lines are then in the report written at the same VAB or flight entry.
             global::KSP1PartMod.Game.Perf.LoadTimeline.SubscribeToGameStates(Game);
+            Ksp1Textures.SubscribeToGameStates(Game);
             try
             {
                 global::KSP1PartMod.Game.Audit.AuditRunner.Arm(Game, Animations);

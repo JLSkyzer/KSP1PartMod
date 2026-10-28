@@ -601,7 +601,8 @@ namespace KSP1PartMod.Game.Perf
             }
         }
 
-        /// <summary>The <c>perf: rebuilds since</c> line for the rebuilds since the previous moment, then their reset.</summary>
+        /// <summary>The <c>perf: rebuilds since</c> line for the rebuilds since the previous moment, then their reset. Called
+        /// once per VAB or flight memory moment (entry and entry + 5 s), from <c>Ksp1Textures</c>.</summary>
         internal static void WriteRebuilds(string moment)
         {
             if (!IsArmed) return;
@@ -654,8 +655,9 @@ namespace KSP1PartMod.Game.Perf
             }
         }
 
-        /// <summary>Campaign load (<c>Loading</c> → the next playable state), the first main menu, and the rebuild line at each
-        /// VAB or flight entry. Same pattern as <c>Ksp1Textures.SubscribeToGameStates</c>.</summary>
+        /// <summary>Campaign load (<c>Loading</c> → the next playable state) and the first main menu. The rebuild line belongs to
+        /// the VAB and flight memory moments of <c>Ksp1Textures</c> (<see cref="WriteRebuilds"/>). Same pattern as
+        /// <c>Ksp1Textures.SubscribeToGameStates</c>.</summary>
         public static void SubscribeToGameStates(GameInstance game)
         {
             if (!IsArmed) return;
@@ -717,8 +719,6 @@ namespace KSP1PartMod.Game.Perf
                 CampaignLoads.Add(PerfLines.S(seconds) + " s to " + current);
                 WriteOurs();
             }
-            if (current == GameState.VehicleAssemblyBuilder) WriteRebuilds("VAB entry");
-            else if (current == GameState.FlightView && previous != GameState.Map3DView) WriteRebuilds("flight entry");
         }
 
         /// <summary>The <c>perf: ours:</c> line, once the campaign load is over (all our steps have run: the tech-tree placement

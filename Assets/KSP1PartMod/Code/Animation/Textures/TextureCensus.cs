@@ -31,8 +31,8 @@ namespace KSP1PartMod.Animation.Textures
     /// uncompressed, not a power of two, or readable, plus the N largest. It only reads what it is given. Pure.</summary>
     public sealed class TextureCensus
     {
-        /// <summary>The size classes by the longest side: up to 256, 512, 1024, 2048, then above 2048 (printed ≥4096).</summary>
-        public static readonly string[] SizeLabels = { "≤256", "512", "1024", "2048", "≥4096" };
+        /// <summary>The size classes by the longest side: up to 256, 512, 1024, 2048, then above 2048 (printed "&gt;2048").</summary>
+        public static readonly string[] SizeLabels = { "≤256", "512", "1024", "2048", ">2048" };
 
         private readonly Dictionary<string, CensusBin> _byFormat = new Dictionary<string, CensusBin>(StringComparer.Ordinal);
         private readonly List<string> _formatOrder = new List<string>();

@@ -311,7 +311,7 @@ namespace KSP1PartMod.Tests.ReduxMu
 
         // ------------------------------------------------------------------ game states
 
-        [Test] public void GameStates_GameStartCampaignLoadOursAndRebuilds()
+        [Test] public void GameStates_GameStartCampaignLoadAndOurs()
         {
             Arm();
             _lines.Clear();
@@ -330,9 +330,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual("[KSP1PartMod] perf: campaign load: 10.0 s from Loading to VehicleAssemblyBuilder", _lines[3]);
             StringAssert.StartsWith("[KSP1PartMod] perf: ours: mu fix —", _lines[4]);
             StringAssert.Contains("animation step —", _lines[4], "our phases are reset after each ours line");
-            Assert.AreEqual("[KSP1PartMod] perf: rebuilds since game start: 0 prefab rebuild(s) in 0 ms (textures 0 ms over 0 load(s)); " +
-                            "slowest: none", _lines[5]);
-            Assert.AreEqual(6, _lines.Count);
+            Assert.AreEqual(5, _lines.Count, "the rebuild line belongs to the memory moments of Ksp1Textures");
             Assert.AreEqual(42.0, LoadTimeline.MainMenuAfterSeconds);
             Assert.AreEqual(2, LoadTimeline.CampaignLoads.Count);
         }

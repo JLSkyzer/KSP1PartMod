@@ -145,7 +145,7 @@ namespace KSP1PartMod.Tests.Animation.Perf
             c.Add("Saturn_S1C", 4096, 4096, "DXT5", 8, true, 1, false);
             c.Add("decal", 300, 200, "RGBA32", 32, false, 1, true);
             Assert.AreEqual("[KSP1PartMod] textures: census at flight entry: 2 live KSP1 texture(s) ~16 MB; by format DXT5 1 (16), RGBA32 1 (0.2); " +
-                            "by size ≤256 0 (0), 512 1 (0.2), 1024 0 (0), 2048 0 (0), ≥4096 1 (16); without mipmaps 2 (16.2); " +
+                            "by size ≤256 0 (0), 512 1 (0.2), 1024 0 (0), 2048 0 (0), >2048 1 (16); without mipmaps 2 (16.2); " +
                             "uncompressed 1 (0.2); not a power of two 1 (0.2); readable 1 (0.2 MB of RAM); census 41.3 ms", PerfLines.Census(c));
             Assert.AreEqual("[KSP1PartMod] textures: largest at flight entry: Saturn_S1C 4096x4096 DXT5 16 MB, decal 300x200 RGBA32 0.2 MB",
                 PerfLines.Largest(c));
