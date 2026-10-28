@@ -48,6 +48,19 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>Opt-in cost counter (<c>perf_counter</c>, default false): times every <c>Drive</c> and the channel flush
         /// and logs <c>anim: perf: …</c> every 60 s.</summary>
         public bool PerfCounter => _switches2a.PerfCounter;
+        /// <summary>Timing patches on Redux's KSP1 import phases, our importers and our load steps (<c>perf_load_timeline</c>,
+        /// default true; false: no timing patch, as 0.12.0).</summary>
+        public bool PerfLoadTimeline => _perf.LoadTimeline;
+        /// <summary>Process memory and the KSP1 texture census at each memory moment, plus a main-menu moment
+        /// (<c>perf_memory_lines</c>, default true; false: the 0.12.0 <c>textures: memory/cache</c> lines only).</summary>
+        public bool PerfMemoryLines => _perf.MemoryLines;
+        /// <summary>Writes <c>&lt;mod&gt;/perf/perf-&lt;session start&gt;.md</c>, rewritten at each memory moment
+        /// (<c>perf_report_file</c>, default true).</summary>
+        public bool PerfReportFile => _perf.ReportFile;
+        /// <summary>Length of the slowest-parts and largest-textures lists (<c>perf_top_n</c>, default 10, 1 to 50).</summary>
+        public int PerfTopN => _perf.TopN;
+        /// <summary>Window of the per-feature frame lines, in seconds (<c>perf_window_seconds</c>, default 10, 2 to 300).</summary>
+        public double PerfWindowSeconds => _perf.WindowSeconds;
         /// <summary>KSP1 module names never taken (<c>skip_modules</c>), trimmed, distinct, ordinal.</summary>
         public IReadOnlyCollection<string> SkipModules => _switches2a.SkipModules;
         /// <summary>Let Redux's <c>Module_Fairing</c> finish its initialization on KSP1 parts (<c>fix_fairing_init</c>):
@@ -281,6 +294,16 @@ namespace KSP1PartMod.Animation.Settings
             public bool RaiseStreamingBudget;
         }
 
+        /// <summary>The performance keys of 0.13.0 (<c>perf_counter</c> stays with 2a), read together.</summary>
+        private sealed class SwitchesPerf
+        {
+            public bool LoadTimeline = true, MemoryLines = true, ReportFile = true;
+            public int TopN = 10;
+            public double WindowSeconds = 10;
+        }
+
+        private readonly SwitchesPerf _perf;
+
         /// <summary>The audit-mode keys, read together.</summary>
         private sealed class SwitchesAudit
         {
@@ -309,13 +332,14 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
-            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators, SwitchesScience science)
+            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators, SwitchesScience science, SwitchesPerf perf)
         {
+            _perf = perf;
             _science = science;
             _radiators = radiators;
             _isru = isru;
@@ -365,6 +389,7 @@ namespace KSP1PartMod.Animation.Settings
                 var isru = new SwitchesIsru();
                 var radiators = new SwitchesRadiators();
                 var science = new SwitchesScience();
+                var perf = new SwitchesPerf();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -384,6 +409,11 @@ namespace KSP1PartMod.Animation.Settings
                         case "throttle_effects": ReadBool(p, ref s2a.ThrottleEffects, problems); break;
                         case "heat_glow": ReadBool(p, ref s2a.HeatGlow, problems); break;
                         case "perf_counter": ReadBool(p, ref s2a.PerfCounter, problems); break;
+                        case "perf_load_timeline": ReadBool(p, ref perf.LoadTimeline, problems); break;
+                        case "perf_memory_lines": ReadBool(p, ref perf.MemoryLines, problems); break;
+                        case "perf_report_file": ReadBool(p, ref perf.ReportFile, problems); break;
+                        case "perf_top_n": ReadClampedInt(p, 1, 50, ref perf.TopN, problems); break;
+                        case "perf_window_seconds": ReadClampedDouble(p, 2, 300, ref perf.WindowSeconds, problems); break;
                         case "plugin_modules": ReadBool(p, ref s2a.PluginModules, problems); break;
                         case "b9_module_gates": ReadBool(p, ref s2a.B9ModuleGates, problems); break;
                         case "fix_fairing_init": ReadBool(p, ref s041.FixFairingInit, problems); break;
@@ -447,7 +477,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf);
             }
             catch (Exception e)
             {
