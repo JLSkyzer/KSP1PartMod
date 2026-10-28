@@ -201,6 +201,9 @@ science n'est pas lancée. Si un moteur s'allume ou un étage se sépare différ
   la tuyère est supposé être le maillage émissif (les maillages frères ne sont pas cherchés) ; la plume de poussée
   de Redux reste **hors** de la lueur : si elle brille, le noter. `<n>` peut surestimer.
 - [ ] Sous warp sur rails la poussée RCS est zéro : la lueur s'éteint (attendu).
+- [ ] RCS au repos (aucune commande) : le maillage de la tuyère ne brille **pas** (couleur émissive prémultipliée,
+  noire à la poussée nulle). S'il brille quand même, ajouter `"ModuleBdbRCSEmissive"` à `skip_modules` dans
+  `animations.json` et le signaler.
 
 ## 2b.7 Cache-maillages
 

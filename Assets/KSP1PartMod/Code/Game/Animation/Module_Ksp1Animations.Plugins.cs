@@ -187,7 +187,8 @@ namespace KSP1PartMod.Game.Animation
             }
         }
 
-        /// <summary>Flight: each thruster's renderer gets <c>(1, 1, 1, alphaCurve(scalar))</c> on its Color-class channel.
+        /// <summary>Flight: each thruster's renderer gets <c>alphaCurve(scalar)</c> premultiplied
+        /// (<see cref="PluginRules.RcsEmissiveColor"/>) on its Color-class channel.
         /// Editor or no RCS: nothing is submitted, so the material's own colour shows. Allocation-free.</summary>
         private static void StepRcsEmissive(Entry e, bool inEditor)
         {
@@ -195,7 +196,7 @@ namespace KSP1PartMod.Game.Animation
             for (var i = 0; i < e.Thrusters.Length; i++)
             {
                 var scalar = RcsScalar.Of(e.RcsForce(i), e.RcsMax, e.Def.ThrustForceMult);
-                e.Writer.WriteAt(i, new Rgba(1f, 1f, 1f, e.RcsAlpha.Evaluate(scalar)));
+                e.Writer.WriteAt(i, PluginRules.RcsEmissiveColor(e.RcsAlpha, scalar));
             }
         }
 

@@ -111,6 +111,17 @@ namespace KSP1PartMod.Animation.Runtime
         public static string RcsGlowLine(string part, int thrusters, int hosts) =>
             $"{part} rcs glow: {thrusters} thruster(s), {hosts} host(s) {(thrusters == hosts ? "matched" : "count mismatch, disabled")}";
 
+        /// <summary>Final review I1: the RCS emissive colour, <c>alphaCurve(scalar)</c> premultiplied into every component.
+        /// KSP1 writes <c>(1, 1, 1, a)</c> and its shaders read the alpha as the intensity; the KSP2 <c>_EmissionColor</c>
+        /// that <c>shader_property_map</c> picks first reads only the RGB, so an idle thruster (scalar 0, alpha 0) must be
+        /// black, not white. NaN gives black; the alpha is clamped to 0..1.</summary>
+        public static Rgba RcsEmissiveColor(Behaviours.FloatCurve alphaCurve, float scalar)
+        {
+            var a = alphaCurve != null ? alphaCurve.Evaluate(scalar) : scalar;
+            a = a > 0f ? (a < 1f ? a : 1f) : 0f; // NaN fails "a > 0": black
+            return new Rgba(a, a, a, a);
+        }
+
         /// <summary>The name prefix of Redux's RCS plume objects (<c>Ksp1RcsPlumeBuilder</c>).</summary>
         public const string RcsPlumePrefix = "[KSP1 RCS Plume]";
 

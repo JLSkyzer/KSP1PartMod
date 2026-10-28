@@ -306,7 +306,8 @@ namespace KSP1PartMod.Game.Animation
         {
             note = null;
             var e = new Entry(def);
-            var editorSpeed = KSP1PartModPlugin.Animations.EditorAnimationSpeed;
+            var settings = KSP1PartModPlugin.Animations; // the settings of this bind, passed to every writer
+            var editorSpeed = settings.EditorAnimationSpeed;
             switch (def.Kind)
             {
                 case EntryKind.Toggle:
@@ -340,7 +341,7 @@ namespace KSP1PartMod.Game.Animation
                     break;
                 }
                 case EntryKind.Color:
-                    e.Writer = new MaterialWriter(gameObject, def, KSP1PartModPlugin.Animations);
+                    e.Writer = new MaterialWriter(gameObject, def, settings);
                     note = e.Writer.Note;
                     if (e.Writer.RendererCount == 0) return null;
                     Log($"{_name} color '{def.ShaderProperty}' {e.Writer.Note}");
@@ -481,7 +482,7 @@ namespace KSP1PartMod.Game.Animation
                     {
                         var slots = new Renderer[e.Thrusters.Length];
                         for (var i = 0; i < slots.Length; i++) slots[i] = FirstMeshRenderer(e.Thrusters[i]);
-                        e.Writer = new MaterialWriter(slots, def, KSP1PartModPlugin.Animations);
+                        e.Writer = new MaterialWriter(slots, def, settings);
                         LogPluginLine(def, PluginRules.RcsEmissiveLine(_name, e.Writer.Note));
                     }
                     e.RcsAlpha = new KSP1PartMod.Animation.Behaviours.FloatCurve(def.Curves != null && def.Curves.Length > 0 ? def.Curves[0] : null);
@@ -1313,6 +1314,8 @@ namespace KSP1PartMod.Game.Animation
             public bool Rested;
             /// <summary>States sampled at rest this frame, disabled again on the next (hold-pose idiom).</summary>
             public List<AnimationState> RestHeld;
+            /// <summary>The frame <see cref="RestHeld"/> was filled (<see cref="RestPlan.ReleaseNow"/>).</summary>
+            public int RestHeldFrame;
 
             public Entry(AnimEntryDef def) => Def = def;
         }

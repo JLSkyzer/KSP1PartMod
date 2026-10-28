@@ -20,6 +20,9 @@ namespace KSP1PartMod.Game.Animation
         private static readonly ClipPose RestTrackPose = new ClipPose(0f, 0f, 0f, true);
 
         private VariantWatch _variants;
+        /// <summary>Final review M2: gated part whose switch had no variant set at bind (<see cref="VariantRetryRule"/>).</summary>
+        private bool _variantRetry;
+        private float _variantBindTime, _variantLastTry;
 
         // ---------------------------------------------------------------- bind
 
@@ -41,6 +44,9 @@ namespace KSP1PartMod.Game.Animation
                             LogTransforms(set, _variants.ActiveOf(set));
                 }
                 else if (gated) Log($"{_name} B9 gates on their default subtype: {note}");
+                _variantRetry = gated && (_variants == null || _variants.SetCount == 0) && GetComponent<VSwift.Modules.Behaviours.Module_PartSwitch>() != null;
+                _variantBindTime = _variantLastTry = Time.unscaledTime;
+                if (_variantRetry) Log($"{_name} B9 switch has no variant set yet, looking again for {VariantRetryRule.Limit:0} s");
             }
             catch (Exception ex)
             {
@@ -94,6 +100,7 @@ namespace KSP1PartMod.Game.Animation
         /// while nothing changes.</summary>
         private void PollVariants(bool inEditor)
         {
+            if (_variantRetry) RetryVariants();
             var w = _variants;
             if (w == null) return;
             try
@@ -104,6 +111,46 @@ namespace KSP1PartMod.Game.Animation
             {
                 _variants = null;
                 Error($"{_name} variant watch stopped for this session, B9 gates frozen: {ex}");
+            }
+        }
+
+        /// <summary>The switch had no set at bind: create the watch again until it has sets, then set every gate from the
+        /// selection (an entry now inactive rests on this frame's <see cref="RestInactive"/>). Never throws.</summary>
+        private void RetryVariants()
+        {
+            try
+            {
+                var now = Time.unscaledTime;
+                var hasSwitch = GetComponent<VSwift.Modules.Behaviours.Module_PartSwitch>() != null;
+                switch (VariantRetryRule.Next(true, hasSwitch, _variants?.SetCount ?? 0, now - _variantBindTime, now - _variantLastTry))
+                {
+                    case VariantRetry.Retry:
+                        _variantLastTry = now;
+                        var w = VariantWatch.Create(this, out _, out _);
+                        if (w == null || w.SetCount == 0) return;
+                        _variants = w;
+                        _variantRetry = false;
+                        Log(VariantRetryRule.FoundLine(_name, now - _variantBindTime, w.Describe()));
+                        foreach (var e in _entries)
+                        {
+                            if (e.Disabled || e.Def.Gates == null || e.Def.Gates.Length == 0) continue;
+                            InitGate(e);
+                            e.Rested = false;
+                        }
+                        return;
+                    case VariantRetry.GiveUp:
+                        _variantRetry = false;
+                        Log(VariantRetryRule.GiveUpLine(_name));
+                        return;
+                    case VariantRetry.None:
+                        _variantRetry = false;
+                        return;
+                }
+            }
+            catch (Exception ex)
+            {
+                _variantRetry = false;
+                Error($"{_name} variant retry failed, B9 gates on their default subtype: {ex}");
             }
         }
 
@@ -148,7 +195,7 @@ namespace KSP1PartMod.Game.Animation
             for (var i = 0; i < _entries.Count; i++)
             {
                 var held = _entries[i].RestHeld;
-                if (held == null || held.Count == 0) continue;
+                if (held == null || held.Count == 0 || !RestPlan.ReleaseNow(Time.frameCount, _entries[i].RestHeldFrame)) continue;
                 for (var k = 0; k < held.Count; k++)
                     if (held[k] != null) held[k].enabled = false;
                 held.Clear();
@@ -206,6 +253,7 @@ namespace KSP1PartMod.Game.Animation
                 s.speed = 0f;
                 s.normalizedTime = 0f;
                 (e.RestHeld ??= new List<AnimationState>()).Add(s);
+                e.RestHeldFrame = Time.frameCount;
             }
         }
 

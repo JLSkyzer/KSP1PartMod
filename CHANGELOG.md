@@ -10,7 +10,12 @@ Animations phase 2b: KSP1 plugin modules and B9PartSwitch gates. Not run in game
 - **Clip ownership.** One owner per clip, unless the B9 gates keep two entries apart. `skip_modules` is applied before that rule.
 - New `animations.json` keys: `plugin_modules`, `b9_module_gates` (default true). `skip_modules` also names plugin modules.
 - **Not verified in game:** see section 2b of the checklist. The main ones: the B9 set and variant ids against Redux's, `ActiveVariants` changing on a VAB pick, whether Redux's `TransformActivator` really toggles the variant transforms (it looks objects up by direct child), `EngineIgnited` and `isDecoupled` timing, the unit and scale of the RCS force (kN), the host-to-thruster pairing, and the cost on a 1000-part craft.
-- 1280 EditMode tests (1278 passing, 2 explicit and skipped).
+- **Final-review fixes:**
+  - The RCS emissive colour is premultiplied, so an idle thruster stays dark (the KSP2 `_EmissionColor` ignores alpha).
+  - An entry inactive at load holds its rest pose until the next frame.
+  - A B9 switch with no variant set at bind is looked up again for 10 s.
+  - A nozzle previewed out in the VAB no longer starts flight extended, because only the flight state is saved.
+- 1292 EditMode tests (1290 passing, 2 explicit and skipped).
 
 ## 0.4.1 - 2026-10-28
 

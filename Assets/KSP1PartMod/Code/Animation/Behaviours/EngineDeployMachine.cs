@@ -9,7 +9,8 @@ namespace KSP1PartMod.Animation.Behaviours
     /// entry is <see cref="AnimEntryDef.Retractable"/>; a non-retractable entry stays out once extended. At flight
     /// start the pose is the target, with no motion. In the editor a toggle previews the extension at
     /// <see cref="EditorSpeed.Multiplier"/> (KSP1 value 1). Saved: <c>.deployed</c>, only with
-    /// <see cref="AnimEntryDef.PersistDeployed"/>.</summary>
+    /// <see cref="AnimEntryDef.PersistDeployed"/>, and only the flight state: the editor preview saves "not deployed", so a
+    /// nozzle previewed out in the VAB starts flight from ignition alone (final review M3).</summary>
     public sealed class EngineDeployMachine : IEntryMachine
     {
         private readonly string _kDeployed;
@@ -17,6 +18,8 @@ namespace KSP1PartMod.Animation.Behaviours
         private readonly float _length;
         private float _t, _speed;
         private bool _manual, _editorOn, _lastSaved;
+        /// <summary>The machine ran in flight (<see cref="Start"/> or a flight tick): only then is its pose saved.</summary>
+        private bool _flight;
 
         public EngineDeployMachine(AnimEntryDef def, float clipLength)
         {
@@ -26,7 +29,10 @@ namespace KSP1PartMod.Animation.Behaviours
             _length = Machine.Length(clipLength);
         }
 
-        public bool Changed => _persist && Deployed != _lastSaved;
+        public bool Changed => _persist && SavedDeployed != _lastSaved;
+
+        /// <summary>The value saved: the flight state, never the editor preview.</summary>
+        private bool SavedDeployed => _flight && Deployed;
 
         /// <summary>BDB's <c>deployed</c>: out, or moving.</summary>
         public bool Deployed => _t > 0f || _speed != 0f;
@@ -40,6 +46,7 @@ namespace KSP1PartMod.Animation.Behaviours
         /// keeps a non-ignited engine's nozzle out.</summary>
         public void Start(bool ignited)
         {
+            _flight = true;
             if (ignited) _t = 1f;
             _speed = 0f;
         }
@@ -57,6 +64,7 @@ namespace KSP1PartMod.Animation.Behaviours
         public void Tick(float dt, bool inEditor, bool anyIgnited, float editorSpeedSetting)
         {
             if (!(dt > 0f)) return;
+            if (!inEditor) _flight = true;
             var target = inEditor ? _editorOn : anyIgnited || _manual;
             var rate = inEditor ? EditorSpeed.Multiplier(editorSpeedSetting, 1f) : 1f;
             if (target && _t < 1f) _speed = rate;
@@ -73,13 +81,13 @@ namespace KSP1PartMod.Animation.Behaviours
             if (!_persist || !Machine.TryRead(saved, _kDeployed, out var d)) return;
             _t = Machine.Bool(d) ? 1f : 0f;
             _speed = 0f;
-            _lastSaved = Deployed;
+            _lastSaved = Machine.Bool(d);
         }
 
         public void Save(IDictionary<string, float> into)
         {
             if (!_persist) return;
-            _lastSaved = Deployed;
+            _lastSaved = SavedDeployed;
             into[_kDeployed] = Machine.Of(_lastSaved);
         }
     }

@@ -8,6 +8,11 @@ namespace KSP1PartMod.Animation.Runtime
     /// wins, and sampling the rest there would fight it.</summary>
     public static class RestPlan
     {
+        /// <summary>Final review M1: states held at rest on frame <paramref name="heldFrame"/> are released only once the
+        /// frame number has moved on, so the legacy animation pass samples them at least once even when the setup and the
+        /// first update of the part run in the same frame.</summary>
+        public static bool ReleaseNow(int frame, int heldFrame) => frame > heldFrame;
+
         /// <summary>Per item of <paramref name="mine"/>: true when the inactive entry samples its rest on it, that is when
         /// it is not null and no array of <paramref name="activeOthers"/> holds the same object (by reference).</summary>
         public static bool[] Unshared<T>(T[] mine, IReadOnlyList<T[]> activeOthers) where T : class
