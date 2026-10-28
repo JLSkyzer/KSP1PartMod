@@ -29,9 +29,9 @@ namespace KSP1PartMod.Animation.Cfg
     {
         private const string B9Name = "ModuleB9PartSwitch";
 
-        /// <summary>Applies the B9 gates to <paramref name="entries"/> (sets <see cref="AnimEntryDef.Gates"/>) and returns
-        /// one note per override left alone for a reason worth logging. Overrides on modules that are neither ours nor
-        /// Redux's are skipped silently.</summary>
+        /// <summary>Applies the B9 gates to <paramref name="entries"/> (replaces <see cref="AnimEntryDef.Gates"/>, so a
+        /// second call gives the same result) and returns one note per override left alone for a reason worth logging.
+        /// Overrides on modules that are neither ours nor Redux's are skipped silently.</summary>
         /// <param name="reduxOwnedModuleIndices">MODULE indices whose animation stays with Redux: not gated.</param>
         public static IReadOnlyList<string> Apply(IReadOnlyList<IKsp1Node> modules, IReadOnlyList<AnimEntryDef> entries,
             ISet<int> reduxOwnedModuleIndices)
@@ -40,6 +40,8 @@ namespace KSP1PartMod.Animation.Cfg
             if (modules == null || entries == null || entries.Count == 0) return notes;
             var redux = reduxOwnedModuleIndices ?? new HashSet<int>();
             var ours = new HashSet<int>(entries.Where(e => e != null).Select(e => e.ModuleIndex));
+            foreach (var e in entries)
+                if (e != null) e.Gates = null;
             var switches = Switches(modules);
             foreach (var sw in switches)
             {
@@ -152,6 +154,7 @@ namespace KSP1PartMod.Animation.Cfg
             var result = new List<Switch>();
             if (modules == null) return result;
             var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var ignored = ShroudTransforms(modules);
             var kept = 0;
             foreach (var m in modules)
             {
@@ -168,7 +171,7 @@ namespace KSP1PartMod.Animation.Cfg
                 if (subtypes.Count == 0 || !subtypes.Any(HasVisualData)) continue;
                 // Built: the id is reserved even if the set is then dropped.
                 var id = MakeUnique(raw, used);
-                if (!subtypes.Any(HasTransformer)) continue;
+                if (!subtypes.Any(st => HasTransformer(st, ignored))) continue;
                 sw.SetId = id;
                 kept++;
             }
@@ -214,14 +217,33 @@ namespace KSP1PartMod.Animation.Cfg
         private static bool HasVisualData(IKsp1Node subtype) =>
             Transforms(subtype).Any() || subtype.GetNodes("NODE").Any() || TextureNodes(subtype).Any();
 
-        /// <summary>A transformer Redux would build for the subtype. Redux also drops transforms named by an engine
-        /// shroud (its ignored set), which the cfg alone cannot tell.</summary>
-        private static bool HasTransformer(IKsp1Node subtype) =>
-            Transforms(subtype).Any()
+        /// <summary>A transformer Redux would build for the subtype. Its transforms leave out the engine-shroud names
+        /// (<paramref name="ignored"/>); the visual-data test above does not, as in Redux.</summary>
+        private static bool HasTransformer(IKsp1Node subtype, HashSet<string> ignored) =>
+            Transforms(subtype).Any(t => !ignored.Contains(t))
             || subtype.GetNodes("NODE").Any(n => !string.IsNullOrWhiteSpace(n.GetValue("name")) && IsVector3(n.GetValue("position")))
             || TextureNodes(subtype).Any(t =>
                 FirstNonBlank(t.GetValue("texture"), t.GetValue("newTexture"), t.GetValue("mainTextureURL")).Length > 0
                 || t.AllValues.Any(v => IsShaderTextureKey(v.Key)));
+
+        /// <summary>Redux's ignored transforms (<c>Ksp1EngineShroudBuilder.GetFairingShroudTransformNames</c>, read in
+        /// the 26w42c decompile): the comma-separated <c>jettisonName</c> of each ModuleJettison, trimmed, compared
+        /// ignoring case, unless <c>ignoreNodes</c> parses as true. (<c>bottomNodeName</c> defaults to <c>bottom</c>, so
+        /// its other condition always holds.)</summary>
+        private static HashSet<string> ShroudTransforms(IReadOnlyList<IKsp1Node> modules)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var m in modules)
+            {
+                if (m == null || !"ModuleJettison".Equals(Trim(m.GetValue("name")), StringComparison.OrdinalIgnoreCase)) continue;
+                var names = (m.GetValue("jettisonName") ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(n => n.Trim()).Where(n => n.Length > 0).ToList();
+                if (names.Count == 0) continue;
+                if (bool.TryParse(m.GetValue("ignoreNodes"), out var ignoreNodes) && ignoreNodes) continue;
+                foreach (var n in names) set.Add(n);
+            }
+            return set;
+        }
 
         private static bool IsVector3(string raw)
         {

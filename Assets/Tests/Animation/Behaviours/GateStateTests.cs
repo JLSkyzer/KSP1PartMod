@@ -76,21 +76,29 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
 
         [Test] public void Gate_Check10000Frames_AllocatesZero()
         {
-            var s = new GateState(new[] { Gate(new[] { "a", "off" }), Gate(new[] { "b" }) });
-            var ids = new[] { "x", "a", "b", "off", null };
-            var changes = 0;
+            // Gate 0 flips every frame (each flip changes Active) while gate 1 stays at its default; from frame 5000
+            // gate 1 holds "b" (inactive), so no flip changes Active any more.
+            var warm = new GateState(new[] { Gate(new[] { "off" }), Gate(new[] { "b" }) });
+            var measured = new GateState(new[] { Gate(new[] { "off" }), Gate(new[] { "b" }) });
+            var s = warm;
+            int changes = 0, inactiveFrames = 0;
             void Frames()
             {
+                changes = 0;
+                inactiveFrames = 0;
                 for (var i = 0; i < 10000; i++)
                 {
-                    if (s.Set(i & 1, ids[i % ids.Length])) changes++;
-                    if (!s.Active) changes--;
+                    if (s.Set(0, (i & 1) == 0 ? "off" : "x")) changes++;
+                    if (s.Set(1, i < 5000 ? null : "b")) changes++;
+                    if (!s.Active) inactiveFrames++;
                 }
             }
 
             Frames(); // warm up (JIT)
+            s = measured;
             Assert.That(Frames, Is.Not.AllocatingGCMemory());
-            Assert.AreNotEqual(0, changes);
+            Assert.AreEqual(5000 + 1, changes); // frame 5000 flips gate 0 off before gate 1 takes "b"
+            Assert.AreEqual(2500 + 5000, inactiveFrames);
         }
     }
 }

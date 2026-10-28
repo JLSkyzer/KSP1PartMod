@@ -98,6 +98,25 @@ namespace KSP1PartMod.Tests.Animation.Cfg
                 B9(moduleId: "t", subtypes: Sub("name = x\nTEXTURE\n{\ntexture = a/b\n}\n")),
                 B9(moduleId: "u", subtypes: Sub("name = x\nTEXTURE:emissive\n{\n_EmissiveMap = a/c\n}\n")))));
 
+        private static string Jettison(string names, string ignoreNodes = null) =>
+            Module("name = ModuleJettison\njettisonName = " + names + (ignoreNodes != null ? "\nignoreNodes = " + ignoreNodes : ""));
+
+        // A switch whose only transforms are shroud names (Redux's ignored set, from ModuleJettison jettisonName,
+        // ignoring case) is built (id reserved) then dropped: k does not advance.
+        [Test] public void B9_SetIds_ShroudOnlyTransforms_DroppedButReserved() =>
+            CollectionAssert.AreEqual(new[] { null, "s_2", "B9Switch1" }, B9GatePlanner.SetIds(Mods(
+                Jettison("fairingA, Fairing_B"),
+                B9(moduleId: "s", subtypes: new[] { Sub("name = a\ntransform = FAIRINGA\n"), Sub("name = b\ntransform = fairing_b\n") }),
+                B9(moduleId: "s"), B9())));
+
+        [Test] public void B9_SetIds_ShroudWithIgnoreNodes_NotIgnored() =>
+            CollectionAssert.AreEqual(new[] { "s" }, B9GatePlanner.SetIds(Mods(
+                Jettison("fairingA", ignoreNodes: "True"), B9(moduleId: "s", subtypes: new[] { Sub("name = a\ntransform = fairingA\n") }))));
+
+        [Test] public void B9_SetIds_ShroudPlusOtherTransform_Kept() =>
+            CollectionAssert.AreEqual(new[] { "s" }, B9GatePlanner.SetIds(Mods(
+                Jettison("fairingA"), B9(moduleId: "s", subtypes: new[] { Sub("name = a\ntransform = fairingA\ntransform = bell\n") }))));
+
         [Test] public void B9_SetIds_NoSubtype_NotASet() =>
             CollectionAssert.AreEqual(new string[] { null }, B9GatePlanner.SetIds(Mods(Module("name = ModuleB9PartSwitch\nmoduleID = x"))));
 
@@ -175,6 +194,22 @@ namespace KSP1PartMod.Tests.Animation.Cfg
                 Plain("a", Override(Id("ModuleDeployableEngine", "NozzleA"), active: false)), Plain("b"),
             })))[0].Gates.Single();
             Assert.AreEqual(((string)null, "b"), (g.SetId, g.DefaultSubtype));
+        }
+
+        [Test] public void B9_Apply_Twice_SameGates()
+        {
+            var mods = TwoNozzles(B9(moduleId: "x", subtypes: new[]
+            {
+                Subtype("a", Override(Id("ModuleDeployableEngine", "NozzleA"), active: false)), Subtype("b"),
+            }));
+            var entries = EntriesOf(mods);
+            var first = B9GatePlanner.Apply(mods, entries, new HashSet<int>());
+            var second = B9GatePlanner.Apply(mods, entries, new HashSet<int>());
+            CollectionAssert.AreEqual(first, second);
+            var g = entries[0].Gates.Single();
+            Assert.AreEqual("x", g.SetId);
+            CollectionAssert.AreEqual(new[] { "a" }, g.InactiveIn);
+            Assert.IsNull(entries[1].Gates);
         }
 
         [Test] public void B9_ModuleActiveTrue_NoGate() =>

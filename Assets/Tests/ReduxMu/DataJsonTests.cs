@@ -16,7 +16,15 @@ namespace KSP1PartMod.Tests.ReduxMu
         private static Data_Ksp1Animations SampleData()
         {
             var d = new Data_Ksp1Animations();
-            d.Entries.Add(new AnimEntryDef { Kind = EntryKind.Toggle, Key = "toggle:door:0", Clip = "door", Layer = 1 });
+            d.Entries.Add(new AnimEntryDef
+            {
+                Kind = EntryKind.Toggle, Key = "toggle:door:0", Clip = "door", Layer = 1,
+                Gates = new[]
+                {
+                    new B9Gate { SetId = "engineSwitch", InactiveIn = new[] { "A", "C" }, DefaultSubtype = "B", SubtypeIds = new[] { "A", "B", "C" } },
+                    new B9Gate { SetId = null, InactiveIn = new[] { "x" }, DefaultSubtype = "y", SubtypeIds = new[] { "x", "y" } },
+                },
+            });
             d.Entries.Add(new AnimEntryDef
             {
                 Kind = EntryKind.Color, Key = "color:_EmissiveColor:0", ModuleIndex = 3, ShaderProperty = "_EmissiveColor",
@@ -44,6 +52,16 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual("door", back.Entries[0].Clip);
             CollectionAssert.AreEqual(new[] { "lamp" }, back.Entries[1].IncludedRenderers);
             CollectionAssert.AreEqual(new[] { "solar" }, back.ReduxClips);
+            Assert.IsNull(back.Entries[1].Gates, "no gates stays null");
+            var g = back.Entries[0].Gates;
+            Assert.AreEqual(2, g.Length);
+            Assert.AreEqual(("engineSwitch", "B"), (g[0].SetId, g[0].DefaultSubtype));
+            CollectionAssert.AreEqual(new[] { "A", "C" }, g[0].InactiveIn);
+            CollectionAssert.AreEqual(new[] { "A", "B", "C" }, g[0].SubtypeIds);
+            Assert.IsNull(g[1].SetId, "null set id kept");
+            Assert.AreEqual("y", g[1].DefaultSubtype);
+            CollectionAssert.AreEqual(new[] { "x" }, g[1].InactiveIn);
+            CollectionAssert.AreEqual(new[] { "x", "y" }, g[1].SubtypeIds);
         }
 
         /// <summary>IOProvider's settings are built by a RuntimeInitializeOnLoadMethod, which EditMode does not run:
