@@ -84,7 +84,7 @@ PROPELLANT
             Assert.AreEqual(2, copy.GetNodes("PROPELLANT").Count());
         }
 
-        [Test] public void OffForms_FourKinds()
+        [Test] public void OffForms_ThreeKinds_NoEngine()
         {
             CollectionAssert.AreEquivalent(
                 new[] { "gimbalRange", "gimbalRangeXP", "gimbalRangeXN", "gimbalRangeYP", "gimbalRangeYN" },
@@ -95,7 +95,7 @@ PROPELLANT
             foreach (var d in new[] { "ModuleDecouple", "ModuleAnchoredDecoupler" })
                 CollectionAssert.AreEqual(new[] { "staged=false" }, B9OffForms.For(d).Select(v => v.Key + "=" + v.Value));
             foreach (var e in new[] { "ModuleEngines", "moduleenginesfx" })
-                CollectionAssert.AreEqual(new[] { "maxThrust=0" }, B9OffForms.For(e).Select(v => v.Key + "=" + v.Value));
+                Assert.IsNull(B9OffForms.For(e), "maxThrust 0 would give NaN Δv: no engine off form");
         }
 
         [Test] public void OffForms_None_ForConverterAndOthers()

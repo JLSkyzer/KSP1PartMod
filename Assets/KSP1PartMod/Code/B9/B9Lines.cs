@@ -89,6 +89,19 @@ namespace KSP1PartMod.B9
         public static string ModuleOffNone(string part, string ksp1Module, string variant) =>
             Prefix + $"{part}: {ksp1Module} off in {variant}: no native off form, left on";
 
+        /// <summary>An engine turned off: no off form (maxThrust 0 would give NaN Δv and burn time), the engine stays on.</summary>
+        public static string ModuleOffEngine(string part, string ksp1Module, string variant) =>
+            Prefix + $"{part}: {ksp1Module} off in {variant}: engine off form (maxThrust 0) dropped, left on (its Δv and burn time would read NaN)";
+
+        /// <summary>A decoupler turned off on a part that also stages through another module: staging is per part
+        /// (<c>CanStage</c>), so the off form would take that module out of staging too.</summary>
+        public static string ModuleOffStaging(string part, string ksp1Module, string variant, string other) =>
+            Prefix + $"{part}: {ksp1Module} off in {variant}: off form skipped, the part also stages through {other} (staging is per part), left on";
+
+        /// <summary>An off form whose re-import changes no native field.</summary>
+        public static string ModuleOffNoChange(string part, string ksp1Module, string variant) =>
+            Prefix + $"{part}: {ksp1Module} off in {variant}: the off form changes no native field";
+
         public static string NoNativeEffect(string part, string ksp1Module, IEnumerable<string> keys) =>
             Prefix + $"{part}: {ksp1Module}: no native effect ({List(keys)})";
 
@@ -104,9 +117,11 @@ namespace KSP1PartMod.B9
 
         /// <summary>End of the import.</summary>
         public static string ModuleDataSummary(int transformers, int parts, IEnumerable<(string Field, int Count)> byField,
-            int offForms, int noOffForm, IEnumerable<string> noOffFormModules, int noNativeEffect, IEnumerable<string> noEffectModules) =>
+            int offForms, int noOffForm, IEnumerable<string> noOffFormModules, int noNativeEffect, IEnumerable<string> noEffectModules,
+            int offNoChange = 0) =>
             Prefix + $"module data: {transformers} transformer(s) on {parts} part(s) ({List(byField?.Select(f => f.Field + " " + f.Count))}); " +
-            $"off forms {offForms}, no off form {noOffForm} ({List(noOffFormModules)}); no native effect {noNativeEffect} ({List(noEffectModules)})";
+            $"off forms {offForms}{(offNoChange > 0 ? $" ({offNoChange} changing nothing)" : "")}, no off form {noOffForm} ({List(noOffFormModules)}); " +
+            $"no native effect {noNativeEffect} ({List(noEffectModules)})";
 
         // ---- Task 4: audit ----
 

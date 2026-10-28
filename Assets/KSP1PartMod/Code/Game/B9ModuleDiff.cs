@@ -69,9 +69,9 @@ namespace KSP1PartMod.Game
         {
             var m = new Members();
             m.AddValue = AccessTools.Method(typeof(Ksp1ConfigNode), "AddValue", new[] { typeof(string), typeof(string) });
-            if (m.AddValue == null || m.AddValue.IsStatic) { m.AddValue = null; m.Missing.Add("Ksp1ConfigNode.AddValue(string, string)"); }
+            if (m.AddValue == null || m.AddValue.IsStatic || m.AddValue.ReturnType != typeof(void)) { m.AddValue = null; m.Missing.Add("Ksp1ConfigNode.AddValue(string, string)"); }
             m.AddNode = AccessTools.Method(typeof(Ksp1ConfigNode), "AddNode", new[] { typeof(Ksp1ConfigNode) });
-            if (m.AddNode == null || m.AddNode.IsStatic) { m.AddNode = null; m.Missing.Add("Ksp1ConfigNode.AddNode(Ksp1ConfigNode)"); }
+            if (m.AddNode == null || m.AddNode.IsStatic || m.AddNode.ReturnType != typeof(void)) { m.AddNode = null; m.Missing.Add("Ksp1ConfigNode.AddNode(Ksp1ConfigNode)"); }
             var translator = AccessTools.TypeByName(TranslatorTypeName);
             m.OrderedEngines = translator == null ? null : AccessTools.Method(translator, OrderedEnginesName, new[] { typeof(Ksp1ConfigNode) });
             if (m.OrderedEngines == null || !m.OrderedEngines.IsStatic || m.OrderedEngines.ReturnType != typeof(List<Ksp1ConfigNode>))
@@ -82,14 +82,28 @@ namespace KSP1PartMod.Game
             return m;
         }
 
-        /// <summary>Binds the members (all must resolve).</summary>
+        /// <summary>Binds the members (all must resolve); false, never a throw, when one cannot be bound.</summary>
         internal static bool Bind(Members m)
         {
             if (m == null || m.Missing.Count > 0) return false;
+            try
+            {
+                BindChecked(m);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Reset();
+                m.Missing.Add("B9 module data binding (" + e.GetType().Name + ": " + e.Message + ")");
+                return false;
+            }
+        }
+
+        private static void BindChecked(Members m)
+        {
             _addValue = (Action<Ksp1ConfigNode, string, string>)Delegate.CreateDelegate(typeof(Action<Ksp1ConfigNode, string, string>), m.AddValue);
             _addNode = (Action<Ksp1ConfigNode, Ksp1ConfigNode>)Delegate.CreateDelegate(typeof(Action<Ksp1ConfigNode, Ksp1ConfigNode>), m.AddNode);
             _orderedEngines = (Func<Ksp1ConfigNode, List<Ksp1ConfigNode>>)Delegate.CreateDelegate(typeof(Func<Ksp1ConfigNode, List<Ksp1ConfigNode>>), m.OrderedEngines);
-            return true;
         }
 
         internal static void Reset()
@@ -117,18 +131,37 @@ namespace KSP1PartMod.Game
                 .Where(f => f.GetCustomAttributes(true).Any(a => a.GetType().Name == DefinitionAttributeName))
                 .ToArray());
 
-        /// <summary>The native fields that <paramref name="edited"/> (the edited copy of the part's MODULE number
-        /// <paramref name="targetIndex"/>) changes, through <paramref name="registry"/>, as V-SwiFT transformers.</summary>
+        /// <summary>The MODULE indices of the engines Redux imports together as one multi-mode <c>Module_Engine</c>
+        /// (empty when the part has no engine switch).</summary>
+        internal static HashSet<int> SwitchedEngineIndices(Ksp1ConfigNode partNode)
+        {
+            var result = new HashSet<int>();
+            var ordered = _orderedEngines(partNode);
+            if (ordered == null || ordered.Count == 0) return result;
+            var modules = partNode.GetNodes("MODULE").ToList();
+            for (var i = 0; i < modules.Count; i++)
+                if (ordered.Any(n => ReferenceEquals(n, modules[i]))) result.Add(i);
+            return result;
+        }
+
+        /// <summary>One edit: the edited copy of the part's MODULE number <paramref name="targetIndex"/>.</summary>
         internal static Result Diff(Ksp1PartModuleImporterRegistry registry, Ksp1ConfigNode partNode, Ksp1PartImportContext context,
-            int targetIndex, IKsp1Node edited)
+            int targetIndex, IKsp1Node edited) =>
+            Diff(registry, partNode, context, new[] { new KeyValuePair<int, IKsp1Node>(targetIndex, edited) });
+
+        /// <summary>The native fields that <paramref name="edits"/> (edited copies of the part's MODULE nodes, by index)
+        /// change, through <paramref name="registry"/>, as V-SwiFT transformers. Several edits are allowed only on the
+        /// engines Redux switches: they are written into one engine list, imported once, so one <c>engineModes</c> holds
+        /// every edited mode.</summary>
+        internal static Result Diff(Ksp1PartModuleImporterRegistry registry, Ksp1ConfigNode partNode, Ksp1PartImportContext context,
+            IReadOnlyList<KeyValuePair<int, IKsp1Node>> edits)
         {
             var result = new Result();
             var modules = partNode.GetNodes("MODULE").ToList();
-            if (targetIndex < 0 || targetIndex >= modules.Count || edited == null)
+            if (edits == null || edits.Count == 0 || edits.Any(e => e.Key < 0 || e.Key >= modules.Count || e.Value == null))
                 return NotImported(result, "no such module");
-            var target = modules[targetIndex];
+            var target = modules[edits[0].Key];
             var name = target.GetValue("name");
-            var editedNode = ToConfigNode(edited);
 
             SerializedPartModule before = default, after = default;
             bool imported;
@@ -136,19 +169,24 @@ namespace KSP1PartMod.Game
             if (ordered != null && ordered.Count > 0)
             {
                 // Redux imports a part's switched engines together, one mode each (multi-mode engine).
-                var i = ordered.FindIndex(n => ReferenceEquals(n, target));
-                if (i < 0) return NotImported(result, "not among Redux's engine modes");
-                var editedList = new List<Ksp1ConfigNode>(ordered) { [i] = editedNode };
+                var editedList = new List<Ksp1ConfigNode>(ordered);
+                foreach (var e in edits)
+                {
+                    var i = ordered.FindIndex(n => ReferenceEquals(n, modules[e.Key]));
+                    if (i < 0) return NotImported(result, "not among Redux's engine modes");
+                    editedList[i] = ToConfigNode(e.Value);
+                }
                 imported = registry.TryImportEngineModes(ordered, Scratch(context, partNode), out before)
                            && registry.TryImportEngineModes(editedList, Scratch(context, partNode), out after);
             }
             else
             {
+                if (edits.Count != 1) throw new ArgumentException("several edits outside a switched engine", nameof(edits));
                 if (Ksp1PartModuleImporterRegistry.IsGimbalModuleName(name) &&
                     !ReferenceEquals(modules.First(m => Ksp1PartModuleImporterRegistry.IsGimbalModuleName(m.GetValue("name"))), target))
                     return NotImported(result, "not the part's first gimbal, the only one Redux imports");
                 imported = registry.TryImport(target, Scratch(context, partNode), out before)
-                           && registry.TryImport(editedNode, Scratch(context, partNode), out after);
+                           && registry.TryImport(ToConfigNode(edits[0].Value), Scratch(context, partNode), out after);
             }
             if (!imported || before.BehaviourType == null || before.BehaviourType != after.BehaviourType)
                 return NotImported(result, "Redux imports no native module for it");
@@ -199,7 +237,8 @@ namespace KSP1PartMod.Game
         }
 
         /// <summary>A throwaway context: the real part node, a throwaway part data that shares (reads only) the real one's
-        /// attach nodes (decoupler node ids) and resource containers (heat shield capacity), a scratch report.</summary>
+        /// attach nodes (decoupler node ids), resource containers (heat shield capacity) and crossfeed flag (crossfeed
+        /// importer), a scratch report. These are every part value Redux's and our importers read.</summary>
         private static Ksp1PartImportContext Scratch(Ksp1PartImportContext real, Ksp1ConfigNode partNode) =>
             new Ksp1PartImportContext(real.PartName, new Ksp1ImportReport())
             {
@@ -209,6 +248,8 @@ namespace KSP1PartMod.Game
                     partName = real.PartData?.partName ?? real.PartName,
                     attachNodes = real.PartData?.attachNodes,
                     resourceContainers = real.PartData?.resourceContainers,
+                    // Read by 0.8.0's crossfeed importer (its default when the module has no crossfeedStatus).
+                    fuelCrossFeed = real.PartData?.fuelCrossFeed ?? new PartData().fuelCrossFeed,
                 },
             };
     }

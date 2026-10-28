@@ -58,8 +58,8 @@ namespace KSP1PartMod.B9
     }
 
     /// <summary>The native "off" form of a KSP1 module that a B9 subtype turns off (<c>moduleActive = false</c>): DATA
-    /// values written over the module and re-imported by Redux, for the kinds KSP2 can show as off. A curated table
-    /// (plan (d)); any other module has none.</summary>
+    /// values written over the module and re-imported by Redux, for the kinds KSP2 can show as off: gimbal, RCS,
+    /// decoupler. A curated table (plan (d)); any other module, engines included, has none.</summary>
     public static class B9OffForms
     {
         private static readonly Dictionary<string, KeyValuePair<string, string>[]> Table =
@@ -70,8 +70,8 @@ namespace KSP1PartMod.B9
                 ["ModuleRCSFX"] = Zero("thrusterPower"),
                 ["ModuleDecouple"] = new[] { new KeyValuePair<string, string>("staged", "false") },
                 ["ModuleAnchoredDecoupler"] = new[] { new KeyValuePair<string, string>("staged", "false") },
-                ["ModuleEngines"] = Zero("maxThrust"),
-                ["ModuleEnginesFX"] = Zero("maxThrust"),
+                // No engine form: an engine at maxThrust 0 keeps its staging slot with a fuel flow of 0, so Δv and burn
+                // time read NaN or infinite (review of Task 3, 2026-10-28). An engine turned off stays on, with a line.
             };
 
         private static KeyValuePair<string, string>[] Zero(params string[] keys) =>

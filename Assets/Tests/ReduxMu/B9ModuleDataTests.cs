@@ -6,9 +6,11 @@ using HarmonyLib;
 using KSP.IO;
 using KSP.Modules;
 using KSP.Sim.Definitions;
+using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.B9;
 using KSP1PartMod.Game;
+using KSP1PartMod.Game.Animation;
 using KSP1PartMod.Tests.Animation;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -588,6 +590,279 @@ PART
             CollectionAssert.Contains(_lines, B9Lines.FieldConflict("testConflict", "Module_Engine", "engineModes", "first"));
         });
 
+        // ------------------------------------------------------------------ several modes, off-form rules
+
+        private const string TwoModePart = @"
+PART
+{
+	name = testTwoModes
+	mass = 1
+	MODULE
+	{
+		name = ModuleEnginesFX
+		engineID = SL
+		maxThrust = 100
+		PROPELLANT
+		{
+			name = LiquidFuel
+			ratio = 1
+		}
+	}
+	MODULE
+	{
+		name = ModuleEnginesFX
+		engineID = Vac
+		maxThrust = 110
+		PROPELLANT
+		{
+			name = LiquidFuel
+			ratio = 1
+		}
+	}
+	MODULE
+	{
+		name = MultiModeEngine
+		primaryEngineID = SL
+		secondaryEngineID = Vac
+	}
+	MODULE
+	{
+		name = ModuleB9PartSwitch
+		moduleID = thrust
+		SUBTYPE
+		{
+			name = Low
+		}
+		SUBTYPE
+		{
+			name = High
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleEnginesFX
+					engineID = SL
+				}
+				DATA
+				{
+					maxThrust = 200
+				}
+			}
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleEnginesFX
+					engineID = Vac
+				}
+				DATA
+				{
+					maxThrust = 220
+				}
+			}
+		}
+	}
+}
+";
+
+        private static Data_Engine.EngineMode[] Modes(ModuleDefinitionTransformer t) =>
+            (Data_Engine.EngineMode[])IOProvider.FromJson(t.Value.ToString(Formatting.None), typeof(Data_Engine.EngineMode[]));
+
+        /// <summary>One subtype edits both modes of a multi-mode engine: one <c>engineModes</c> holds both edits.</summary>
+        [Test] public void TryBuild_TwoModesEditedByOneSubtype_OneTransformerWithBoth() => WithGameSettings(() =>
+        {
+            Assert.IsTrue(Arm());
+            var imported = Import(TwoModePart);
+            TestContext.WriteLine(Log);
+            Assert.AreEqual(1, imported.Context.PartData.serializedPartModules.Count(m => m.BehaviourType == typeof(Module_Engine)));
+            var mdts = Mdt(VariantOf(imported.Data, "High"));
+            Assert.AreEqual(1, mdts.Count, Log);
+            var modes = Modes(mdts[0]);
+            Assert.AreEqual(200f, modes.Single(m => m.engineID == "SL").maxThrust);
+            Assert.AreEqual(220f, modes.Single(m => m.engineID == "Vac").maxThrust);
+            var tally = B9Overrides.ModuleTallyOf("testTwoModes");
+            Assert.AreEqual(1, tally.Transformers);
+            Assert.AreEqual(1, tally.ByField["Module_Engine.engineModes"]);
+            Assert.IsTrue(tally.Modules.All(o => o.Fields.SequenceEqual(new[] { "engineModes" })), "both modes are edited");
+        });
+
+        /// <summary>Every DATA <c>maxThrust</c> of a real multi-mode part reaches its mode: the mode is found by the
+        /// IDENTIFIER's values (engineID, thrustVectorTransformName).</summary>
+        private void AssertEveryModeEdit(string relativePath, string partName)
+        {
+            var file = RealFile(relativePath);
+            Assert.IsTrue(Arm());
+            var part = file.Node.GetNodes("PART").Single(p => p.GetValue("name") == partName);
+            var imported = Import(file, part);
+            TestContext.WriteLine(Log);
+            var checkedEdits = 0;
+            foreach (var st in part.GetNodes("MODULE").Where(m => m.GetValue("name") == "ModuleB9PartSwitch").SelectMany(m => m.GetNodes("SUBTYPE")))
+            {
+                var edits = st.GetNodes("MODULE").Where(b => b.GetNode("IDENTIFIER")?.GetValue("name") == "ModuleEnginesFX" &&
+                                                             b.GetNode("DATA")?.GetValue("maxThrust") != null).ToList();
+                if (edits.Count == 0) continue;
+                var mdts = Mdt(VariantOf(imported.Data, st.GetValue("name")));
+                Assert.AreEqual(1, mdts.Count(t => t.Key == "engineModes"), st.GetValue("name") + ": one engineModes per variant");
+                var modes = Modes(mdts.Single(t => t.Key == "engineModes"));
+                foreach (var b in edits)
+                {
+                    var id = b.GetNode("IDENTIFIER");
+                    var mode = modes.Single(m =>
+                        (id.GetValue("engineID") == null || m.engineID == id.GetValue("engineID")) &&
+                        (id.GetValue("thrustVectorTransformName") == null || m.thrustVectorTransformName == id.GetValue("thrustVectorTransformName")));
+                    Assert.AreEqual(float.Parse(b.GetNode("DATA").GetValue("maxThrust"), System.Globalization.CultureInfo.InvariantCulture),
+                        mode.maxThrust, 1e-3f, $"{st.GetValue("name")}: mode {mode.engineID}");
+                    checkedEdits++;
+                }
+            }
+            TestContext.WriteLine($"{checkedEdits} mode edit(s) checked");
+            Assert.Greater(checkedEdits, 1);
+            Assert.IsFalse(_lines.Any(l => l.Contains("failed") || l.Contains("dropped")), Log);
+        }
+
+        /// <summary>A real cfg, with its <c>MODULE:NEEDS[!DefaultActionGroups]</c> nodes named <c>MODULE</c>: in game
+        /// ModuleManager resolves them (that mod is not installed) before Redux reads the part, and the UA120's
+        /// <c>MultiModeEngine</c> is such a node.</summary>
+        private static Ksp1ConfigFile RealFile(string relativePath)
+        {
+            var path = Path.Combine(InstalledKsp1.Root, relativePath);
+            if (!File.Exists(path)) Assert.Ignore("not installed: " + path);
+            var text = System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path), @"MODULE:NEEDS\[!DefaultActionGroups\]", "MODULE");
+            return new Ksp1ConfigFile(new Ksp1ModRoot(InstalledKsp1.Root, InstalledKsp1.Root), path, "Bluedog_DB", Ksp1ConfigNode.Parse(text));
+        }
+
+        [Test] public void TryBuild_RealBdbXlr129_BothModesEdited() => WithGameSettings(() =>
+            AssertEveryModeEdit("Bluedog_DB/Parts/Engines/bluedog_XLR129.cfg", "bluedog_XLR129"));
+
+        [Test] public void TryBuild_RealBdbUa120_SrbMainModeChanges() => WithGameSettings(() =>
+        {
+            AssertEveryModeEdit("Bluedog_DB/Parts/Titan/bluedog_UA120.cfg", "bluedog_UA120");
+            Disarm();
+            _lines.Clear();
+            B9Overrides.Sink = _lines.Add;
+            Assert.IsTrue(Arm());
+            var file = RealFile("Bluedog_DB/Parts/Titan/bluedog_UA120.cfg");
+            var imported = Import(file, file.Node.GetNodes("PART").Single());
+            Assert.AreEqual(1, imported.Context.PartData.serializedPartModules.Count(m => m.BehaviourType == typeof(Module_Engine)), "one multi-mode engine");
+            var main = Modes(Mdt(VariantOf(imported.Data, "UA1202")).Single(t => t.Key == "engineModes")).Single(m => m.engineID == "S1SRB");
+            Assert.AreEqual(486.3f, main.maxThrust, 1e-3f, "the Titan SRB main mode, 1311.4 kN in the cfg");
+        });
+
+        private const string DecouplerEnginePart = @"
+PART
+{
+	name = testSepMotor
+	mass = 0.1
+	MODULE
+	{
+		name = ModuleDecouple
+		ejectionForce = 100
+	}
+	MODULE
+	{
+		name = ModuleEngines
+		maxThrust = 20
+		PROPELLANT
+		{
+			name = SolidFuel
+			ratio = 1
+		}
+	}
+	MODULE
+	{
+		name = ModuleB9PartSwitch
+		moduleID = sw
+		SUBTYPE
+		{
+			name = Live
+		}
+		SUBTYPE
+		{
+			name = Inert
+			addedMass = 0.01
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleDecouple
+				}
+				moduleActive = false
+			}
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleEngines
+				}
+				moduleActive = false
+			}
+		}
+	}
+}
+";
+
+        /// <summary>A decoupler off on a part that also stages through an engine: the decoupler off form is skipped
+        /// (staging is per part), and the engine off form is dropped (maxThrust 0 gives NaN Δv).</summary>
+        [Test] public void TryBuild_DecouplerOffWithAnEngine_Skipped_EngineOffDropped() => WithGameSettings(() =>
+        {
+            Assert.IsTrue(Arm());
+            var imported = Import(DecouplerEnginePart);
+            TestContext.WriteLine(Log);
+            CollectionAssert.IsEmpty(Mdt(VariantOf(imported.Data, "Inert")), Log);
+            CollectionAssert.Contains(_lines, B9Lines.ModuleOffStaging("testSepMotor", "ModuleDecouple", "Inert", "ModuleEngines"));
+            CollectionAssert.Contains(_lines, B9Lines.ModuleOffEngine("testSepMotor", "ModuleEngines", "Inert"));
+            Assert.IsFalse(_lines.Any(l => l.Contains("no native effect")), "a skipped off form is not 'no native effect'");
+            B9Overrides.LogImportSummaryOnce();
+            CollectionAssert.Contains(_lines, B9Lines.ModuleDataSummary(0, 0, null, 0, 2, new[] { "ModuleDecouple", "ModuleEngines" }, 0, null));
+        });
+
+        private const string RcsZeroPart = @"
+PART
+{
+	name = testRcsZero
+	mass = 0.1
+	MODULE
+	{
+		name = ModuleRCSFX
+		thrusterPower = 0
+		resourceName = MonoPropellant
+	}
+	MODULE
+	{
+		name = ModuleB9PartSwitch
+		moduleID = sw
+		SUBTYPE
+		{
+			name = On
+		}
+		SUBTYPE
+		{
+			name = Off
+			addedMass = 0.01
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleRCSFX
+				}
+				moduleActive = false
+			}
+		}
+	}
+}
+";
+
+        [Test] public void TryBuild_OffFormChangingNothing_LoggedAndCounted() => WithGameSettings(() =>
+        {
+            Assert.IsTrue(Arm());
+            var imported = Import(RcsZeroPart);
+            TestContext.WriteLine(Log);
+            CollectionAssert.IsEmpty(Mdt(VariantOf(imported.Data, "Off")));
+            CollectionAssert.Contains(_lines, B9Lines.ModuleOffNoChange("testRcsZero", "ModuleRCSFX", "Off"));
+            B9Overrides.LogImportSummaryOnce();
+            Assert.IsTrue(_lines.Any(l => l.Contains("off forms 0 (1 changing nothing)")), Log);
+        });
+
         // ------------------------------------------------------------------ real files
 
         /// <summary>The installed BDB Titan Transtage: its 34D subtype raises <c>maxThrust</c> to 36.5 and changes the
@@ -621,21 +896,25 @@ PART
 
         /// <summary>Every installed PART (raw cfg) whose B9 subtypes carry a module DATA block: imported as Redux does,
         /// then built with the postfix. An engine, gimbal, RCS, solar or command target gives transformers or a
-        /// "no native effect" note (or a logged skip: IDENTIFIER, repeated behaviour); fairings, decals and FX names
-        /// give notes only; nothing fails.</summary>
+        /// "no native effect" note. A repeated behaviour is not an accepted outcome: it is listed apart, and each one is
+        /// checked against the real import (the part holds that behaviour twice or more) and its line. Fairings and decals
+        /// give notes only; every DATA block's FX names, re-imported alone, change no native field; nothing fails.</summary>
         [Test] public void Census_InstalledDataBlocks_TransformerOrNote() => WithGameSettings(() =>
         {
             var cfgs = InstalledKsp1.AllCfg();
             Assert.IsTrue(Arm());
             var root = InstalledKsp1.Root;
             var modRoot = new Ksp1ModRoot(root, root);
-            int parts = 0, reduxThrows = 0, effect = 0, noEffect = 0, repeated = 0, unmatched = 0, notesOnlyChecked = 0, fxOnlyChecked = 0;
+            int parts = 0, reduxThrows = 0, effect = 0, noEffect = 0, unmatched = 0, notesOnlyChecked = 0, fxOnlyChecked = 0;
+            var repeated = new List<string>();
+            var registry = new Ksp1PartModuleImporterRegistry();
             var byField = new Dictionary<string, int>();
             var fxKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "powerEffectName", "runningEffectName", "spoolEffectName", "engageEffectName", "disengageEffectName", "flameoutEffectName" };
             foreach (var path in cfgs)
             {
                 Ksp1ConfigNode node;
-                try { node = Ksp1ConfigNode.ParseFile(path); }
+                // MODULE:NEEDS[!DefaultActionGroups] resolved as ModuleManager does in game (BDB's MultiModeEngine nodes).
+                try { node = Ksp1ConfigNode.Parse(System.Text.RegularExpressions.Regex.Replace(File.ReadAllText(path), @"MODULE:NEEDS\[!DefaultActionGroups\]", "MODULE")); }
                 catch { continue; }
                 var mod = path.Substring(root.Length).TrimStart('/', '\\').Split('/', '\\')[0];
                 foreach (var part in node.GetNodes("PART"))
@@ -647,7 +926,8 @@ PART
                     if (blocks.Count == 0) continue;
                     parts++;
                     var name = part.GetValue("name");
-                    try { Import(new Ksp1ConfigFile(modRoot, path, mod, node), part); }
+                    Imported imported;
+                    try { imported = Import(new Ksp1ConfigFile(modRoot, path, mod, node), part); }
                     catch (Exception e)
                     {
                         reduxThrows++;
@@ -674,17 +954,34 @@ PART
                             notesOnlyChecked++;
                             Assert.IsTrue(outcomes.All(o => o.Fields.Count == 0), $"{name}: {target} gave native fields");
                         }
-                        if (keys.Count > 0 && keys.All(fxKeys.Contains) && outcomes.All(o => o.Keys.All(fxKeys.Contains)))
+                        var fx = block.GetNodes("DATA").SelectMany(d => d.Values).Where(v => fxKeys.Contains(v.Name)).ToList();
+                        if (fx.Count > 0)
                         {
-                            fxOnlyChecked++;
-                            Assert.IsTrue(outcomes.All(o => o.Fields.Count == 0), $"{name}: FX names of {target} gave native fields");
+                            // The block's FX names alone, written over its target and re-imported: no native field.
+                            var adapters = Ksp1NodeAdapter.Modules(part);
+                            var match = B9GatePlanner.Match(adapters, new Ksp1NodeAdapter(block.GetNode("IDENTIFIER")));
+                            if (match.Count == 1)
+                            {
+                                var fxData = new B9Node("DATA");
+                                fxData.Values.AddRange(fx.Select(v => new KeyValuePair<string, string>(v.Name, v.RawValue)));
+                                var r = B9ModuleDiff.Diff(registry, part, imported.Context, match[0], B9ModuleEdit.EditedCopy(adapters[match[0]], fxData));
+                                CollectionAssert.IsEmpty(r.Transformers.Select(t => t.Key), $"{name}: FX names of {target} gave native fields");
+                                fxOnlyChecked++;
+                            }
                         }
                         if (!NativeTargets.Contains(target)) continue;
                         foreach (var o in outcomes)
                         {
                             if (o.Fields.Count > 0) effect++;
                             else if (o.NoEffect) noEffect++;
-                            else if (o.Repeated) repeated++;
+                            else if (o.Repeated)
+                            {
+                                // Not an accepted outcome: a verified skip, listed apart.
+                                var count = imported.Context.PartData.serializedPartModules.Count(m => m.BehaviourType?.Name == o.Behaviour);
+                                Assert.GreaterOrEqual(count, 2, $"{name}: {target} reported repeated, but {o.Behaviour} appears {count} time(s)");
+                                Assert.IsTrue(_lines.Contains(B9Lines.BehaviourRepeated(name, o.Behaviour, count)), $"{name}: no repeated line");
+                                repeated.Add($"{name} ({target} -> {o.Behaviour} x{count})");
+                            }
                             else Assert.Fail($"{name}: {target} gave neither a transformer nor a note");
                         }
                     }
@@ -694,8 +991,9 @@ PART
             }
             B9Overrides.LogImportSummaryOnce();
             TestContext.WriteLine($"parts with module DATA {parts}, Redux threw {reduxThrows}; engine/gimbal/RCS/solar/command targets: " +
-                                  $"native fields {effect}, no native effect {noEffect}, repeated behaviour {repeated}; no IDENTIFIER match {unmatched}; " +
+                                  $"native fields {effect}, no native effect {noEffect}; skipped, behaviour repeated {repeated.Count}; no IDENTIFIER match {unmatched}; " +
                                   $"fairing/decal checked {notesOnlyChecked}, FX-only checked {fxOnlyChecked}");
+            TestContext.WriteLine("repeated (skipped, not applied): " + string.Join("; ", repeated.Distinct()));
             TestContext.WriteLine("by field: " + string.Join(", ", byField.OrderByDescending(kv => kv.Value).Select(kv => kv.Key + " " + kv.Value)));
             TestContext.WriteLine(_lines.LastOrDefault(l => l.Contains("module data:")));
             TestContext.WriteLine(string.Join(Environment.NewLine, _lines.Where(l => l.Contains("dropped") || l.Contains("failed") ||
@@ -704,6 +1002,7 @@ PART
             Assert.AreEqual(0, reduxThrows, "Redux's own import threw");
             Assert.IsFalse(_lines.Any(l => l.Contains(": failed, Redux's variants kept")), Log);
             Assert.Greater(effect, 0);
+            Assert.Greater(fxOnlyChecked, 0, "at least one DATA block with FX names");
             Assert.Greater(byField.TryGetValue("Module_Engine.engineModes", out var em) ? em : 0, 0);
         });
     }

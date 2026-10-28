@@ -100,7 +100,7 @@ namespace KSP1PartMod.Game
         /// <summary>The module data of one part (replaced when the part is imported again).</summary>
         internal sealed class ModuleTally
         {
-            public int Transformers, OffForms, NoOffForm;
+            public int Transformers, OffForms, NoOffForm, OffNoChange;
             public readonly Dictionary<string, int> ByField = new Dictionary<string, int>(StringComparer.Ordinal);
             public readonly List<string> NoOffFormModules = new List<string>();
             public readonly List<ModuleOutcome> Modules = new List<ModuleOutcome>();
@@ -564,11 +564,16 @@ namespace KSP1PartMod.Game
 
         /// <summary>The module edits of one subtype (d.2 to d.7): each edited KSP1 module re-imported by Redux and diffed;
         /// each native field that differs becomes a validated <c>ModuleDefinitionTransformer</c> in <paramref name="list"/>,
-        /// unless its behaviour appears more than once on the part or another set already owns that field.</summary>
+        /// unless its behaviour appears more than once on the part or another set already owns that field. Every edit
+        /// of the subtype on the engines Redux switches is written into one engine list and diffed once, so the variant
+        /// gets one <c>engineModes</c> with all its modes.</summary>
         private static void AddModuleEdits(string part, Ksp1ConfigNode partNode, Ksp1PartImportContext context, string setId,
             B9SubtypePlan st, List<ITransformer> list, Built built, ModuleTally tally, Dictionary<int, ModuleOutcome> states,
             Dictionary<string, string> claims)
         {
+            var switched = B9ModuleDiff.SwitchedEngineIndices(partNode);
+            var groups = new List<List<B9ModuleEditPlan>>();
+            List<B9ModuleEditPlan> engineGroup = null;
             foreach (var edit in st.ModuleEdits)
             {
                 if (!states.TryGetValue(edit.TargetIndex, out var o))
@@ -579,43 +584,84 @@ namespace KSP1PartMod.Game
                 }
                 foreach (var k in edit.DataKeys)
                     if (!o.Keys.Contains(k)) o.Keys.Add(k);
-                var offForm = edit.Off && !edit.NoOffForm;
-                if (offForm && !o.Keys.Contains("moduleActive")) o.Keys.Add("moduleActive");
                 if (edit.Off && edit.NoOffForm)
                 {
                     tally.NoOffForm++;
                     if (!tally.NoOffFormModules.Contains(o.Ksp1Module)) tally.NoOffFormModules.Add(o.Ksp1Module);
-                    LogOnce(part + "\noff-none\n" + o.Ksp1Module + "\n" + st.VariantId, B9Lines.ModuleOffNone(part, o.Ksp1Module, st.VariantId));
+                    LogOnce(part + "\noff-none\n" + o.Ksp1Module + "\n" + st.VariantId,
+                        Ksp1PartModuleImporterRegistry.IsEngineModuleName(o.Ksp1Module)
+                            ? B9Lines.ModuleOffEngine(part, o.Ksp1Module, st.VariantId)
+                            : B9Lines.ModuleOffNone(part, o.Ksp1Module, st.VariantId));
                 }
-                if (edit.Edited == null || o.Repeated) continue;
+                if (edit.Off && !edit.NoOffForm && !o.Keys.Contains("moduleActive")) o.Keys.Add("moduleActive");
+                if (edit.Edited == null) continue;
+                if (switched.Contains(edit.TargetIndex))
+                {
+                    if (engineGroup == null) groups.Add(engineGroup = new List<B9ModuleEditPlan>());
+                    engineGroup.Add(edit);
+                }
+                else groups.Add(new List<B9ModuleEditPlan> { edit });
+            }
+
+            foreach (var group in groups)
+            {
+                var outcomes = group.Select(e => states[e.TargetIndex]).Distinct().ToList();
+                var names = string.Join(", ", outcomes.Select(o => o.Ksp1Module).Distinct());
+                if (outcomes.Any(o => o.Repeated)) continue;
+                var offEdit = group.FirstOrDefault(e => e.Off && !e.NoOffForm);
 
                 B9ModuleDiff.Result r;
                 try
                 {
-                    r = B9ModuleDiff.Diff(Registry(), partNode, context, edit.TargetIndex, edit.Edited);
+                    r = B9ModuleDiff.Diff(Registry(), partNode, context,
+                        group.Select(e => new KeyValuePair<int, IKsp1Node>(e.TargetIndex, e.Edited)).ToList());
                 }
                 catch (Exception e)
                 {
-                    o.Failed = true;
+                    foreach (var o in outcomes) o.Failed = true;
                     Warn(B9Lines.TransformerDropped(part, nameof(ModuleDefinitionTransformer),
-                        o.Ksp1Module + " in " + st.VariantId + ": " + (e.InnerException?.Message ?? e.Message)));
+                        names + " in " + st.VariantId + ": " + (e.InnerException?.Message ?? e.Message)));
                     continue;
                 }
                 if (r.Behaviour != null)
                 {
-                    o.Behaviour = r.Behaviour.Name;
+                    foreach (var o in outcomes) o.Behaviour = r.Behaviour.Name;
                     ModuleTypeOnce(r.Behaviour);
                 }
+                var behaviour = r.Behaviour?.Name;
                 if (r.Outcome == B9ModuleDiff.Outcome.Repeated)
                 {
-                    o.Repeated = true;
-                    LogOnce(part + "\nrepeated\n" + o.Behaviour, B9Lines.BehaviourRepeated(part, o.Behaviour, r.Count));
+                    foreach (var o in outcomes) o.Repeated = true;
+                    LogOnce(part + "\nrepeated\n" + behaviour, B9Lines.BehaviourRepeated(part, behaviour, r.Count));
                     continue;
                 }
-                if (r.Outcome != B9ModuleDiff.Outcome.Compared) continue; // no native effect, decided for the whole part
+                if (r.Outcome != B9ModuleDiff.Outcome.Compared)
+                {
+                    // No native module: no native effect, decided for the whole part. An off form is logged here.
+                    if (offEdit != null) OffChangesNothing(part, tally, outcomes[0], st.VariantId);
+                    continue;
+                }
+
+                var candidates = r.Transformers;
+                if (offEdit != null && Ksp1PartModuleImporterRegistry.IsDecouplerModuleName(offEdit.TargetModule))
+                {
+                    // Staging is per part: a decoupler made non-stageable takes the part's other stageable module out of
+                    // staging too. The off form applies only when nothing else on the part stages.
+                    var other = OtherStageable(partNode, context, offEdit.TargetIndex);
+                    if (other != null)
+                    {
+                        candidates = candidates.Where(t => t.Key != DecoupleStageableField).ToList();
+                        LogOnce(part + "\noff-staging\n" + offEdit.TargetModule + "\n" + st.VariantId,
+                            B9Lines.ModuleOffStaging(part, offEdit.TargetModule, st.VariantId, other));
+                        tally.NoOffForm++;
+                        if (!tally.NoOffFormModules.Contains(offEdit.TargetModule)) tally.NoOffFormModules.Add(offEdit.TargetModule);
+                        states[offEdit.TargetIndex].Keys.Remove("moduleActive");
+                        offEdit = null;
+                    }
+                }
 
                 var fields = new List<string>();
-                foreach (var t in r.Transformers)
+                foreach (var t in candidates)
                 {
                     // V-SwiFT replaces a whole field: a later set would overwrite (and its reverter revert) the first's.
                     var claim = t.BehaviourType + "." + t.DataType + "." + t.Key;
@@ -633,18 +679,61 @@ namespace KSP1PartMod.Game
                     var byField = t.BehaviourType + "." + t.Key;
                     tally.ByField[byField] = tally.ByField.TryGetValue(byField, out var n) ? n + 1 : 1;
                 }
-                if (fields.Count == 0) continue;
-                var firstEdit = o.Fields.Count == 0;
-                foreach (var f in fields)
-                    if (!o.Fields.Contains(f)) o.Fields.Add(f);
-                if (offForm)
+                if (fields.Count == 0)
                 {
-                    tally.OffForms++;
-                    built.Lines.Add(B9Lines.ModuleOff(part, o.Ksp1Module, st.VariantId, o.Behaviour, fields));
+                    if (offEdit != null && r.Transformers.Count == 0) OffChangesNothing(part, tally, outcomes[0], st.VariantId);
+                    continue;
                 }
-                else if (firstEdit) // once per part and module
-                    built.Lines.Add(B9Lines.ModuleEdit(part, setId, st.VariantId, o.Ksp1Module, o.Behaviour, fields));
+                foreach (var o in outcomes)
+                {
+                    var firstEdit = o.Fields.Count == 0;
+                    foreach (var f in fields)
+                        if (!o.Fields.Contains(f)) o.Fields.Add(f);
+                    if (offEdit != null && offEdit.TargetIndex == o.TargetIndex)
+                    {
+                        tally.OffForms++;
+                        built.Lines.Add(B9Lines.ModuleOff(part, o.Ksp1Module, st.VariantId, behaviour, fields));
+                    }
+                    else if (firstEdit) // once per part and module
+                    {
+                        var line = B9Lines.ModuleEdit(part, setId, st.VariantId, o.Ksp1Module, behaviour, fields);
+                        if (!built.Lines.Contains(line)) built.Lines.Add(line);
+                    }
+                }
             }
+        }
+
+        /// <summary>The <c>Data_Decouple</c> field the decoupler off form (<c>staged = false</c>) sets.</summary>
+        internal const string DecoupleStageableField = "IsStageable";
+
+        /// <summary>The native modules that put a part in staging besides a decoupler (Redux's stage type: engine,
+        /// parachute, decoupler; KSP2: a docking port added to staging, a fairing).</summary>
+        private static readonly string[] StageableBehaviours = { "Module_Engine", "Module_Parachute", "Module_DockingNode", "Module_Fairing" };
+
+        /// <summary>Another module of the part that stages (KSP1 engine, parachute, decoupler or docking port, or a native
+        /// engine, parachute, docking port or fairing), or null.</summary>
+        private static string OtherStageable(Ksp1ConfigNode partNode, Ksp1PartImportContext context, int decouplerIndex)
+        {
+            var modules = partNode.GetNodes("MODULE").ToList();
+            for (var i = 0; i < modules.Count; i++)
+            {
+                if (i == decouplerIndex) continue;
+                var n = modules[i].GetValue("name")?.Trim();
+                if (n == null) continue;
+                if (Ksp1PartModuleImporterRegistry.IsEngineModuleName(n) || Ksp1PartModuleImporterRegistry.IsDecouplerModuleName(n) ||
+                    n.Equals("ModuleParachute", StringComparison.OrdinalIgnoreCase) || n.Equals("ModuleDockingNode", StringComparison.OrdinalIgnoreCase))
+                    return n;
+            }
+            var native = context.PartData?.serializedPartModules?
+                .Select(m => m.BehaviourType?.Name).FirstOrDefault(b => b != null && StageableBehaviours.Contains(b));
+            return native;
+        }
+
+        /// <summary>An off form whose re-import changes no native field: logged and counted.</summary>
+        private static void OffChangesNothing(string part, ModuleTally tally, ModuleOutcome o, string variant)
+        {
+            tally.OffNoChange++;
+            LogOnce(part + "\noff-nochange\n" + o.Ksp1Module + "\n" + variant, B9Lines.ModuleOffNoChange(part, o.Ksp1Module, variant));
         }
 
         /// <summary>End of a part's module data: an edited module no variant could change natively gets its
@@ -899,7 +988,8 @@ namespace KSP1PartMod.Game
             return B9Lines.ModuleDataSummary(ms.Sum(m => m.Transformers), ms.Count(m => m.Transformers > 0),
                 byField.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => (kv.Key, kv.Value)),
                 ms.Sum(m => m.OffForms), ms.Sum(m => m.NoOffForm), ms.SelectMany(m => m.NoOffFormModules).Distinct().OrderBy(n => n, StringComparer.Ordinal),
-                noEffect.Count, noEffect.Select(o => o.Ksp1Module).Distinct().OrderBy(n => n, StringComparer.Ordinal));
+                noEffect.Count, noEffect.Select(o => o.Ksp1Module).Distinct().OrderBy(n => n, StringComparer.Ordinal),
+                ms.Sum(m => m.OffNoChange));
         }
 
         internal static void Info(string line)
