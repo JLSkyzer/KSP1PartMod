@@ -293,6 +293,19 @@ namespace KSP1PartMod.Game
         /// types, read in file order so that the first definition of a name wins (B9's rule).</summary>
         private static void AfterFromConfigFiles(IEnumerable<Ksp1ConfigFile> __0, object __result)
         {
+            var timed = KSP1PartMod.Perf.PerfClock.Start(); // a worker thread: the clock is lock-free
+            try
+            {
+                ReadTankTypes(__0, __result);
+            }
+            finally
+            {
+                KSP1PartMod.Perf.PerfClock.Stop(KSP1PartMod.Perf.PerfPhase.B9Postfixes, timed);
+            }
+        }
+
+        private static void ReadTankTypes(IEnumerable<Ksp1ConfigFile> __0, object __result)
+        {
             if (!_armed || _stopped) return;
             try
             {
@@ -354,6 +367,20 @@ namespace KSP1PartMod.Game
 
         /// <summary><c>TryBuild(file, partNode, rescaleFactor, context, ignoredTransforms, out data, out baseline)</c>.</summary>
         private static void AfterTryBuild(Ksp1ConfigNode __1, float __2, Ksp1PartImportContext __3, ref bool __result,
+            ref Data_PartSwitch __5, ref List<string> __6)
+        {
+            var timed = KSP1PartMod.Perf.PerfClock.Start();
+            try
+            {
+                AppendSets(__1, __2, __3, ref __result, ref __5, ref __6);
+            }
+            finally
+            {
+                KSP1PartMod.Perf.PerfClock.Stop(KSP1PartMod.Perf.PerfPhase.B9Postfixes, timed);
+            }
+        }
+
+        private static void AppendSets(Ksp1ConfigNode __1, float __2, Ksp1PartImportContext __3, ref bool __result,
             ref Data_PartSwitch __5, ref List<string> __6)
         {
             if (!_armed || _stopped || __1 == null || __3 == null) return;
@@ -1014,6 +1041,19 @@ namespace KSP1PartMod.Game
         /// <summary>Redux names its own (visual) sets; the sets we appended to <paramref name="partName"/> are named here, from
         /// <c>switcherDescription</c> and the subtype <c>title</c>s, through the same resolver.</summary>
         private static void AfterAddLocalizationTerms(string __1, Func<string, string> __2, Action<string, string> __3)
+        {
+            var timed = KSP1PartMod.Perf.PerfClock.Start();
+            try
+            {
+                NameAppendedSets(__1, __2, __3);
+            }
+            finally
+            {
+                KSP1PartMod.Perf.PerfClock.Stop(KSP1PartMod.Perf.PerfPhase.B9Postfixes, timed);
+            }
+        }
+
+        private static void NameAppendedSets(string __1, Func<string, string> __2, Action<string, string> __3)
         {
             if (!_armed || __1 == null || __3 == null) return;
             try

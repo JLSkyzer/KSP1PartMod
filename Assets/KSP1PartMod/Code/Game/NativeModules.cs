@@ -330,7 +330,7 @@ namespace KSP1PartMod.Game
                         if (RejectedNames.Add(c.Ksp1Module)) Info(NativeLines.AlreadyRedux(c.Ksp1Module));
                         continue;
                     }
-                    importers[c.Ksp1Module] = c.Create();
+                    importers[c.Ksp1Module] = Perf.LoadTimeline.Wrap(c.Create()); // itself unless perf_load_timeline
                 }
             }
             catch (Exception e)

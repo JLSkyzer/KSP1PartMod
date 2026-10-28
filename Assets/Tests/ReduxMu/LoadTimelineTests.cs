@@ -1,0 +1,282 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using HarmonyLib;
+using KSP.Game;
+using KSP.Sim.Definitions;
+using KSP1PartMod.Animation.Settings;
+using KSP1PartMod.Game;
+using KSP1PartMod.Game.Perf;
+using KSP1PartMod.Native;
+using KSP1PartMod.Perf;
+using NUnit.Framework;
+using Redux.Ksp1Import;
+using Redux.Ksp1Import.Assets;
+using Redux.Ksp1Import.Config;
+using Redux.Ksp1Import.Modules;
+using UnityEngine;
+using UnityEngine.TestTools;
+
+namespace KSP1PartMod.Tests.ReduxMu
+{
+    /// <summary>Against the referenced Ksp2Redux.dll (26w42c): the load timeline's members resolve by name with the parameter
+    /// types used, its patches are applied, a real <c>TryTranslatePart</c> is timed, and our importers are wrapped only while
+    /// it is armed.</summary>
+    public class LoadTimelineTests
+    {
+        private readonly List<string> _lines = new List<string>();
+
+        [SetUp] public void SetUp()
+        {
+            LoadTimeline.Reset();
+            _lines.Clear();
+            LoadTimeline.Sink = _lines.Add;
+        }
+
+        [TearDown] public void TearDown()
+        {
+            LoadTimeline.Reset();
+            LoadTimeline.Sink = null;
+            new Harmony(NativeModules.HarmonyId).UnpatchAll(NativeModules.HarmonyId);
+            NativeModules.Reset();
+            NativeModules.Sink = null;
+        }
+
+        private static AnimationSettings Settings(string json = "{}") => AnimationSettings.Parse(json, out _);
+
+        private void Arm(string json = "{}") => LoadTimeline.Arm(new Harmony(LoadTimeline.HarmonyId), Settings(json));
+
+        // ------------------------------------------------------------------ resolution
+
+        [Test] public void EveryReduxMember_ResolvesWithItsParameterTypes()
+        {
+            var members = LoadTimeline.Resolve();
+            Assert.AreEqual(24, members.Count);
+            var missing = members.Where(m => !m.Found).Select(m => m.Label).ToList();
+            CollectionAssert.IsEmpty(missing, string.Join(", ", missing));
+            foreach (var m in members)
+            {
+                if (m.Prefix != null) Assert.IsNotNull(AccessTools.Method(typeof(LoadTimeline), m.Prefix), m.Prefix);
+                if (m.Postfix != null) Assert.IsNotNull(AccessTools.Method(typeof(LoadTimeline), m.Postfix), m.Postfix);
+            }
+            // Every phase of research (b) is covered.
+            var phases = new HashSet<PerfPhase>(members.Select(m => m.Phase));
+            foreach (var p in new[]
+                     {
+                         PerfPhase.CacheKey, PerfPhase.ConfigGet, PerfPhase.CfgRead, PerfPhase.MmFinalize, PerfPhase.TankCatalog,
+                         PerfPhase.PlumeCatalog, PerfPhase.LocalizationCatalog, PerfPhase.ImportWall, PerfPhase.Translate,
+                         PerfPhase.ReduxImporters, PerfPhase.Prefab, PerfPhase.MuRead, PerfPhase.Textures, PerfPhase.ReportLines,
+                         PerfPhase.LocalizationRegister, PerfPhase.Icons, PerfPhase.Release, PerfPhase.Rebuild,
+                     })
+                Assert.IsTrue(phases.Contains(p), p.ToString());
+        }
+
+        [Test] public void FlowAndRebuildNameMembers_Resolve()
+        {
+            var x = LoadTimeline.ResolveExtras();
+            CollectionAssert.IsEmpty(x.Missing, string.Join(", ", x.Missing));
+            Assert.AreEqual(typeof(float), x.FlowStartedOnRealtime.FieldType);
+            Assert.AreEqual(typeof(string), x.EntryPartName.ReturnType);
+            Assert.AreEqual("OnActionResolve", x.OnActionResolve.Name);
+        }
+
+        [Test] public void Armed_PatchesEveryMember_AndSaysSo()
+        {
+            Arm();
+            Assert.IsTrue(LoadTimeline.IsArmed);
+            Assert.IsTrue(PerfClock.Enabled);
+            var armed = _lines.Single(l => l.Contains("perf: armed:"));
+            StringAssert.StartsWith("[KSP1PartMod] perf: armed: load timeline on (24 of 24 Redux phase(s) timed), memory lines on, " +
+                                    "report file on, frame cost off (window 10 s); timer overhead ~", armed);
+            Assert.IsFalse(_lines.Any(l => l.Contains("not found")), string.Join("\n", _lines));
+            var patched = Harmony.GetAllPatchedMethods()
+                .Where(m => Harmony.GetPatchInfo(m)?.Owners.Contains(LoadTimeline.HarmonyId) == true).ToList();
+            Assert.AreEqual(25, patched.Count); // 24 Redux members and SequentialFlow.OnActionResolve
+            foreach (var m in patched)
+            {
+                var info = Harmony.GetPatchInfo(m);
+                foreach (var p in info.Prefixes.Where(p => p.owner == LoadTimeline.HarmonyId))
+                {
+                    Assert.AreEqual(Priority.First, p.priority, m.Name);
+                    Assert.AreEqual(typeof(void), p.PatchMethod.ReturnType, m.Name + ": a timing prefix never skips the original");
+                }
+                foreach (var p in info.Postfixes.Where(p => p.owner == LoadTimeline.HarmonyId))
+                    Assert.AreEqual(Priority.Last, p.priority, m.Name);
+                Assert.IsFalse(info.Transpilers.Any(p => p.owner == LoadTimeline.HarmonyId));
+                Assert.IsFalse(info.Finalizers.Any(p => p.owner == LoadTimeline.HarmonyId));
+            }
+        }
+
+        [Test] public void Off_NoPatch_AndTheLineSaysOff()
+        {
+            Arm("{\"perf_load_timeline\": false}");
+            Assert.IsFalse(LoadTimeline.IsArmed);
+            Assert.IsFalse(PerfClock.Enabled);
+            StringAssert.StartsWith("[KSP1PartMod] perf: armed: load timeline off (0 of 24 Redux phase(s) timed), ", _lines.Single());
+            Assert.IsFalse(Harmony.GetAllPatchedMethods().Any(m => Harmony.GetPatchInfo(m)?.Owners.Contains(LoadTimeline.HarmonyId) == true));
+        }
+
+        // ------------------------------------------------------------------ a real translation
+
+        [Test] public void TryTranslatePart_IsTimed_AndKeptAsSlowest()
+        {
+            LogAssert.ignoreFailingMessages = true; // Redux's report lines (fallback geometry) are not ours to judge here
+            Arm();
+            var root = new Ksp1ModRoot("C:/import", "C:/import/GameData");
+            var node = Ksp1ConfigNode.Parse("PART\n{\nname = perfTimelinePart\nmodule = Part\nmass = 0.1\ncategory = Utility\n}\n");
+            var file = new Ksp1ConfigFile(root, "C:/import/GameData/Test/Parts/perf.cfg", "Test", node);
+            var part = node.GetNodes("PART").First();
+            try
+            {
+                Ksp1ImportedPartRegistry.BeginImport("perf-timeline-test");
+                var ok = new Ksp1PartTranslator(null, null).TryTranslatePart(file, part, new Ksp1ImportReport(), out var core, out _);
+                Assert.IsTrue(ok);
+                Assert.IsNotNull(core);
+                var translate = PerfClock.Clock.Get(PerfPhase.Translate);
+                Assert.AreEqual(1, translate.Calls);
+                Assert.Greater(translate.Ticks, 0);
+                Assert.AreEqual(1, PerfClock.Clock.Get(PerfPhase.Prefab).Calls, "BuildPrefab is nested in the translation");
+                var slowest = LoadTimeline.SlowestOfImport;
+                Assert.AreEqual(1, slowest.Length);
+                Assert.AreEqual("perfTimelinePart", slowest[0].Name);
+                Assert.AreEqual(translate.Ticks, slowest[0].TotalTicks);
+                Assert.Greater(slowest[0].PrefabTicks, 0);
+                Assert.LessOrEqual(slowest[0].PrefabTicks, slowest[0].TotalTicks);
+            }
+            finally
+            {
+                foreach (var e in Ksp1ImportedPartRegistry.ImportedParts.ToList())
+                {
+                    if (e.Prefab != null) UnityEngine.Object.DestroyImmediate(e.Prefab);
+                    e.Prefab = null;
+                }
+                Ksp1ImportedPartRegistry.Clear();
+                LogAssert.ignoreFailingMessages = false;
+            }
+        }
+
+        [Test] public void OutsideAnImport_MainThreadPhasesDoNotCount()
+        {
+            Arm();
+            var root = new Ksp1ModRoot("C:/import", "C:/import/GameData");
+            var node = Ksp1ConfigNode.Parse("PART\n{\nname = perfNoImport\n}\n");
+            var file = new Ksp1ConfigFile(root, "C:/import/GameData/Test/Parts/perf.cfg", "Test", node);
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                Ksp1ModelImporter_BuildPrefab(file, node.GetNodes("PART").First());
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false;
+            }
+            Assert.AreEqual(0, PerfClock.Clock.Get(PerfPhase.Prefab).Calls);
+        }
+
+        private static void Ksp1ModelImporter_BuildPrefab(Ksp1ConfigFile file, Ksp1ConfigNode part)
+        {
+            var core = new PartCore { data = new PartData { partName = "perfNoImport" } };
+            var go = Redux.Ksp1Import.Model.Ksp1ModelImporter.BuildPrefab(file, part, core, new Ksp1ImportReport());
+            if (go != null) UnityEngine.Object.DestroyImmediate(go);
+        }
+
+        // ------------------------------------------------------------------ our importers
+
+        [Test] public void OurImporters_WrappedOnlyWhileArmed()
+        {
+            NativeModules.Sink = _ => { };
+            Assert.IsTrue(NativeModules.TryApply(new Harmony(NativeModules.HarmonyId), Settings()));
+            var importers = Importers(new Ksp1PartModuleImporterRegistry());
+            Assert.IsInstanceOf<CrossfeedImporter>(importers[CrossfeedMapping.Ksp1Module]);
+
+            Arm();
+            importers = Importers(new Ksp1PartModuleImporterRegistry());
+            var timed = importers[CrossfeedMapping.Ksp1Module] as TimedImporter;
+            Assert.IsNotNull(timed);
+            Assert.IsInstanceOf<CrossfeedImporter>(timed.Inner);
+        }
+
+        private static IDictionary<string, IKsp1PartModuleImporter> Importers(Ksp1PartModuleImporterRegistry registry) =>
+            (IDictionary<string, IKsp1PartModuleImporter>)NativeModules.Resolve().Importers.GetValue(registry);
+
+        private sealed class FakeImporter : IKsp1PartModuleImporter
+        {
+            public bool Result;
+            public SerializedPartModule Module;
+            public Exception Throw;
+
+            public bool TryImport(Ksp1ConfigNode moduleNode, Ksp1PartImportContext context, out SerializedPartModule serializedModule)
+            {
+                serializedModule = Module;
+                if (Throw != null) throw Throw;
+                return Result;
+            }
+        }
+
+        [Test] public void TimedImporter_ReturnsWhatTheInnerReturns()
+        {
+            PerfClock.Enabled = true;
+            var module = new SerializedPartModule { Name = "PartComponentModule_Test", BehaviourType = typeof(string) };
+            var yes = new TimedImporter(new FakeImporter { Result = true, Module = module });
+            Assert.IsTrue(yes.TryImport(null, null, out var got));
+            Assert.AreEqual("PartComponentModule_Test", got.Name);
+            Assert.AreEqual(typeof(string), got.BehaviourType);
+
+            var no = new TimedImporter(new FakeImporter { Result = false });
+            Assert.IsFalse(no.TryImport(null, null, out var none));
+            Assert.IsNull(none.Name);
+            Assert.AreEqual(2, PerfClock.Clock.Get(PerfPhase.OurImporters).Calls);
+        }
+
+        [Test] public void TimedImporter_LetsTheExceptionThrough()
+        {
+            PerfClock.Enabled = true;
+            var thrown = new InvalidOperationException("inner");
+            var timed = new TimedImporter(new FakeImporter { Throw = thrown });
+            var caught = Assert.Throws<InvalidOperationException>(() => timed.TryImport(null, null, out _));
+            Assert.AreSame(thrown, caught);
+            Assert.AreEqual(1, PerfClock.Clock.Get(PerfPhase.OurImporters).Calls);
+        }
+
+        // ------------------------------------------------------------------ game states
+
+        [Test] public void GameStates_GameStartCampaignLoadOursAndRebuilds()
+        {
+            Arm();
+            _lines.Clear();
+            PerfClock.NoteTicks(PerfPhase.AnimationStep, PerfClock.Frequency / 1000 * 3);
+            LoadTimeline.OnState(GameState.MainMenu, GameState.WarmUpLoading, 42f);
+            LoadTimeline.OnState(GameState.Loading, GameState.MainMenu, 50f);
+            LoadTimeline.OnState(GameState.KerbalSpaceCenter, GameState.Loading, 80.5f);
+            LoadTimeline.OnState(GameState.MainMenu, GameState.KerbalSpaceCenter, 90f);
+            LoadTimeline.OnState(GameState.Loading, GameState.MainMenu, 100f);
+            LoadTimeline.OnState(GameState.VehicleAssemblyBuilder, GameState.Loading, 110f);
+
+            Assert.AreEqual("[KSP1PartMod] perf: game start: main menu after 42.0 s", _lines[0]);
+            Assert.AreEqual("[KSP1PartMod] perf: campaign load: 30.5 s from Loading to KerbalSpaceCenter", _lines[1]);
+            StringAssert.StartsWith("[KSP1PartMod] perf: ours: mu fix —, shroud import —, B9 —, native importers —, science scan —, " +
+                                    "tracks read — (worker), animation step 3 ms, placement —", _lines[2]);
+            Assert.AreEqual("[KSP1PartMod] perf: campaign load: 10.0 s from Loading to VehicleAssemblyBuilder", _lines[3]);
+            StringAssert.StartsWith("[KSP1PartMod] perf: ours: mu fix —", _lines[4]);
+            StringAssert.Contains("animation step —", _lines[4], "our phases are reset after each ours line");
+            Assert.AreEqual("[KSP1PartMod] perf: rebuilds since game start: 0 prefab rebuild(s) in 0 ms (textures 0 ms over 0 load(s)); " +
+                            "slowest: none", _lines[5]);
+            Assert.AreEqual(6, _lines.Count);
+            Assert.AreEqual(42.0, LoadTimeline.MainMenuAfterSeconds);
+            Assert.AreEqual(2, LoadTimeline.CampaignLoads.Count);
+        }
+
+        [Test] public void Rebuilds_AreResetAfterTheirLine()
+        {
+            Arm();
+            PerfClock.NoteTicks(PerfPhase.Rebuild, PerfClock.Frequency / 100);
+            LoadTimeline.WriteRebuilds("VAB entry");
+            LoadTimeline.WriteRebuilds("flight entry");
+            var lines = _lines.Where(l => l.Contains("rebuilds since")).ToList();
+            StringAssert.StartsWith("[KSP1PartMod] perf: rebuilds since game start: 1 prefab rebuild(s) in 10 ms", lines[0]);
+            StringAssert.StartsWith("[KSP1PartMod] perf: rebuilds since VAB entry: 0 prefab rebuild(s) in 0 ms", lines[1]);
+            Assert.AreEqual(0, PerfClock.Clock.Get(PerfPhase.Rebuild).Calls);
+            Assert.AreEqual(2, LoadTimeline.Rebuilds.Count);
+        }
+    }
+}

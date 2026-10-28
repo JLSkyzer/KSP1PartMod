@@ -235,6 +235,7 @@ namespace KSP1PartMod.Animation.Tracks
                     clips += t.Sets.Count;
                     foreach (var set in t.Sets) tracks += set.Tracks.Count;
                 }
+                KSP1PartMod.Perf.PerfClock.Note(KSP1PartMod.Perf.PerfPhase.TracksRead, clock); // lock-free: this is a worker
                 log($"{Prefix}read {reads} model(s) for {parts.Count} part(s) in {clock.ElapsedMilliseconds} ms on a worker; " +
                     $"{clips} clip(s) with {tracks} track(s); {failed} failed");
             }

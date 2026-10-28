@@ -133,6 +133,7 @@ namespace KSP1PartMod.Game.Animation
             if (!followRedux) log.LogInfo("[KSP1PartMod] anim: Redux deployables not followed (follow_redux_deployables false)");
             if (!KSP1PartModPlugin.Animations.PluginModules) log.LogInfo("[KSP1PartMod] anim: KSP1 plugin modules not planned (plugin_modules false)");
             if (!KSP1PartModPlugin.Animations.B9ModuleGates) log.LogInfo("[KSP1PartMod] anim: B9 module gates off (b9_module_gates false)");
+            KSP1PartMod.Perf.PerfClock.Note(KSP1PartMod.Perf.PerfPhase.AnimationStep, clock);
             log.LogInfo($"[KSP1PartMod] anim: added {added}, refreshed {refreshed}, untouched {untouched} in {clock.ElapsedMilliseconds} ms");
             return planned;
         }

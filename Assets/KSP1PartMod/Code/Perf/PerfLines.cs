@@ -37,7 +37,10 @@ namespace KSP1PartMod.Perf
                    $"(window {windowSeconds.ToString("0.#", Inv)} s); timer overhead ~{overheadNs.ToString("0", Inv)} ns per timing";
         }
 
-        public static string MemberNotFound(string member, PerfPhase phase) =>
+        public static string MemberNotFound(string member, PerfPhase phase) => MemberNotFound(member, phase.ToString());
+
+        /// <summary>The same line for what is not a <see cref="PerfPhase"/> (flow steps, rebuild part names).</summary>
+        public static string MemberNotFound(string member, string phase) =>
             Prefix + $"load: {member} not found, phase '{phase}' not timed";
 
         public static string ImportWorker(ImportSummary s) =>

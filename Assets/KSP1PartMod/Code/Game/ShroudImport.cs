@@ -171,8 +171,22 @@ namespace KSP1PartMod.Game
             KSP1PartModPlugin.Log?.LogInfo(ShroudLines.ImportSummary(Counts.Kept, Counts.WithMissing, Counts.Rebuilds));
         }
 
-        /// <summary>False skips Redux's method: no <c>Data_Fairing</c>, so <c>ConfigurePrefab</c> keeps the meshes.</summary>
+        /// <summary>False skips Redux's method: no <c>Data_Fairing</c>, so <c>ConfigurePrefab</c> keeps the meshes. Timed as
+        /// <see cref="KSP1PartMod.Perf.PerfPhase.ShroudImport"/> (load timeline).</summary>
         private static bool BeforeAddFairingModule(Ksp1ConfigNode __0)
+        {
+            var timed = KSP1PartMod.Perf.PerfClock.Start();
+            try
+            {
+                return KeepShroudMeshes(__0);
+            }
+            finally
+            {
+                KSP1PartMod.Perf.PerfClock.Stop(KSP1PartMod.Perf.PerfPhase.ShroudImport, timed);
+            }
+        }
+
+        private static bool KeepShroudMeshes(Ksp1ConfigNode __0)
         {
             if (_broken) return true;
             try
@@ -190,8 +204,22 @@ namespace KSP1PartMod.Game
             }
         }
 
-        /// <summary>The prefab as Redux built it, node sizes and drag cube included: its shroud roots are hidden.</summary>
+        /// <summary>The prefab as Redux built it, node sizes and drag cube included: its shroud roots are hidden. Timed as
+        /// <see cref="KSP1PartMod.Perf.PerfPhase.ShroudImport"/> (load timeline; not inside a later rebuild).</summary>
         private static void AfterBuildConfiguredPrefab(Ksp1ConfigNode __1, string __4, GameObject __result)
+        {
+            var timed = KSP1PartMod.Perf.PerfClock.Start();
+            try
+            {
+                HideShroudsInPrefab(__1, __4, __result);
+            }
+            finally
+            {
+                KSP1PartMod.Perf.PerfClock.Stop(KSP1PartMod.Perf.PerfPhase.ShroudImport, timed);
+            }
+        }
+
+        private static void HideShroudsInPrefab(Ksp1ConfigNode __1, string __4, GameObject __result)
         {
             if (_broken || __result == null || __1 == null) return;
             try

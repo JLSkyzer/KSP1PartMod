@@ -256,6 +256,7 @@ namespace KSP1PartMod.Game
             foreach (var note in writer.Notes) log.LogInfo(note);
             foreach (var problem in writer.Problems) log.LogWarning(problem);
             var nodes = writer.AddedParts.Select(p => p.node).Distinct().Count();
+            KSP1PartMod.Perf.PerfClock.Note(KSP1PartMod.Perf.PerfPhase.Placement, clock);
             log.LogInfo($"[KSP1PartMod] placed {writer.AddedParts.Count} part(s) in {nodes} node(s), " +
                         $"created {writer.AddedNodes.Count} node(s) in {clock.ElapsedMilliseconds} ms");
         }

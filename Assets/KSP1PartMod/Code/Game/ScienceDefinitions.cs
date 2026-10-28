@@ -122,6 +122,7 @@ namespace KSP1PartMod.Game
             var duplicates = new List<string>();
             var defs = scan.Build(settings, Resolver(scan), duplicates);
             watch.Stop();
+            KSP1PartMod.Perf.PerfClock.Note(KSP1PartMod.Perf.PerfPhase.ScienceScan, watch);
             Definitions = defs;
             Info(ScienceLines.DefinitionsRead(scan.DefinitionNodes.Count, scan.DefinitionFiles, scan.CfgFiles, watch.ElapsedMilliseconds, scan.MmEdits, scan.ScienceModuleMmEdits));
             foreach (var f in scan.Failures) Warn(ScienceLines.ReadFailed(f, "parse error"));

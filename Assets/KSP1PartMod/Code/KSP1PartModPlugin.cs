@@ -48,6 +48,15 @@ namespace KSP1PartMod
             Animations = ReadAnimationSettings();
             try
             {
+                // Right after the settings and before every other patch: each later patch's cost falls inside a timed phase.
+                global::KSP1PartMod.Game.Perf.LoadTimeline.Arm(new Harmony(global::KSP1PartMod.Game.Perf.LoadTimeline.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Perf.PerfLines.LoadStopped(e.ToString()));
+            }
+            try
+            {
                 // Before Redux's import (which finalizes the cfgs) and before every other import patch.
                 MmPatches.TryApply(new Harmony(MmPatches.HarmonyId), MmPatches.Switches.From(Animations));
             }
@@ -230,6 +239,7 @@ namespace KSP1PartMod
                 Log.LogInfo("[KSP1PartMod] mu: fix disabled by " + AnimationSettingsFile);
                 return;
             }
+            var timed = KSP1PartMod.Perf.PerfClock.Start();
             try
             {
                 var applied = MuReaderFix.TryApply(new Harmony(MuReaderFix.HarmonyId), out var report);
@@ -240,6 +250,10 @@ namespace KSP1PartMod
             {
                 Log.LogError("[KSP1PartMod] mu: fix failed, Redux's reader left as it was: " + e);
             }
+            finally
+            {
+                KSP1PartMod.Perf.PerfClock.Stop(KSP1PartMod.Perf.PerfPhase.MuFix, timed);
+            }
         }
 
         public override void OnInitialized()
@@ -247,6 +261,7 @@ namespace KSP1PartMod
             Log = SWLogger;
             Log.LogInfo("[KSP1PartMod] loaded " + Version);
             Ksp1Textures.SubscribeToGameStates(Game);
+            global::KSP1PartMod.Game.Perf.LoadTimeline.SubscribeToGameStates(Game);
             try
             {
                 global::KSP1PartMod.Game.Audit.AuditRunner.Arm(Game, Animations);
