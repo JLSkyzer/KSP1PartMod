@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.1 - 2026-10-28
+
+Fixes from the 2026-10-28 in-game test of 0.4.0. Not run in game yet; checklist (French) in `docs/testing/2026-10-28-fixes-041-in-game-checklist.md`.
+
+- **KSP1 engines with a shroud in the VAB** (LV-T45, RE-I2, RK-7, Mainsail…). Redux turns each KSP1 `ModuleJettison` shroud into a KSP2 `Module_Fairing` whose base model transform is hard-coded as `model`; KSP1 imports have none, so `Module_Fairing.OnInitialize` threw on a null collider array. The part's finalization stopped halfway: Redux's placeholder cylinder (the red cylinder) stayed, and, because the second spawn of a part runs `FinalizeLoad` synchronously without a try/catch, the part could not be placed again in the same VAB visit. The mod now gives those KSP1 parts an empty collider array before `OnInitialize` (`fairing: <part> base colliders were null …`), and skips Redux's `OnMaterialLoaded` on KSP1 parts without `Module_Color`, where it would throw. The KSP2 procedural shroud stays unbuilt, as before. Switch: `fix_fairing_init`.
+- **Engine stats in the VAB tooltip.** Redux gives KSP1 parts a per-mod category, so the tooltip never took its engine branch. The mod adds the native max thrust and Isp lines, plus the propellant, to KSP1 engines (`tooltip: <n> engine line(s) added …`). Switch: `engine_tooltip_stats`.
+- **Third column of the part grid.** While the sub-category bar is shown, the parts panel widens by the bar's width instead of narrowing the grid; the ship toolbar (and the trash can when outside the panel) moves with its edge, and everything is restored on hide and before Redux's collapse/expand (`ui: grid kept …`). Switch: `subcategory_bar_keeps_grid`. The grid cut seen during a search is not explained yet: a one-time `ui: grid during search: …` line logs the grid then.
+- **KSP1 textures.** After the import, Redux rebuilds each KSP1 part on demand with an emptied texture cache, so every rebuilt part loaded its own copy of every texture. The mod keeps the cache across rebuilds so each file is loaded once and shared (`share_ksp1_textures`); the gain in video memory is estimated, not measured: the `textures: memory at …` and `textures: cache at …` lines give the real figures. Readable KSP1 textures follow the game's texture quality (`ksp1_textures_follow_quality`). Opt-in: `raise_streaming_budget` raises the texture streaming budget by the KSP1 texture memory. A temporary icon prefab now keeps its textures whenever sharing is armed and the import is complete, even after the sharing stopped on an error (textures handed out before stay shared).
+- **Stock `#autoLOC` titles** come from the missing KSP1 dictionaries, not from the mod: the workspace tool `tools/ksp1-layout.mjs --localization` copies `Squad/Localization` and `SquadExpansion/Serenity/Localization` from a KSP1 install into `mods/KSP1` (undone by `--undo`).
+- New `animations.json` keys: `fix_fairing_init`, `engine_tooltip_stats`, `subcategory_bar_keeps_grid`, `share_ksp1_textures`, `ksp1_textures_follow_quality` (default true), `raise_streaming_budget` (default false).
+- 975 EditMode tests (974 passing, 1 explicit and skipped).
+
 ## 0.4.0 - 2026-10-27
 
 Animations phase 2a: material, light and glow curves of KSP1 clips. Not run in game yet; checklist in `docs/testing/2026-10-27-animations-phase2-in-game-checklist.md` (section 2a).

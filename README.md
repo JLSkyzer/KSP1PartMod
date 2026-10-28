@@ -89,6 +89,12 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "heat_glow": true,
   "skip_modules": [],
   "perf_counter": false,
+  "fix_fairing_init": true,
+  "engine_tooltip_stats": true,
+  "subcategory_bar_keeps_grid": true,
+  "share_ksp1_textures": true,
+  "ksp1_textures_follow_quality": true,
+  "raise_streaming_budget": false,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissionColor", "_EmissiveColor"],
     "_TintColor": ["_TintColor"],
@@ -114,6 +120,12 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `heat_glow`: play KSP1's heat glow (Heat entries and their curves). Set `false` if KSP2 already makes hot parts glow and you see it doubled.
 - `skip_modules`: list of KSP1 module names the mod never takes, for example `["FXModuleThrottleEffects"]`, to switch one module off if it misbehaves.
 - `perf_counter`: default `false`. `true` logs every 60 s the time spent by the animations (`[KSP1PartMod] anim: perf:` lines), for bug reports.
+- `fix_fairing_init` (0.4.1): Redux turns the jettison shroud of KSP1 engines into a KSP2 `Module_Fairing` that looks for a transform named `model`, which KSP1 imports lack; it then breaks the part in the VAB (red cylinder left, part that cannot be placed again in the same visit). The mod gives those parts an empty collider array and skips Redux's `OnMaterialLoaded` on KSP1 parts without `Module_Color` (`[KSP1PartMod] fairing:` lines). `false` leaves Redux as it is.
+- `engine_tooltip_stats` (0.4.1): add the max thrust, Isp and propellant lines of KSP1 engines to the VAB tooltip, as the game does for KSP2 engines (`[KSP1PartMod] tooltip:` line).
+- `subcategory_bar_keeps_grid` (0.4.1): while the sub-category bar is shown, widen the parts panel by the bar's width so the third column stays whole; the ship toolbar follows. `false` narrows the grid instead, as in 0.4.0.
+- `share_ksp1_textures` (0.4.1): load each KSP1 texture file once and share it between the KSP1 parts Redux rebuilds after the import, instead of one copy per rebuilt part. Less video memory: an estimate from reading Redux's code, not measured yet. `false` keeps one copy per part.
+- `ksp1_textures_follow_quality` (0.4.1): the KSP1 textures Redux keeps readable follow the game's Texture Quality setting. Most KSP1 textures are not readable and stay at full size either way.
+- `raise_streaming_budget` (0.4.1): default `false`. `true` raises the game's texture streaming budget by the KSP1 texture memory, capped at the video card's memory less a quarter (at least 1 GB); it can cause stutter on cards with little memory. The `[KSP1PartMod] textures:` lines give the texture memory at the end of the import and at each VAB or flight entry.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
 ### Phase 2a: material, light and glow curves (0.4.0)
@@ -149,6 +161,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
 - Robotics parts of KSP1 are spread over several KSP1 nodes, so only those of `actuators` land in the new robotics node.
 - Animations: phases 1 and 2a only. The modules listed under phase 2b and later are not played yet.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
+- Stock KSP1 parts titled `#autoLOC_…`: Redux reads every `Localization` node under `mods/KSP1`, but a copy of the stock part folders alone carries no dictionary. Copy `GameData/Squad/Localization` and `GameData/SquadExpansion/Serenity/Localization` from your KSP1 install to the same paths under `mods/KSP1` (Making History's keys are in the Squad dictionary). Redux keeps one text per key, English when present, else the first language it reads: a KSP1 installed in French gives French titles in every game language.
 
 ## KSP1 content
 
