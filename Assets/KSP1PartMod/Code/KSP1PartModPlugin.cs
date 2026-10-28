@@ -93,6 +93,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // Before Redux's import (tanks, B9 tank types, converters) and before NativeModules; independent of enabled.
+                OreRemap.Arm(new Harmony(OreRemap.HarmonyId), Animations.OreRemapTarget);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.NativeLines.Prefix + "ore: remap not applied, Redux's mapping kept: " + e);
+            }
+            try
+            {
                 // Before Redux's import, which builds its module importer registries; independent of enabled.
                 NativeModules.TryApply(new Harmony(NativeModules.HarmonyId), Animations);
             }

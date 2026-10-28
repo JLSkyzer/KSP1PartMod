@@ -50,6 +50,10 @@ namespace KSP1PartMod.Game
             public Func<IKsp1PartModuleImporter> Create;
             /// <summary>The converter's summary line, once at the end of the import.</summary>
             public Func<string> Summary;
+            /// <summary>Several summary lines instead of <see cref="Summary"/> (null: <see cref="Summary"/>).</summary>
+            public Func<IEnumerable<string>> SummaryLines;
+            /// <summary>Optional: run once the hook is armed with this converter (its own patches, with the hook's Harmony).</summary>
+            public Action<Harmony> AfterArm;
             public string Pair => NativeLines.Pair(Ksp1Module, NativeModule);
         }
 
@@ -75,6 +79,17 @@ namespace KSP1PartMod.Game
                 MissingMembers = HeatshieldImporter.MissingMembers,
                 Create = () => new HeatshieldImporter(_settings?.AblatorRateScale ?? 1.0),
                 Summary = HeatshieldImporter.Summary,
+            },
+            new Converter
+            {
+                Ksp1Module = ConverterMapping.Ksp1Module,
+                NativeModule = ConverterMapping.NativeModule,
+                SwitchKey = "ksp1_converters",
+                IsOn = s => s.Ksp1Converters,
+                MissingMembers = ConverterImporter.MissingMembers,
+                Create = () => new ConverterImporter(_settings?.IsruHeatScale ?? 1.0),
+                SummaryLines = ConverterImporter.SummaryLines,
+                AfterArm = h => ConverterImporter.ArmNames(h),
             },
         };
 
@@ -189,6 +204,18 @@ namespace KSP1PartMod.Game
                 return false;
             }
             Info(NativeLines.Armed(wanted.Select(c => c.Pair)));
+            foreach (var c in wanted)
+            {
+                if (c.AfterArm == null) continue;
+                try
+                {
+                    c.AfterArm(harmony);
+                }
+                catch (Exception e)
+                {
+                    Error(NativeLines.Prefix + c.Ksp1Module + " extra patches failed: " + e);
+                }
+            }
             return true;
         }
 
@@ -201,6 +228,7 @@ namespace KSP1PartMod.Game
             _settings = null;
             _broken = _summaryLogged = false;
             HeatshieldImporter.ResetReference();
+            ConverterImporter.ResetSession();
             RejectedNames.Clear();
             Record.Clear();
         }
@@ -254,7 +282,9 @@ namespace KSP1PartMod.Game
             {
                 try
                 {
-                    Info(c.Summary());
+                    if (c.SummaryLines != null)
+                        foreach (var line in c.SummaryLines()) Info(line);
+                    else Info(c.Summary());
                 }
                 catch (Exception e)
                 {

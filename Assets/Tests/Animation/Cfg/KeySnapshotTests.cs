@@ -146,7 +146,11 @@ namespace KSP1PartMod.Tests.Animation.Cfg
         /// <summary>0.10.0: the ISRU importers add <c>Module_ResourceConverter</c>, <c>Module_Mine</c> and
         /// <c>Module_ResourceScanner</c> to the part's native modules; no planner input is added. The keys of the stock ISRU
         /// parts are those of the 0.3.2 and 0.4.0 snapshots, and every key (2b kinds included) is the same with those native
-        /// modules present (the ISRU switches on) and absent (off), with or without shrouds and ablator chars.</summary>
+        /// modules present (the ISRU switches on) and absent (off), with or without shrouds and ablator chars.
+        /// <para>The snapshot half is a real check. The on/off half is a regression guard, not a proof: no native counterpart
+        /// is listed in the planner today, so the native set is not read and no setting reaches the planner. It catches a
+        /// future counterparts entry that would move a key. The real on/off check of <c>isru_active_animation</c> comes with
+        /// Task 4.</para></summary>
         [Test] public void Plan_IsruParts_KeysUnchanged_WithIsruSwitchesOnAndOff()
         {
             var on = new HashSet<string>(StringComparer.Ordinal) { "Module_ResourceConverter", "Module_Mine", "Module_ResourceScanner" };

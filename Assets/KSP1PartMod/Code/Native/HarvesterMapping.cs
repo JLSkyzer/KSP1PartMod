@@ -69,6 +69,10 @@ namespace KSP1PartMod.Native
         public string ImpactTransform { get; private set; } = "";
         public double ImpactRange { get; private set; }
 
+        /// <summary>Kept harvesters whose cfg omits <c>AutoShutdown</c> / <c>GeneratesHeat</c> (read as false, S: KSP1's
+        /// defaults are not proven), for the census.</summary>
+        public int OmittedAutoShutdown { get; private set; }
+        public int OmittedGeneratesHeat { get; private set; }
         public int SkippedOcean { get; private set; }
         public int SkippedAtmospheric { get; private set; }
         public int SkippedExospheric { get; private set; }
@@ -185,6 +189,8 @@ namespace KSP1PartMod.Native
                 m._outputs.Add(new HarvestOutput(resource, outName, efficiency, ksp1Rate, outRate));
                 outputs.Add(new IsruFlow(resource, outName, ksp1Rate, outRate));
                 inputs.AddRange(own);
+                if (IsruCfg.Value(h, "AutoShutdown") == null) m.OmittedAutoShutdown++;
+                if (IsruCfg.Value(h, "GeneratesHeat") == null) m.OmittedGeneratesHeat++;
                 if (IsruCfg.Bool(h, "GeneratesHeat") == true)
                 {
                     var ec = own.Where(f => IsruResources.IsElectricCharge(f.Name)).Sum(f => f.Rate);

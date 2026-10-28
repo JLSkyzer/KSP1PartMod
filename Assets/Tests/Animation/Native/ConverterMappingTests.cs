@@ -363,5 +363,33 @@ PART
             Assert.IsFalse(m.ResourceAutoShutdown);
             Assert.That(m.Notes, Has.Some.Contains("AutoShutdown differs between converters"));
         }
+
+        /// <summary>Task 1 review: ALL_VESSEL (and ALL_VESSEL_BALANCE) is KSP2's own behaviour, not noted; other modes are.</summary>
+        [Test] public void FlowMode_VesselWide_NotNoted_OtherModes_Noted()
+        {
+            string Body(string mode) => "ConverterName = Cell\nINPUT_RESOURCE\n{\nResourceName = MonoPropellant\nRatio = 1\nFlowMode = " + mode +
+                                       "\n}\nOUTPUT_RESOURCE\n{\nResourceName = ElectricCharge\nRatio = 1\n}";
+            foreach (var mode in new[] { "ALL_VESSEL", "all_vessel", "ALL_VESSEL_BALANCE" })
+                CollectionAssert.DoesNotContain(ConverterMapping.From(new[] { One(Body(mode)) }, 0, null, IsruFakes.Table(), HeatPerEc, 1).NotReproduced,
+                    "FlowMode", mode);
+            foreach (var mode in new[] { "STAGE_PRIORITY_FLOW", "NO_FLOW", "STACK_PRIORITY_SEARCH" })
+                CollectionAssert.Contains(ConverterMapping.From(new[] { One(Body(mode)) }, 0, null, IsruFakes.Table(), HeatPerEc, 1).NotReproduced,
+                    "FlowMode", mode);
+        }
+
+        /// <summary>Task 1 review: the census counts the converters that omit AutoShutdown / GeneratesHeat (read as false, S).</summary>
+        [Test] public void OmittedAutoShutdownAndGeneratesHeat_Counted()
+        {
+            var nodes = Converters(Isru).Concat(Converters(FuelCell)).ToList();
+            var m = ConverterMapping.From(nodes, 0, null, IsruFakes.Table(), HeatPerEc, 1);
+            Assert.AreEqual(nodes.Count(n => n.GetValue("AutoShutdown") == null), m.OmittedAutoShutdown);
+            Assert.AreEqual(nodes.Count(n => n.GetValue("GeneratesHeat") == null), m.OmittedGeneratesHeat);
+            var bare = ConverterMapping.From(new[] { One("ConverterName = Bare\nOUTPUT_RESOURCE\n{\nResourceName = ElectricCharge\nRatio = 1\n}") },
+                0, null, IsruFakes.Table(), HeatPerEc, 1);
+            Assert.AreEqual(1, bare.OmittedAutoShutdown);
+            Assert.AreEqual(1, bare.OmittedGeneratesHeat);
+            Assert.IsFalse(bare.ResourceAutoShutdown);
+            Assert.AreEqual(0, bare.Formulas[0].FluxGenerated);
+        }
     }
 }

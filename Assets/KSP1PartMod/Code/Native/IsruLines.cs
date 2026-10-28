@@ -41,11 +41,20 @@ namespace KSP1PartMod.Native
         public const string OreTableNotFound =
             Prefix + "ore: Redux's resource table not found, Ore stays TestRocks (KSP1 drills on Ore skipped)";
 
-        /// <summary>One mode of a converted part; <paramref name="mode"/> is its position in the native formula list.</summary>
-        public static string ConverterMode(string part, IsruFormula f, int mode) =>
+        /// <summary>KSP1's own Ore unit mass (t). S: KSP1's public wiki; the stock <c>ResourcesGeneric.cfg</c> is in neither
+        /// install. Only for the log.</summary>
+        public const double Ksp1OreTonnesPerUnit = 0.01;
+
+        /// <summary>One mode of a converted part; <paramref name="mode"/> is its position in the native formula list. A mode
+        /// that moves KSP1 Ore gets Redux's Ore unit mass (<paramref name="oreTonnesPerUnit"/>, t per KSP1 unit, null when
+        /// unknown) against KSP1's: its mass in and out then differ by that ratio.</summary>
+        public static string ConverterMode(string part, IsruFormula f, int mode, double? oreTonnesPerUnit = null) =>
             Prefix + $"{part}: converter '{f.LabelSource}' -> mode {mode}: in {Flows(f.Inputs)} out {Flows(f.Outputs)} " +
             $"(mass in {(f.MassInKnown ? Inv(f.MassIn) : "?")} t/s, out {(f.MassOutKnown ? Inv(f.MassOut) : "?")} t/s), " +
-            $"heat {Inv(f.FluxGenerated)} kW";
+            $"heat {Inv(f.FluxGenerated)} kW" +
+            (oreTonnesPerUnit is double ore && ore > 0
+                ? $"; Ore weighs {Inv(ore)} t per KSP1 unit in Redux, {Inv(Ksp1OreTonnesPerUnit)} t in KSP1: Ore mass x{Inv(ore / Ksp1OreTonnesPerUnit)}"
+                : "");
 
         public static string ConvertersSummary(int parts, int modes, int severalConverters, int dropped, IEnumerable<(string Field, int Parts)> notReproduced) =>
             Prefix + $"converters: {parts} part(s) got {ConverterMapping.NativeModule} with {modes} mode(s) " +

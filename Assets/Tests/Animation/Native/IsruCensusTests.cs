@@ -19,13 +19,16 @@ namespace KSP1PartMod.Tests.Animation.Native
             public int Harvesters, DrillParts, HarvesterNoMap, HarvesterOcean, HarvesterAtmospheric, HarvesterExospheric, HarvesterOther;
             public int Surveyors, ResourceScanners, ResourceScannersKept, ScannerRequiresUnlock, ScannerNoResource, ScannerType;
             public int AsteroidDrillParts;
+            /// <summary>Converters and kept harvesters whose cfg omits AutoShutdown / GeneratesHeat (read as false, S).</summary>
+            public int OmittedAutoShutdown, OmittedGeneratesHeat;
 
             public override string ToString() =>
                 $"converters {ConverterModules} on {ConverterParts} part(s) -> {ConverterModes} mode(s), {ConverterDropped} dropped; " +
                 $"harvesters {Harvesters} -> {DrillParts} drill part(s), skipped {HarvesterOcean} ocean, {HarvesterAtmospheric} atmospheric, " +
                 $"{HarvesterExospheric} exospheric, {HarvesterNoMap} without a map, {HarvesterOther} other; asteroid/comet drill parts {AsteroidDrillParts}; " +
                 $"surveyors {Surveyors}; resource scanners {ResourceScanners} -> {ResourceScannersKept} kept, left out {ScannerRequiresUnlock} RequiresUnlock, " +
-                $"{ScannerType} ScannerType, {ScannerNoResource} without a scannable resource";
+                $"{ScannerType} ScannerType, {ScannerNoResource} without a scannable resource; " +
+                $"AutoShutdown omitted on {OmittedAutoShutdown}, GeneratesHeat omitted on {OmittedGeneratesHeat} (read as false)";
         }
 
         private sealed class Census
@@ -74,7 +77,8 @@ namespace KSP1PartMod.Tests.Animation.Native
             if (converters.Count > 0)
             {
                 var map = ConverterMapping.From(converters, 0, null, r, NativeIsruRef.FallbackConverterHeatPerEc, 1);
-                Both(x => { x.ConverterModules += converters.Count; x.ConverterModes += map.Formulas.Count; x.ConverterDropped += map.DroppedFormulas; });
+                Both(x => { x.ConverterModules += converters.Count; x.ConverterModes += map.Formulas.Count; x.ConverterDropped += map.DroppedFormulas;
+                    x.OmittedAutoShutdown += map.OmittedAutoShutdown; x.OmittedGeneratesHeat += map.OmittedGeneratesHeat; });
                 if (map.HasModule) Both(x => x.ConverterParts++);
                 Fields(map.NotReproduced);
                 foreach (var flow in map.Formulas.SelectMany(f => f.Inputs.Concat(f.Outputs))) Resource(flow.Ksp1Name);
@@ -92,6 +96,8 @@ namespace KSP1PartMod.Tests.Animation.Native
                     x.HarvesterAtmospheric += map.SkippedAtmospheric;
                     x.HarvesterExospheric += map.SkippedExospheric;
                     x.HarvesterOther += map.SkippedOther;
+                    x.OmittedAutoShutdown += map.OmittedAutoShutdown;
+                    x.OmittedGeneratesHeat += map.OmittedGeneratesHeat;
                     if (map.HasModule) x.DrillParts++;
                 });
                 Fields(map.NotReproduced);

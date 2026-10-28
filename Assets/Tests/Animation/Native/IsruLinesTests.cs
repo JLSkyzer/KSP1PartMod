@@ -42,6 +42,18 @@ namespace KSP1PartMod.Tests.Animation.Native
                 IsruLines.ConverterNamesNotRegistered("Ksp1PartLocalizationBuilder.Add"));
         }
 
+        /// <summary>Task 1 review: a mode that moves KSP1 Ore states Redux's Ore unit mass against KSP1's.</summary>
+        [Test] public void ConverterMode_WithOre_StatesTheMassRatio()
+        {
+            var f = ConverterMapping.From(new[] { Module(
+                "name = ModuleResourceConverter\nConverterName = Lf\nINPUT_RESOURCE\n{\nResourceName = Ore\nRatio = 1\n}\n" +
+                "OUTPUT_RESOURCE\n{\nResourceName = LiquidFuel\nRatio = 1\n}") }, 0, null, IsruFakes.Table(), 10.5, 1).Formulas[0];
+            Assert.AreEqual("[KSP1PartMod] native: p: converter 'Lf' -> mode 0: in CarbonRegolith 0.05 out Methane 2 " +
+                            "(mass in 0.05 t/s, out 0.005 t/s), heat 0 kW; Ore weighs 0.05 t per KSP1 unit in Redux, 0.01 t in KSP1: Ore mass x5",
+                IsruLines.ConverterMode("p", f, 0, 0.05));
+            StringAssert.EndsWith("heat 0 kW", IsruLines.ConverterMode("p", f, 0, null), "unknown: no suffix");
+        }
+
         [Test] public void ConverterMode_EmptyFlows_None_UnknownMass_QuestionMark()
         {
             var f = ConverterMapping.From(new[] { Module(

@@ -20,7 +20,7 @@ namespace KSP1PartMod.Native
     /// <item>module fields: <c>ResourceAutoShutdown</c> = the first kept formula's <c>AutoShutdown</c>,
     /// <c>conversionRate</c> 1 (KSP1 runs at full rate), <c>AutoShutdownTemperatureRatio</c> 0.9, <c>ConvertByMass</c> false;</item>
     /// <item>not reproduced, counted once per part by field (<see cref="NotReproduced"/>): <c>DumpExcess</c> (when true),
-    /// <c>FillAmount</c> (when below 1), <c>FlowMode</c>, <c>ThermalEfficiency</c>, <c>TemperatureModifier</c>,
+    /// <c>FillAmount</c> (when below 1), <c>FlowMode</c> (when not vessel-wide: <see cref="IsVesselWide"/>), <c>ThermalEfficiency</c>, <c>TemperatureModifier</c>,
     /// <c>DefaultShutoffTemp</c>, the specialist bonus, <c>AlwaysActive</c> (when true), <c>EfficiencyBonus</c> (when not 1),
     /// the <c>REQUIRED_RESOURCE</c> amount, several modes at once, and any other key or node.</item>
     /// </list>
@@ -46,6 +46,14 @@ namespace KSP1PartMod.Native
         public const string RequiredAmount = "REQUIRED_RESOURCE amount";
         public const string SpecialistBonus = "specialist bonus";
 
+        /// <summary>The part already has a <c>Data_ResourceConverter</c> (a Redux importer of its own).</summary>
+        public const string ExistingModuleNote = Ksp1Module + " not converted: the part already has a " + NativeModule;
+
+        /// <summary>KSP1 flow modes that draw from the whole vessel, as KSP2 does: not noted.</summary>
+        public static bool IsVesselWide(string flowMode) =>
+            string.Equals(flowMode, "ALL_VESSEL", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(flowMode, "ALL_VESSEL_BALANCE", StringComparison.OrdinalIgnoreCase);
+
         /// <summary>The localization term of a mode's name.</summary>
         public static string LabelKey(string part, int index) => $"Parts/Ksp1Converter/{part}/{index}";
 
@@ -55,6 +63,10 @@ namespace KSP1PartMod.Native
         /// <summary>The KSP1 converters read (the called node included).</summary>
         public int SourceCount { get; private set; }
         public int DroppedFormulas { get; private set; }
+        /// <summary>KSP1 converters whose cfg omits <c>AutoShutdown</c> / <c>GeneratesHeat</c> (read as false, S: KSP1's
+        /// defaults are not proven), for the census.</summary>
+        public int OmittedAutoShutdown { get; private set; }
+        public int OmittedGeneratesHeat { get; private set; }
         public int CalledIndex { get; private set; } = -1;
         public CalledMatch CalledMatch { get; private set; }
 
@@ -145,6 +157,8 @@ namespace KSP1PartMod.Native
             var name = IsruCfg.Value(node, "ConverterName");
             var label = string.IsNullOrEmpty(name) ? "Converter " + (index + 1) : name;
             var who = $"{Ksp1Module} '{label}'";
+            if (IsruCfg.Value(node, "AutoShutdown") == null) OmittedAutoShutdown++;
+            if (IsruCfg.Value(node, "GeneratesHeat") == null) OmittedGeneratesHeat++;
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var kv in node.AllValues)
             {
@@ -249,7 +263,8 @@ namespace KSP1PartMod.Native
                 drop = drop ?? $"{name} Ratio '{ratioText}' is not a number of 0 or more";
                 return null;
             }
-            if (IsruCfg.Value(node, "FlowMode") != null)
+            var flowMode = IsruCfg.Value(node, "FlowMode");
+            if (flowMode != null && !IsVesselWide(flowMode))
                 NotReproducedField("FlowMode", $"{Ksp1Module}: FlowMode not reproduced (KSP2 draws from the whole vessel)");
             if (kind == "OUTPUT_RESOURCE" && IsruCfg.Bool(node, "DumpExcess") == true)
                 NotReproducedField("DumpExcess", $"{Ksp1Module}: DumpExcess not reproduced (KSP2 stops the mode when an output is full)");
