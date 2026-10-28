@@ -40,6 +40,8 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
   au VAB (`already reported` dans la ligne `starting`).
 - [ ] Si le jeu plante pendant l'audit : relancer, ligne `audit: the previous run stopped during <pièce> (game closed or
   crashed): added to skip.txt`. Cette pièce n'est plus auditée (`<mod>/audit/skip.txt`).
+  Pour réauditer les pièces ignorées, supprimer `<mod>/audit/skip.txt` : le `.md` et les lignes `starting` / `done`
+  donnent son chemin et le rappellent (« delete it to retry these parts »).
 - [ ] Remettre `"audit_on_vab_entry": false` à la fin.
 
 ## 2. À envoyer

@@ -407,6 +407,17 @@ namespace KSP1PartMod.Tests.Audit
             Assert.AreEqual("audit: crasher (BDB): crashed_previous_run", AuditSummary.PartLine(crashed));
         }
 
+        [Test] public void Summary_SkipNote_OnlyWhenAPathIsGiven()
+        {
+            var s = AuditSummary.From(Fixture(), 12);
+            StringAssert.DoesNotContain("delete it", s.DoneLine("r.csv"));
+            StringAssert.DoesNotContain("delete it", s.Markdown("x"));
+            var note = "skipped parts are listed in D:/a/skip.txt: delete it to retry these parts";
+            Assert.AreEqual(note, AuditSummary.SkipNote("D:/a/skip.txt"));
+            StringAssert.EndsWith("; " + note, s.DoneLine("r.csv", "D:/a/skip.txt"));
+            StringAssert.Contains(note + ".\n", s.Markdown("x", "D:/a/skip.txt"));
+        }
+
         [Test] public void Summary_DoneLine_OneDecimalForShortRuns()
         {
             StringAssert.StartsWith("audit: done in 0.4 s:", AuditSummary.From(new AuditRecord[0], 0.4).DoneLine("r"));

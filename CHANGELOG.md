@@ -10,7 +10,8 @@ Audit mode: load every KSP1 part once, off screen, and report the ones that fail
 - **Report:** `<mod>/audit/audit-<date>.csv` (one row per part, written as it goes) and `.md` (summary: by kind, by mod, by module, slowest parts, and a `pods:` line for KSP1 pods with engines). A part that crashes the game is named by the breadcrumb file and added to `skip.txt` at the next start.
 - **Leak checks:** the OAB event delegate counts and the message subscriptions of the real builder are compared around each spawn (lines `OAB event ... grew`, `message ... kept ...`). A failed snapshot is logged and skips the check for that part only.
 - **Risks:** the detached spawn is read from the 26w42c decompilation, not tried in game; a module may behave differently when detached; the cost per part and the `UnloadUnusedAssets` hitches are unmeasured.
-- 1354 EditMode tests (1352 passing, 2 explicit and skipped).
+- **Stop paths hardened:** a failed address lookup for the control parts logs one line and the audit runs without them; an error that stops the audit now stops the session clock and writes the partial `.md`; the `.md` and the `starting` / `done` lines give the path of `skip.txt` and say to delete it to retry the skipped parts.
+- 1355 EditMode tests (1353 passing, 2 explicit and skipped).
 
 ## 0.5.0 - 2026-10-28
 

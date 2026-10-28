@@ -90,8 +90,12 @@ namespace KSP1PartMod.Audit
 
         // ---- log lines (Task 2's exact formats) ----
 
-        public string DoneLine(string reportPath) =>
-            $"audit: done in {Seconds(ElapsedSeconds)} s: {Total} part(s), {Ok} ok, {OkWithWarnings} ok with import warnings only, {WithProblem} with a problem; report {reportPath}";
+        public string DoneLine(string reportPath, string skipPath = null) =>
+            $"audit: done in {Seconds(ElapsedSeconds)} s: {Total} part(s), {Ok} ok, {OkWithWarnings} ok with import warnings only, {WithProblem} with a problem; report {reportPath}" +
+            (string.IsNullOrEmpty(skipPath) ? "" : "; " + SkipNote(skipPath));
+
+        /// <summary>How to clear the skip list.</summary>
+        public static string SkipNote(string skipPath) => $"skipped parts are listed in {skipPath}: delete it to retry these parts";
 
         public string ByKindLine() =>
             "audit: by kind: " + (KindCounts.Count == 0 ? "none" : string.Join(", ", KindCounts.Select(p => $"{AuditKinds.Name(p.Key)} {p.Value}")));
@@ -142,11 +146,12 @@ namespace KSP1PartMod.Audit
 
         // ---- Markdown ----
 
-        public string Markdown(string stamp)
+        public string Markdown(string stamp, string skipPath = null)
         {
             var sb = new StringBuilder();
             sb.Append("# KSP1PartMod audit ").Append(stamp).Append("\n\n");
             sb.Append($"{Total} part(s) in {Seconds(ElapsedSeconds)} s: {Ok} ok, {OkWithWarnings} ok with import warnings only, {WithProblem} with a problem.\n\n");
+            if (!string.IsNullOrEmpty(skipPath)) sb.Append(SkipNote(skipPath)).Append(".\n\n");
 
             sb.Append("## By kind\n\n| Kind | Parts |\n|---|---|\n");
             foreach (var p in KindCounts) sb.Append($"| {AuditKinds.Name(p.Key)} | {p.Value} |\n");

@@ -145,6 +145,7 @@ namespace KSP1PartMod.Game.Audit
                     KSP1PartModPlugin.Log?.LogError(P + "stopped by an error (the next VAB entry starts again): " + e);
                     if (!Stale(generation))
                     {
+                        FinishAfterError();
                         _run?.Close();
                         _run = null;
                         _running = false;
@@ -154,6 +155,20 @@ namespace KSP1PartMod.Game.Audit
                 yield return current;
             }
             if (!Stale(generation)) _running = false;
+        }
+
+        /// <summary>After an error: the session clock stops and the partial summary is written, as a cancel does.</summary>
+        private static void FinishAfterError()
+        {
+            try
+            {
+                SessionClock.Stop();
+                WriteMarkdown(AuditSummary.From(Records, SessionClock.Elapsed.TotalSeconds));
+            }
+            catch (Exception e)
+            {
+                KSP1PartModPlugin.Log?.LogError(P + "partial summary not written: " + e.Message);
+            }
         }
 
         // ---- the run ----
@@ -208,15 +223,26 @@ namespace KSP1PartMod.Game.Audit
             if (run == null) yield break;
             _run = run;
             SessionClock.Start();
-            var total = run.Total;
             var frame = Stopwatch.StartNew();
             var inFrame = 0;
 
-            // Controls: loaded first (awaited), then spawned together in one frame.
+            // Controls: loaded first (awaited), then spawned together in one frame. If the address lookup itself
+            // throws, one line is logged and the audit runs without them (never stopped at each VAB entry).
             var controls = run.Pending.Where(t => t.IsControl).ToList();
             var loaded = new Dictionary<string, LoadResult>(StringComparer.Ordinal);
-            foreach (var c in controls)
-                if (!run.Spawner.HasTemplate(run.Cores[c.Name])) loaded[c.Name] = Load(run.Spawner.AsyncAddress(run.Cores[c.Name], true));
+            try
+            {
+                foreach (var c in controls)
+                    if (!run.Spawner.HasTemplate(run.Cores[c.Name])) loaded[c.Name] = Load(run.Spawner.AsyncAddress(run.Cores[c.Name], true));
+            }
+            catch (Exception e)
+            {
+                log.LogError(P + "control parts skipped, the address lookup failed: " + e.Message);
+                loaded.Clear();
+                run.Pending = run.Pending.Where(t => !t.IsControl).ToList();
+                run.Total = run.Pending.Count;
+            }
+            var total = run.Total;
             var wait = Stopwatch.StartNew();
             while (loaded.Values.Any(l => !l.Done) && wait.Elapsed.TotalSeconds < LoadTimeoutSeconds)
             {
@@ -311,7 +337,7 @@ namespace KSP1PartMod.Game.Audit
             SessionClock.Stop();
             Ksp1Textures.ReportAt("audit end");
             var summary = AuditSummary.From(Records, SessionClock.Elapsed.TotalSeconds);
-            log.LogInfo(summary.DoneLine(_csvPath));
+            log.LogInfo(summary.DoneLine(_csvPath, SkipNotePath()));
             log.LogInfo(summary.ByKindLine());
             log.LogInfo(summary.ByModLine());
             log.LogInfo(summary.ByModuleLine());
@@ -429,7 +455,8 @@ namespace KSP1PartMod.Game.Audit
                     Total = pending.Count,
                 };
                 log.LogInfo(P + $"starting: {pending.Count(t => !t.IsControl)} KSP1 part(s) and {pending.Count(t => t.IsControl)} control(s), " +
-                            $"{skipped} skipped, {alreadyReported} already reported; report {_csvPath}");
+                            $"{skipped} skipped, {alreadyReported} already reported; report {_csvPath}" +
+                            (skip.Count > 0 ? "; " + AuditSummary.SkipNote(skipPath) : ""));
                 Ksp1Textures.ReportAt("audit start");
                 return run;
             }
@@ -622,11 +649,25 @@ namespace KSP1PartMod.Game.Audit
             if (_stamp == null) return;
             try
             {
-                File.WriteAllText(Path.Combine(Dir, $"audit-{_stamp}.md"), summary.Markdown(_stamp), new UTF8Encoding(false));
+                File.WriteAllText(Path.Combine(Dir, $"audit-{_stamp}.md"), summary.Markdown(_stamp, SkipNotePath()), new UTF8Encoding(false));
             }
             catch (Exception e)
             {
                 KSP1PartModPlugin.Log?.LogError(P + "summary not written: " + e.Message);
+            }
+        }
+
+        /// <summary>The skip list path when it holds a part, else null (no note to show).</summary>
+        private static string SkipNotePath()
+        {
+            try
+            {
+                var path = Path.Combine(Dir, SkipFile);
+                return File.Exists(path) && ReadLines(path).Count > 0 ? path : null;
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 
