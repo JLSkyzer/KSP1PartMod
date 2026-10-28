@@ -14,7 +14,6 @@ using KSP1PartMod.Native.Science;
 using Newtonsoft.Json.Linq;
 using Redux.Ksp1Import;
 using Redux.Ksp1Import.Config;
-using SpaceWarp2.API.Loading;
 
 namespace KSP1PartMod.Game
 {
@@ -30,14 +29,15 @@ namespace KSP1PartMod.Game
     /// definition whose <c>data</c> is replaced (feature-gated by Patch Manager), or <b>route B</b>: a prefix on
     /// <c>ScienceExperimentsDataStore.Initialize</c> wraps its callback, which then adds the definitions to the store once it reports
     /// <c>IsInitialized</c> and before the game hears of it, when KSP1PartMod is on in the campaign.</item>
-    /// <item><b>Check</b>: after the game's "Loading Science Data", the live store is read: how many <c>KSP1_*</c> ids are there, and
-    /// the live KSP2 experiments, which replace the 26w42c list (<see cref="Natives"/>).</item>
+    /// <item><b>Check</b> (with <c>ksp1_science</c>, both routes): the same wrapped callback, which no campaign feature gates, reads
+    /// the live store once per initialization, mod on or off: how many <c>KSP1_*</c> ids are there (the in-game proof of the
+    /// gating), and the live KSP2 experiments, which replace the 26w42c list (<see cref="Natives"/>). Route A adds nothing
+    /// there.</item>
     /// </list>
     /// Never throws into the game: every failure is one line, and the import goes on.</summary>
     internal static class ScienceDefinitions
     {
         public const string HarmonyId = "KSP1PartMod.ScienceDefinitions";
-        public const string CheckStepName = "Check the KSP1 science definitions";
         /// <summary>The stock asset copied by route A: its asset name equals its id, it covers every situation and both types.</summary>
         public const string DuplicateSource = "EnvironmentSurvey";
 
@@ -76,9 +76,26 @@ namespace KSP1PartMod.Game
         private static readonly Dictionary<string, string> Json = new Dictionary<string, string>(StringComparer.Ordinal);
         private static bool _armed;
 
-        private static void Info(string line) => KSP1PartModPlugin.Log?.LogInfo(line);
-        private static void Warn(string line) => KSP1PartModPlugin.Log?.LogWarning(line);
-        private static void Error(string line) => KSP1PartModPlugin.Log?.LogError(line);
+        /// <summary>Tests: receives every line instead of the log.</summary>
+        internal static Action<string> Sink;
+
+        private static void Info(string line)
+        {
+            if (Sink != null) Sink(line);
+            else KSP1PartModPlugin.Log?.LogInfo(line);
+        }
+
+        private static void Warn(string line)
+        {
+            if (Sink != null) Sink(line);
+            else KSP1PartModPlugin.Log?.LogWarning(line);
+        }
+
+        private static void Error(string line)
+        {
+            if (Sink != null) Sink(line);
+            else KSP1PartModPlugin.Log?.LogError(line);
+        }
 
         /// <param name="modId">The mod's Patch Manager id (<c>KerbalMod.PM</c> is <c>Patching.ForMod(SWMetadata.Guid)</c>).</param>
         public static void TryApply(Harmony harmony, AnimationSettings settings, string modId)
@@ -97,7 +114,8 @@ namespace KSP1PartMod.Game
             Info(ScienceLines.DefinitionsRead(scan.DefinitionNodes.Count, scan.DefinitionFiles, scan.CfgFiles, watch.ElapsedMilliseconds, scan.MmEdits));
             foreach (var f in scan.Failures) Warn(ScienceLines.ReadFailed(f, "parse error"));
 
-            RegisterCheck();
+            // Both routes: the check runs from the store's callback, which no campaign feature gates.
+            var hooked = HookStore(harmony);
             if (!settings.ScienceGenerateDefinitions) return;
 
             var built = defs.Values.Where(d => d.IsBuilt).OrderBy(d => d.Key, StringComparer.Ordinal).ToList();
@@ -132,22 +150,12 @@ namespace KSP1PartMod.Game
             if (!viaPm)
             {
                 // Also after a partial Patch Manager queue: the store skips the ids already there.
-                try
+                if (!hooked)
                 {
-                    var initialize = AccessTools.Method(typeof(ScienceExperimentsDataStore), nameof(ScienceExperimentsDataStore.Initialize), new[] { typeof(Action) });
-                    if (initialize == null)
-                    {
-                        Error(ScienceLines.Failed("definitions: ScienceExperimentsDataStore.Initialize(Action) not found, store route", "no definition added"));
-                        return;
-                    }
-                    harmony.Patch(initialize, prefix: new HarmonyMethod(typeof(ScienceDefinitions), nameof(BeforeStoreInitialize)));
-                    ViaStore = true;
-                }
-                catch (Exception e)
-                {
-                    Error(ScienceLines.Failed("definitions: store route", e.ToString()));
+                    Error(ScienceLines.Failed("definitions: store route", "the store hook is not armed, no definition added"));
                     return;
                 }
+                ViaStore = true;
             }
             Info(ScienceLines.DefinitionsQueued(built.Count, viaPm, ScienceDefinitionScan.SkipCounts(defs.Values, duplicates.Count)));
         }
@@ -289,8 +297,31 @@ namespace KSP1PartMod.Game
             else Error(ScienceLines.Failed("definitions: Patch Manager duplicate", "the asset is not a JSON object, left as the copy of " + DuplicateSource));
         }
 
-        // ---- route B
+        // ---- the store hook (route B and the check)
 
+        /// <summary>Prefixes <c>ScienceExperimentsDataStore.Initialize(Action)</c>; false (one line) when it cannot.</summary>
+        private static bool HookStore(Harmony harmony)
+        {
+            try
+            {
+                var initialize = AccessTools.Method(typeof(ScienceExperimentsDataStore), nameof(ScienceExperimentsDataStore.Initialize), new[] { typeof(Action) });
+                if (initialize == null)
+                {
+                    Error(ScienceLines.Failed("definitions: ScienceExperimentsDataStore.Initialize(Action) not found, store hook", "no store check, no store route"));
+                    return false;
+                }
+                harmony.Patch(initialize, prefix: new HarmonyMethod(typeof(ScienceDefinitions), nameof(BeforeStoreInitialize)));
+                return true;
+            }
+            catch (Exception e)
+            {
+                Error(ScienceLines.Failed("definitions: store hook", e.ToString()));
+                return false;
+            }
+        }
+
+        /// <summary>Wraps the store's callback: route B adds the definitions (mod on only), then the check runs, then the game's own
+        /// callback. Each store initialization (a new store per campaign load) gives one check.</summary>
         internal static void BeforeStoreInitialize(ScienceExperimentsDataStore __instance, ref Action onInitialized)
         {
             try
@@ -299,7 +330,9 @@ namespace KSP1PartMod.Game
                 var inner = onInitialized;
                 onInitialized = () =>
                 {
-                    AddToStore(store);
+                    if (ViaStore) AddToStore(store);
+                    try { Check(store); }
+                    catch (Exception e) { Error(ScienceLines.Failed("store check", e.ToString())); }
                     inner?.Invoke();
                 };
             }
@@ -345,25 +378,6 @@ namespace KSP1PartMod.Game
 
         // ---- check
 
-        private static void RegisterCheck()
-        {
-            try
-            {
-                SaveLoad.AddStepAfter(KSP1PartModPlugin.ModId, CheckStepName, StockFlow.CampaignLoad, TechTreeLoadStep.ScienceStep, OnCheckStep);
-            }
-            catch (Exception e)
-            {
-                Error(ScienceLines.Failed("store check step registration", e.Message));
-            }
-        }
-
-        private static void OnCheckStep(Action resolve, Action<string> reject)
-        {
-            try { Check(GameManager.Instance?.Game?.ScienceManager?.ScienceExperimentsDataStore); }
-            catch (Exception e) { Error(ScienceLines.Failed("store check", e.ToString())); }
-            finally { resolve(); }
-        }
-
         internal static void Check(ScienceExperimentsDataStore store)
         {
             if (store == null || !store.IsInitialized)
@@ -402,11 +416,15 @@ namespace KSP1PartMod.Game
         internal static void QueueForTests(IEnumerable<ScienceDefinitionModel> definitions) =>
             _queued = (definitions ?? Enumerable.Empty<ScienceDefinitionModel>()).Where(d => d.IsBuilt).ToList();
 
+        /// <summary>Tests: the route the store hook takes.</summary>
+        internal static void ViaStoreForTests(bool viaStore) => ViaStore = viaStore;
+
         /// <summary>Tests: forget the arming and the record.</summary>
         internal static void ResetForTests()
         {
             _armed = false;
             _live = null;
+            Sink = null;
             _queued = new List<ScienceDefinitionModel>();
             Json.Clear();
             Definitions = Empty;

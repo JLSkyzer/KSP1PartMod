@@ -66,7 +66,8 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
   DMagic 0` (cfg bruts).
 - [ ] `science: armed: deploy animations on, wait for animation on`. Aucune ligne `science: … not found, … off` ni
   `science: patch failed`.
-- [ ] À l'ouverture d'une campagne où le mod est activé : `science: store: <p> of <g> KSP1 definition(s) present; KSP2
+- [ ] À l'ouverture de **chaque** campagne (la ligne sort que le mod soit activé ou non : le contrôle tourne dans le rappel
+  du magasin d'expériences, qu'aucune fonctionnalité de campagne ne filtre), ici une campagne où le mod est activé : `science: store: <p> of <g> KSP1 definition(s) present; KSP2
   experiments: …`, **p = g attendu**. Si p = 0 : les doublons du Patch Manager n'arrivent pas au magasin ; noter la
   ligne, et refaire l'essai avec `science_definitions_via_patch_manager: false` (§ 10). Une ligne `store: KSP2
   experiments differ from 26w42c` est possible après une mise à jour de Redux : la recopier.

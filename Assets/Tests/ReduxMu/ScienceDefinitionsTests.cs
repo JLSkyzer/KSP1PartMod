@@ -214,6 +214,7 @@ EXPERIMENT_DEFINITION
             var b = ScienceDefinitionBuilder.From(CfgText.Parse(Def.Replace("bd_inventedProbe", "bd_inventedOther")).GetNodes("EXPERIMENT_DEFINITION").Single(),
                 null, AnimationSettings.Defaults, null);
             ScienceDefinitions.QueueForTests(new[] { a, b });
+            ScienceDefinitions.ViaStoreForTests(true);
             ScienceDefinitions.ModEnabledSource = () => true;
             WithGameSettings(() =>
             {
@@ -240,6 +241,7 @@ EXPERIMENT_DEFINITION
             foreach (var enabled in new bool?[] { null, false })
             {
                 ScienceDefinitions.QueueForTests(new[] { Model() });
+                ScienceDefinitions.ViaStoreForTests(true);
                 ScienceDefinitions.ModEnabledSource = () => enabled;
                 WithGameSettings(() =>
                 {
@@ -258,11 +260,66 @@ EXPERIMENT_DEFINITION
         [Test] public void StoreRoute_NotInitialized_AddsNothing()
         {
             ScienceDefinitions.QueueForTests(new[] { Model() });
+            ScienceDefinitions.ViaStoreForTests(true);
             var store = new ScienceExperimentsDataStore();
             Action callback = () => { };
             ScienceDefinitions.BeforeStoreInitialize(store, ref callback);
             callback();
             CollectionAssert.IsEmpty(store.GetAllExperimentIDs());
+        }
+
+        /// <summary>The check runs from the store's callback in both routes, before the game's own callback, mod on or off (no
+        /// campaign feature gates it). Route A adds nothing there; the mod-off store line says it is expected.</summary>
+        [Test] public void StoreHook_ChecksInBothRoutes_ModOnOrOff_RouteAAddsNothing()
+        {
+            foreach (var viaStore in new[] { false, true })
+            foreach (var enabled in new bool?[] { true, false })
+            {
+                ScienceDefinitions.ResetForTests();
+                var lines = new List<string>();
+                ScienceDefinitions.Sink = lines.Add;
+                ScienceDefinitions.QueueForTests(new[] { Model() });
+                ScienceDefinitions.ViaStoreForTests(viaStore);
+                ScienceDefinitions.ModEnabledSource = () => enabled;
+                var label = $"via store {viaStore}, enabled {enabled}";
+                WithGameSettings(() =>
+                {
+                    var store = new ScienceExperimentsDataStore();
+                    var storeLines = -1;
+                    Action callback = () => storeLines = lines.Count(l => l.Contains("science: store: ") && l.Contains("KSP1 definition(s) present"));
+                    ScienceDefinitions.BeforeStoreInitialize(store, ref callback);
+                    AccessTools.Field(typeof(ScienceExperimentsDataStore), "_isInitialized").SetValue(store, true);
+                    callback();
+                    Assert.AreEqual(1, storeLines, "one store line before the game's callback: " + label);
+                    var added = viaStore && enabled == true;
+                    Assert.AreEqual(added ? 1 : 0, store.GetAllExperimentIDs().Count(i => i.StartsWith("KSP1_")), label);
+                    var line = lines.Single(l => l.Contains("KSP1 definition(s) present"));
+                    StringAssert.StartsWith(ScienceLines.Prefix + $"store: {(added ? 1 : 0)} of 1 KSP1 definition(s) present", line, label);
+                    if (enabled == false) StringAssert.Contains("(KSP1PartMod off in this campaign: expected)", line, label);
+                    else StringAssert.DoesNotContain("expected", line, label);
+                });
+            }
+        }
+
+        /// <summary>A new store per campaign load: one check, and one store line, per store initialization.</summary>
+        [Test] public void StoreHook_OneCheckPerStoreInitialization()
+        {
+            var lines = new List<string>();
+            ScienceDefinitions.Sink = lines.Add;
+            ScienceDefinitions.QueueForTests(new[] { Model() });
+            ScienceDefinitions.ModEnabledSource = () => true;
+            WithGameSettings(() =>
+            {
+                for (var load = 0; load < 2; load++)
+                {
+                    var store = new ScienceExperimentsDataStore();
+                    Action callback = () => { };
+                    ScienceDefinitions.BeforeStoreInitialize(store, ref callback);
+                    AccessTools.Field(typeof(ScienceExperimentsDataStore), "_isInitialized").SetValue(store, true);
+                    callback();
+                }
+            });
+            Assert.AreEqual(2, lines.Count(l => l.Contains("KSP1 definition(s) present")));
         }
 
         [Test] public void Check_ReadsTheLiveNatives()
