@@ -141,7 +141,7 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
 
         [Test] public void EngineMode_Editor_Ksp1Is2x()
         {
-            var m = Mode(len: 2f); m.Tick(0.5f, true, "Secondary", editorSpeedSetting: 0f);
+            var m = Mode(len: 2f, speed: 2f); m.Tick(0.5f, true, "Secondary", editorSpeedSetting: 0f);
             Assert.AreEqual(1f, m.Pose.NormalizedTime, 1e-4f);
         }
 
@@ -149,6 +149,12 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         {
             var m = Mode(len: 2f, speed: 1f); m.Tick(0.5f, true, "Secondary", editorSpeedSetting: 1f);
             Assert.AreEqual(0.25f, m.Pose.NormalizedTime, 1e-4f);
+        }
+
+        [Test] public void EngineMode_SpeedMultiplierZero_NeverMoves()
+        {
+            var m = Mode(speed: 0f); m.Tick(1f, false, "Secondary", 1f); m.Tick(1f, true, "Secondary", 1f);
+            Assert.AreEqual(0f, m.Pose.NormalizedTime);
         }
 
         [Test] public void EngineMode_UnknownMode_HoldsAtTimeZero()

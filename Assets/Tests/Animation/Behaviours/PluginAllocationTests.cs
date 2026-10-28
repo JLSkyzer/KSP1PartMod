@@ -28,6 +28,8 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
                     mode.Tick(0.02f, false, on ? "B" : "A", 1f);
                     dec.Tick(0.02f, k % 3000 > 1500, on, 1f);
                     spring.Tick(0.02f, on ? 9f : float.NaN);
+                    deploy.Tick(0.02f, true, on, 1f); mode.Tick(0.02f, true, on ? "B" : "A", 1f);
+                    if (k % 500 == 0) { spring.Toggle(); dec.TogglePreview(); }
                     float x = 1, y = 2, z = 3;
                     AxisBlend.Blend(ref x, ref y, ref z, 9, 8, 7, constrained, scales);
                     sink += deploy.Pose.NormalizedTime + mode.Pose.NormalizedTime + dec.Pose.NormalizedTime

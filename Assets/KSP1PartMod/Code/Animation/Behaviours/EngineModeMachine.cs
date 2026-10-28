@@ -16,7 +16,7 @@ namespace KSP1PartMod.Animation.Behaviours
         public EngineModeMachine(AnimEntryDef def, float clipLength)
         {
             _modeAtZero = def.ModeAtTimeZero;
-            _speedMult = def.SpeedMultiplier > 0f ? def.SpeedMultiplier : 1f;
+            _speedMult = def.SpeedMultiplier > 0f ? def.SpeedMultiplier : 0f;
             _length = Machine.Length(clipLength);
         }
 
