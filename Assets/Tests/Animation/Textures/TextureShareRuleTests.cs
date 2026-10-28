@@ -64,11 +64,13 @@ namespace KSP1PartMod.Tests.Animation.Textures
             Assert.AreEqual(CacheClear.Redux, TextureShareRule.Clear(false, false));
         }
 
-        [Test] public void DestroyedGraph_KeepsTexturesOnlyWhileSharing()
+        [Test] public void DestroyedGraph_KeepsTexturesWhenArmedAfterImportOutsideRelease()
         {
-            Assert.IsTrue(TextureShareRule.KeepTexturesOfDestroyedGraph(true, true));
-            Assert.IsFalse(TextureShareRule.KeepTexturesOfDestroyedGraph(true, false));
-            Assert.IsFalse(TextureShareRule.KeepTexturesOfDestroyedGraph(false, true));
+            Assert.IsTrue(TextureShareRule.KeepTexturesOfDestroyedGraph(true, true, true, false));
+            Assert.IsFalse(TextureShareRule.KeepTexturesOfDestroyedGraph(false, true, true, false));
+            Assert.IsFalse(TextureShareRule.KeepTexturesOfDestroyedGraph(true, false, true, false));
+            Assert.IsFalse(TextureShareRule.KeepTexturesOfDestroyedGraph(true, true, false, false));
+            Assert.IsFalse(TextureShareRule.KeepTexturesOfDestroyedGraph(true, true, true, true));
         }
     }
 }

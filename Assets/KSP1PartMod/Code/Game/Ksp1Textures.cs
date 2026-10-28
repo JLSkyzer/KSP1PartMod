@@ -291,12 +291,13 @@ namespace KSP1PartMod.Game
             }
         }
 
+        /// <summary>Not gated on <c>_broken</c>: textures handed out before a stop stay shared by live parts.</summary>
         private static void BeforeDestroyGraph(ref bool destroyTextures)
         {
-            if (_broken) return;
             try
             {
-                if (!TextureShareRule.KeepTexturesOfDestroyedGraph(destroyTextures, SharingActive)) return;
+                if (!TextureShareRule.KeepTexturesOfDestroyedGraph(destroyTextures, _sharingArmed,
+                        Ksp1ImportedPartRegistry.IsComplete, _releasing)) return;
                 destroyTextures = false;
                 _keptGraphs++;
             }

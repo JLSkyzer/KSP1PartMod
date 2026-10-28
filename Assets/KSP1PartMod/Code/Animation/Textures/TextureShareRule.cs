@@ -65,9 +65,12 @@ namespace KSP1PartMod.Animation.Textures
         public static CacheClear Clear(bool destroyTextures, bool sharingActive) =>
             !destroyTextures && sharingActive ? CacheClear.DropDestroyedOnly : CacheClear.Redux;
 
-        /// <summary><c>DestroyPrefabGraph</c> (Redux's temporary icon prefab) keeps its textures while sharing: they are
-        /// in the shared cache and live parts use them.</summary>
-        public static bool KeepTexturesOfDestroyedGraph(bool destroyTextures, bool sharingActive) =>
-            destroyTextures && sharingActive;
+        /// <summary><c>DestroyPrefabGraph</c> (Redux's temporary icon prefab) keeps its textures whenever sharing is armed,
+        /// the import is complete and Redux is not releasing its prefabs: they may be in the shared cache and live parts use
+        /// them. Deliberately not tied to a stop of the sharing after an error: textures handed out before the stop are
+        /// still shared, and keeping a few unshared ones (a leak) is safer than destroying shared ones.</summary>
+        public static bool KeepTexturesOfDestroyedGraph(bool destroyTextures, bool sharingArmed, bool importComplete,
+            bool releasing) =>
+            destroyTextures && sharingArmed && importComplete && !releasing;
     }
 }
