@@ -74,6 +74,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // Before Redux's import, which runs after pre-initialization; the settings are read above.
+                ShroudImport.TryApply(new Harmony(ShroudImport.HarmonyId), ShroudSwitch.Arm(Animations.Enabled, Animations.Ksp1EngineShrouds));
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] shroud: import patches not applied, Redux's Module_Fairing left as in 0.6.0: " + e);
+            }
+            try
+            {
                 EngineTooltipStats.TryApply(new Harmony(EngineTooltipStats.HarmonyId), Animations.EngineTooltipStats);
             }
             catch (Exception e)
