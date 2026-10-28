@@ -36,11 +36,18 @@ namespace KSP1PartMod.Game.Ui
             public float Original, Applied;
         }
 
-        private sealed class SubButton
+        private sealed class SubButton : ISyncedToggle
         {
             public Ksp1Subcategory? Type;
             public Toggle Toggle;
             public GameObject Go;
+
+            // A notifying write, so the stock visualizer redraws (see ToggleSync).
+            public bool IsOn
+            {
+                get => Toggle != null && Toggle.isOn;
+                set { if (Toggle != null) Toggle.isOn = value; }
+            }
         }
 
         private const string ScrollbarName = "CategoryTabScrollbar";
@@ -57,6 +64,7 @@ namespace KSP1PartMod.Game.Ui
         private RectTransform _root, _content;
         private ObjectAssemblyCategoryButton _template;
         private readonly List<SubButton> _buttons = new List<SubButton>();
+        private readonly ToggleSync _sync = new ToggleSync();
         private readonly List<Sprite> _ownedSprites = new List<Sprite>();
         private readonly Shift _contentShift = new Shift(), _searchShift = new Shift();
         private const int CreateAttempts = 3;
@@ -126,7 +134,6 @@ namespace KSP1PartMod.Game.Ui
                 }
                 return;
             }
-            if (!_root.gameObject.activeSelf) _root.gameObject.SetActive(true);
             var language = LocalizationManager.CurrentLanguage;
             if (!ReferenceEquals(_model, _builtModel) || _mod != _builtMod || language != _builtLanguage)
             {
@@ -137,8 +144,11 @@ namespace KSP1PartMod.Game.Ui
                 _builtMod = _mod;
                 _builtLanguage = language;
             }
-            foreach (var b in _buttons)
-                if (b.Toggle != null) b.Toggle.SetIsOnWithoutNotify(b.Type == _selected);
+            var selected = -1;
+            for (var i = 0; i < _buttons.Count; i++)
+                if (_buttons[i].Type == _selected) { selected = i; break; }
+            _sync.Apply(_buttons, selected);
+            if (!_root.gameObject.activeSelf) _root.gameObject.SetActive(true);
             Place();
         }
 
@@ -274,7 +284,15 @@ namespace KSP1PartMod.Game.Ui
                     extended.PublishMessages = false;
                 }
                 toggle.SetIsOnWithoutNotify(type == _selected);
-                toggle.onValueChanged.AddListener(on => { if (on) OnClicked(type); });
+                // The stock visualizer subscribed to the old event in its OnEnable, which Instantiate already ran: a cycle
+                // subscribes it to the new one (and redraws it), or it would never redraw a button switched off.
+                foreach (var visualizer in toggle.GetComponents<TransitionVisualizerBase>())
+                    if (visualizer != null && visualizer.enabled)
+                    {
+                        visualizer.enabled = false;
+                        visualizer.enabled = true;
+                    }
+                toggle.onValueChanged.AddListener(on => { if (on && !_sync.Syncing) OnClicked(type); });
             }
             if (icon != null && sprite != null)
             {
