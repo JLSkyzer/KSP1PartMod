@@ -60,7 +60,7 @@ namespace KSP1PartMod.Animation.Runtime
             $"[KSP1PartMod] anim: {part} shroud: variant '{set}' -> '{id}': shroud '{name}'";
 
         public static string Jettisoned(string part, string name, ShroudReason reason) =>
-            $"[KSP1PartMod] anim: {part} shroud '{name}' jettisoned ({(reason == ShroudReason.Staged ? "staged" : "bottom node detached")})";
+            $"[KSP1PartMod] anim: {part} shroud '{name}' jettisoned ({(reason == ShroudReason.Staged ? "staged" : reason == ShroudReason.Restored ? "restored from the saved state" : "bottom node detached")})";
 
         public static string HideOverride(string part, bool on) => $"[KSP1PartMod] anim: {part} shroud hide override {(on ? "on" : "off")}";
 

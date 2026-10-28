@@ -82,8 +82,8 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
         [Test] public void Detach_IgnoreNodesWithIsFairing_NeverLatches() =>
             Assert.IsFalse(Detached(Latch(ignoreNodes: true), 50).Jettisoned);
 
-        [Test] public void Detach_IgnoreNodesNotFairing_Latches() =>
-            Assert.IsTrue(Detached(Latch(isFairing: false, ignoreNodes: true)).Jettisoned);
+        [Test] public void Detach_IgnoreNodesNotFairing_DecoupleEnabled_NeverLatches() =>
+            Assert.IsFalse(Detached(Latch(isFairing: false, ignoreNodes: true), 50).Jettisoned);
 
         [Test] public void Detach_ManualJettison_StillLatchesOnDetach() =>
             Assert.IsTrue(Detached(Latch(manual: true)).Jettisoned);
@@ -193,7 +193,7 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
 
         [Test] public void Step_AndVisible_DoNotAllocate()
         {
-            var l = Latch();
+            var l = Latch(ignoreNodes: true); // never latches on detach: every step runs the counting path
             var shown = 0;
             Assert.That(() =>
             {
@@ -204,7 +204,8 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
                     if (ShroudRule.Visible(false, attached, false, l.Jettisoned, false, true)) shown++;
                 }
             }, Is.Not.AllocatingGCMemory());
-            Assert.GreaterOrEqual(shown, 0);
+            Assert.IsFalse(l.Jettisoned);
+            Assert.AreEqual(5002, shown, "steps with (i / 7) even");
         }
     }
 }

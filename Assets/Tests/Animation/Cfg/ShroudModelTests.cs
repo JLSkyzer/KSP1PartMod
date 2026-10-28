@@ -381,6 +381,16 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             CollectionAssert.AreEqual(new[] { "Closed" }, e.Gates[0].InactiveIn);
         }
 
+        [Test] public void Planner_B9Gates_ApplyToShroudsWithoutPluginModules()
+        {
+            var b9 = B9("moduleID = Cap\n",
+                "SUBTYPE\n{\nname = Open\ntransform = T1\n}\n" +
+                "SUBTYPE\n{\nname = Closed\ntransform = T2\nMODULE\n{\nIDENTIFIER\n{\nname = ModuleJettison\n}\nmoduleActive = false\n}\n}\n");
+            var plan = OwnershipPlanner.Plan(Mods(b9, Jettison("jettisonName = Fairing\n")), false, new HashSet<string>(), false, false,
+                null, false, true, shrouds: true);
+            CollectionAssert.AreEqual(new[] { "Closed" }, plan.Entries.Single(x => x.Kind == EntryKind.Shroud).Gates.Single().InactiveIn);
+        }
+
         [Test] public void Planner_SkipModules_DropsTheShroudEntry()
         {
             var plan = OwnershipPlanner.Plan(Mods(Jettison(Re12Jettison)), false, new HashSet<string>(), false, false,

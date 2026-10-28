@@ -35,7 +35,7 @@ namespace KSP1PartMod.Animation.Behaviours
     /// <summary>The one-way jettison of a shroud in flight. It latches in two ways, as KSP1 does:
     /// <list type="bullet">
     /// <item>the bottom node goes from attached to detached (the part below is gone) when <c>isFairing</c> or
-    /// <c>decoupleEnabled</c>, never for <c>ignoreNodes</c> with <c>isFairing</c>; it needs an attached state seen in flight and
+    /// <c>decoupleEnabled</c>, never for <c>ignoreNodes</c> (KSP1 <c>DecoupleAction</c> returns first); it needs an attached state seen in flight and
     /// then a number of consecutive detached steps (a transient clear, or a load that starts detached, never latches);</item>
     /// <item>the part's stage activates (<see cref="OnStaged"/>) when <c>!isFairing</c>, unless <c>manualJettison</c> or
     /// <c>checkBottomNode</c> with a part attached.</item>
@@ -93,7 +93,8 @@ namespace KSP1PartMod.Animation.Behaviours
             return Jettisoned;
         }
 
-        private bool LatchesOnDetach() => !(_ignoreNodes && _isFairing) && (_isFairing || _decoupleEnabled);
+        // KSP1's DecoupleAction returns on ignoreNodes before it jettisons: such a shroud goes only on staging.
+        private bool LatchesOnDetach() => !_ignoreNodes && (_isFairing || _decoupleEnabled);
 
         private void Latch(ShroudReason reason)
         {

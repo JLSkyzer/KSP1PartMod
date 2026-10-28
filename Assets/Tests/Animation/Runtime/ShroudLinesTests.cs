@@ -64,6 +64,7 @@ namespace KSP1PartMod.Tests.Animation.Runtime
                 ShroudLines.Jettisoned("p", "Shroud2x3", ShroudReason.BottomDetached));
             Assert.AreEqual("[KSP1PartMod] anim: p shroud 'Shroud2x3' jettisoned (staged)",
                 ShroudLines.Jettisoned("p", "Shroud2x3", ShroudReason.Staged));
+            StringAssert.Contains("jettisoned (restored from the saved state)", ShroudLines.Jettisoned("p", "S", ShroudReason.Restored));
             Assert.AreEqual("[KSP1PartMod] anim: p shroud hide override on", ShroudLines.HideOverride("p", true));
             Assert.AreEqual("[KSP1PartMod] anim: p shroud hide override off", ShroudLines.HideOverride("p", false));
         }
