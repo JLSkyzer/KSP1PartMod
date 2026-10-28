@@ -58,6 +58,14 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>The picker panel grows by the sub-category bar's width so the grid keeps whole columns
         /// (<c>subcategory_bar_keeps_grid</c>).</summary>
         public bool SubcategoryBarKeepsGrid => _switches041.SubcategoryBarKeepsGrid;
+        /// <summary>One copy of each KSP1 texture file for every rebuilt part, instead of one per part
+        /// (<c>share_ksp1_textures</c>).</summary>
+        public bool ShareKsp1Textures => _switches041.ShareKsp1Textures;
+        /// <summary>KSP1 textures that stay readable follow the game's texture quality (<c>ksp1_textures_follow_quality</c>).</summary>
+        public bool Ksp1TexturesFollowQuality => _switches041.Ksp1TexturesFollowQuality;
+        /// <summary>Opt-in (default false): raise the texture streaming budget by the KSP1 texture memory, capped by the card's
+        /// memory (<c>raise_streaming_budget</c>).</summary>
+        public bool RaiseStreamingBudget => _switches041.RaiseStreamingBudget;
 
         /// <summary>The phase 2a keys, read together.</summary>
         private sealed class Switches2a
@@ -71,6 +79,8 @@ namespace KSP1PartMod.Animation.Settings
         private sealed class Switches041
         {
             public bool FixFairingInit = true, EngineTooltipStats = true, SubcategoryBarKeepsGrid = true;
+            public bool ShareKsp1Textures = true, Ksp1TexturesFollowQuality = true;
+            public bool RaiseStreamingBudget;
         }
 
         private readonly Switches041 _switches041;
@@ -157,6 +167,9 @@ namespace KSP1PartMod.Animation.Settings
                         case "fix_fairing_init": ReadBool(p, ref s041.FixFairingInit, problems); break;
                         case "engine_tooltip_stats": ReadBool(p, ref s041.EngineTooltipStats, problems); break;
                         case "subcategory_bar_keeps_grid": ReadBool(p, ref s041.SubcategoryBarKeepsGrid, problems); break;
+                        case "share_ksp1_textures": ReadBool(p, ref s041.ShareKsp1Textures, problems); break;
+                        case "ksp1_textures_follow_quality": ReadBool(p, ref s041.Ksp1TexturesFollowQuality, problems); break;
+                        case "raise_streaming_budget": ReadBool(p, ref s041.RaiseStreamingBudget, problems); break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:

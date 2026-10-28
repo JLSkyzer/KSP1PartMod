@@ -79,6 +79,15 @@ namespace KSP1PartMod
             {
                 Log.LogError("[KSP1PartMod] tooltip: engine stats not applied: " + e);
             }
+            try
+            {
+                // Before Redux's import, which runs after pre-initialization (see ApplyMuReaderFix).
+                Ksp1Textures.TryApply(Animations.ShareKsp1Textures, Animations.Ksp1TexturesFollowQuality, Animations.RaiseStreamingBudget);
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] textures: not armed, Redux's texture loading left as it is: " + e);
+            }
             if (Animations.SubcategoryBar)
                 Log.LogInfo("[KSP1PartMod] ui: grid width " + (Animations.SubcategoryBarKeepsGrid
                     ? "kept: the parts panel widens by the sub-category bar's width while it is shown"
@@ -142,6 +151,7 @@ namespace KSP1PartMod
         {
             Log = SWLogger;
             Log.LogInfo("[KSP1PartMod] loaded " + Version);
+            Ksp1Textures.SubscribeToGameStates(Game);
             if (Animations.Enabled) EcsTypeRegistration.TryRegister("initialization");
         }
     }

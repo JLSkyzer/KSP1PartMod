@@ -155,10 +155,40 @@ namespace KSP1PartMod.Tests.Animation.Settings
             Assert.IsTrue(s.FixFairingInit && s.SubcategoryBarKeepsGrid);
         }
 
+        [Test] public void Settings_TextureSwitches_Defaults()
+        {
+            var d = AnimationSettings.Defaults;
+            Assert.IsTrue(d.ShareKsp1Textures && d.Ksp1TexturesFollowQuality);
+            Assert.IsFalse(d.RaiseStreamingBudget);
+            var s = AnimationSettings.Parse(File.ReadAllText(ShippedPath), out var e);
+            Assert.IsNull(e);
+            Assert.IsTrue(s.ShareKsp1Textures && s.Ksp1TexturesFollowQuality);
+            Assert.IsFalse(s.RaiseStreamingBudget);
+        }
+
+        [Test] public void Settings_TextureSwitches_AreRead()
+        {
+            var s = AnimationSettings.Parse("{\"share_ksp1_textures\": false, \"ksp1_textures_follow_quality\": false, \"raise_streaming_budget\": true}", out var e);
+            Assert.IsNull(e);
+            Assert.IsFalse(s.ShareKsp1Textures);
+            Assert.IsFalse(s.Ksp1TexturesFollowQuality);
+            Assert.IsTrue(s.RaiseStreamingBudget);
+        }
+
+        [Test] public void Settings_TextureSwitches_WrongType_KeepDefaultAndReport()
+        {
+            var s = AnimationSettings.Parse("{\"share_ksp1_textures\": 0, \"raise_streaming_budget\": \"yes\"}", out var e);
+            StringAssert.Contains("share_ksp1_textures", e);
+            StringAssert.Contains("raise_streaming_budget", e);
+            Assert.IsTrue(s.ShareKsp1Textures);
+            Assert.IsFalse(s.RaiseStreamingBudget);
+        }
+
         [Test] public void Settings_ShippedFile_Documents041Keys()
         {
             var text = File.ReadAllText(ShippedPath);
-            foreach (var key in new[] { "fix_fairing_init", "engine_tooltip_stats", "subcategory_bar_keeps_grid" })
+            foreach (var key in new[] { "fix_fairing_init", "engine_tooltip_stats", "subcategory_bar_keeps_grid",
+                         "share_ksp1_textures", "ksp1_textures_follow_quality", "raise_streaming_budget" })
             {
                 StringAssert.Contains($"\"{key}\":", text);
                 StringAssert.Contains($"{key}:", text.Substring(0, text.IndexOf("\"enabled\"", System.StringComparison.Ordinal)), key + " in _note");
