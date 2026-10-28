@@ -62,10 +62,24 @@ namespace KSP1PartMod.Game.Animation
             return new ShroudObjects(roots, renderers) { Found = found, RendererCount = rendererCount };
         }
 
-        /// <summary>Shows name <paramref name="index"/> (-1: none) and hides every other. False when nothing changed.</summary>
-        public bool Apply(int index)
+        /// <summary>Shows name <paramref name="index"/> (-1: none) and hides every other. False when the shown name did not change.</summary>
+        /// <param name="reassert">Check <c>activeSelf</c> of the roots even when the index is unchanged, and write only the ones
+        /// that differ: something else may have switched a root (Redux's variants on an <c>ignoreNodes</c> shroud while the VAB
+        /// hide override is on). A comparison per root, no allocation.</param>
+        public bool Apply(int index, bool reassert = false)
         {
-            if (index == _shown) return false;
+            if (index == _shown)
+            {
+                if (reassert) Write(index);
+                return false;
+            }
+            Write(index);
+            _shown = index;
+            return true;
+        }
+
+        private void Write(int index)
+        {
             for (var i = 0; i < _roots.Length; i++)
             {
                 var on = i == index;
@@ -76,8 +90,6 @@ namespace KSP1PartMod.Game.Animation
                 for (var k = 0; k < renderers.Length; k++)
                     if (renderers[k] != null && renderers[k].enabled != on) renderers[k].enabled = on;
             }
-            _shown = index;
-            return true;
         }
 
         /// <summary>Flight: every collider under the shroud roots is disabled for good (KSP1 destroys or disables them; the

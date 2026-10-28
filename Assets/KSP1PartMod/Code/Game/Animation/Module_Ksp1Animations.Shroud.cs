@@ -34,7 +34,6 @@ namespace KSP1PartMod.Game.Animation
             /// <summary>The first-ignition fallback when the staging signal is not armed (flight, <c>!isFairing</c>).</summary>
             public Func<bool> Ignited;
             public bool IgnitionSeen;
-            public bool? LastAttached;
             public bool LastOverride;
 
             public ShroudRuntime(AnimEntryDef def) => Machine = new ShroudMachine(def);
@@ -91,6 +90,10 @@ namespace KSP1PartMod.Game.Animation
             }
             rt.Objects = objects;
             if (inEditor) return;
+
+            // A 0.6.0 save has no jettison state: an engine already staged must not show its shroud again.
+            if (!def.IsFairing && PluginInputs.TryAnyEngineStaged(this, out var staged, out _) && rt.Machine.RestoreIfStaged(staged()))
+                ShroudLine(def, ShroudLines.Jettisoned(_name, NameOf(def, 0), ShroudReason.Restored), "legacy-staged");
 
             ShroudLine(def, ShroudLines.CollidersDisabled(_name, objects.DisableColliders()), "colliders");
             if (!ShroudImport.StagingSignalArmed && !def.IsFairing && PluginInputs.TryAnyEngineIgnited(this, out var ignited, out _))
@@ -199,13 +202,11 @@ namespace KSP1PartMod.Game.Animation
                 rt.LastOverride = rt.Machine.HideOverride;
                 KSP1PartModPlugin.Log?.LogInfo(ShroudLines.HideOverride(_name, rt.LastOverride));
             }
-            rt.Objects.Apply(index);
-            if (rt.LastAttached.HasValue && rt.LastAttached.Value != attached)
-            {
-                if (attached && index >= 0) ShroudChangeLine(def, inEditor, ShroudLines.Shown(_name, NameOf(def, index)), "shown|" + index);
-                else if (!attached && index < 0) ShroudChangeLine(def, inEditor, ShroudLines.Hidden(_name), "hidden");
-            }
-            rt.LastAttached = attached;
+            // While the player hides the shroud, write it every frame: Redux's variants can switch an ignoreNodes shroud back on.
+            rt.Objects.Apply(index, rt.Machine.HideOverride);
+            var change = rt.Machine.LastChange;
+            if (change == ShroudChange.Shown) ShroudChangeLine(def, inEditor, ShroudLines.Shown(_name, NameOf(def, index)), "shown|" + index);
+            else if (change == ShroudChange.Hidden) ShroudChangeLine(def, inEditor, ShroudLines.Hidden(_name), "hidden");
         }
 
         /// <summary>A part is attached to the shroud's node. The node is looked up again while missing or destroyed (a dictionary

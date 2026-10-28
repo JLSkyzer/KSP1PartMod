@@ -97,6 +97,67 @@ namespace KSP1PartMod.Tests.Animation.Behaviours
             Assert.AreEqual(0, m.Step(true, true, true, 0), "the editor never hides a jettisoned shroud");
         }
 
+        [Test] public void Flight_ShortClear_LogsNothing()
+        {
+            var m = M();
+            m.Step(false, true, true, 0);
+            Assert.AreEqual(ShroudChange.None, m.LastChange, "first step: no change to report");
+            for (var i = 0; i < ShroudMachine.DetachDebounce - 1; i++)
+            {
+                m.Step(false, false, true, 0);
+                Assert.AreEqual(ShroudChange.None, m.LastChange, "debounced: still shown");
+            }
+            m.Step(false, true, true, 0);
+            Assert.AreEqual(ShroudChange.None, m.LastChange, "re-attached before the shroud ever hid: no 'shown' line");
+        }
+
+        [Test] public void Flight_DebouncedDetachWithoutLatch_LogsHiddenOnce()
+        {
+            var m = new ShroudMachine(new AnimEntryDef { Kind = EntryKind.Shroud, Key = "shroud:j:0", IsFairing = false, DecoupleEnabled = false }); // a detach hides but does not jettison
+            m.Step(false, true, true, 0);
+            var hidden = 0;
+            for (var i = 0; i < ShroudMachine.DetachDebounce + 2; i++)
+            {
+                m.Step(false, false, true, 0);
+                if (m.LastChange == ShroudChange.Hidden) hidden++;
+            }
+            Assert.AreEqual(1, hidden);
+            Assert.IsFalse(m.Latch.Jettisoned);
+            m.Step(false, true, true, 0);
+            Assert.AreEqual(ShroudChange.Shown, m.LastChange);
+        }
+
+        [Test] public void Editor_AttachAndDetach_LogShownAndHidden()
+        {
+            var m = M();
+            m.Step(true, false, true, 0);
+            m.Step(true, true, true, 0);
+            Assert.AreEqual(ShroudChange.Shown, m.LastChange);
+            m.Step(true, false, true, 0);
+            Assert.AreEqual(ShroudChange.Hidden, m.LastChange);
+        }
+
+        [Test] public void RestoreIfStaged_LegacySave_JettisonsWithoutEvent()
+        {
+            var m = M(isFairing: false);
+            m.Load(new Dictionary<string, float>());
+            Assert.IsFalse(m.RestoreIfStaged(false), "stage not activated");
+            Assert.IsTrue(m.RestoreIfStaged(true));
+            Assert.IsTrue(m.Changed, "saved from now on");
+            Assert.IsFalse(m.TakeJettisonEvent());
+            Assert.AreEqual(-1, m.Step(false, true, true, 0));
+        }
+
+        [Test] public void RestoreIfStaged_NotWhenAStateWasSavedOrNothingLatchesOnStage()
+        {
+            var saved = M(isFairing: false);
+            saved.Load(new Dictionary<string, float> { ["shroud:j:0.jettisoned"] = 0f });
+            Assert.IsFalse(saved.RestoreIfStaged(true), "0.7.0 keeps its own state");
+            Assert.IsFalse(M().RestoreIfStaged(true), "isFairing");
+            var check = new ShroudMachine(new AnimEntryDef { Kind = EntryKind.Shroud, Key = "shroud:j:0", CheckBottomNode = true });
+            Assert.IsFalse(check.RestoreIfStaged(true), "checkBottomNode: the attached state at staging is unknown");
+        }
+
         [Test] public void Load_Missing_KeepsDefaults()
         {
             var m = M();

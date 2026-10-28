@@ -43,6 +43,23 @@ namespace KSP1PartMod.Game.Animation
             return true;
         }
 
+        /// <summary>Any engine of the part staged: <c>Data_Engine.staged</c>, a saved field <c>Module_Engine.StageEngine</c> sets
+        /// (Redux 26w42c decompile). Manually activated engines are not marked.</summary>
+        public static bool TryAnyEngineStaged(Module_Ksp1Animations m, out Func<bool> read, out string field)
+        {
+            read = null;
+            var engines = EngineData(m);
+            field = "Data_Engine.staged";
+            if (engines.Length == 0) return false;
+            read = () =>
+            {
+                for (var i = 0; i < engines.Length; i++)
+                    if (engines[i] != null && engines[i].staged) return true;
+                return false;
+            };
+            return true;
+        }
+
         /// <summary>The active mode's <c>engineID</c> of the part's first <c>Module_Engine</c>: null when the mode index
         /// is out of range.</summary>
         public static bool TryActiveMode(Module_Ksp1Animations m, out Func<string> read, out string field)

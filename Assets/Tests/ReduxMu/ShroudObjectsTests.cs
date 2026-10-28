@@ -111,6 +111,34 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsTrue(clone.transform.Find("model/engine").GetComponent<Renderer>().enabled);
         }
 
+        [Test] public void Reassert_RehidesWhatSomethingElseSwitchedOn()
+        {
+            var prefab = Prefab();
+            var owned = new HashSet<string>();
+            ShroudImport.HideRoots(prefab, new[] { "Shroud2x3", "Shroud1p5x3" }, out _, owned);
+            var clone = Object.Instantiate(prefab);
+            _made.Add(clone);
+            var o = ShroudObjects.Find(clone.transform, new[] { "Shroud2x3", "Shroud1p5x3" }, owned);
+            var big = clone.transform.Find("model/Shroud2x3").gameObject;
+            o.Apply(-1, true);
+            big.SetActive(true); // Redux's variants
+            Assert.IsFalse(o.Apply(-1), "without reassert an unchanged index writes nothing");
+            Assert.IsTrue(big.activeSelf);
+            Assert.IsFalse(o.Apply(-1, true), "the index did not change");
+            Assert.IsFalse(big.activeSelf, "re-hidden");
+        }
+
+        [Test] public void Reassert_DoesNotAllocate()
+        {
+            var prefab = Prefab();
+            var o = ShroudObjects.Find(prefab.transform, new[] { "Shroud2x3", "Shroud1p5x3" }, null);
+            o.Apply(-1, true);
+            Assert.That(() =>
+            {
+                for (var i = 0; i < 100; i++) o.Apply(-1, true);
+            }, Is.Not.AllocatingGCMemory());
+        }
+
         [Test] public void NoRecord_SwitchesNoRenderer_AndMissingNamesAreCounted()
         {
             var prefab = Prefab();

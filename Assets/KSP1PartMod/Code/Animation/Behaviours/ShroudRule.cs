@@ -125,6 +125,10 @@ namespace KSP1PartMod.Animation.Behaviours
             return Jettisoned;
         }
 
+        /// <summary>Staging jettisons this shroud whatever the attached state: not <c>isFairing</c>, not <c>manualJettison</c>,
+        /// not <c>checkBottomNode</c> (which depends on it).</summary>
+        public bool LatchesOnStage => !_isFairing && !_manualJettison && !_checkBottomNode;
+
         // KSP1's DecoupleAction returns on ignoreNodes before it jettisons: such a shroud goes only on staging.
         private bool LatchesOnDetach() => !_ignoreNodes && (_isFairing || _decoupleEnabled);
 

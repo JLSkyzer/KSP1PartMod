@@ -10,6 +10,7 @@ KSP1 engine shrouds (`ModuleJettison`). Not run in game yet; checklist (French) 
 - **Import patch (session-wide).** A Harmony patch on Redux's import stops `Module_Fairing` being added to KSP1 parts with a `ModuleJettison` shroud, hides the shroud transforms and disables their renderers on the prefab, so Redux's reentry hull never includes a hidden shroud. A shroud renderer with only null materials is also disabled on the prefab, but not recorded, so it is never shown. The patches are armed together or not at all.
 - **Legacy saves.** A vessel saved with 0.6.0 loads: at most one shroud, no `Module_Fairing`.
 - **Debounce.** In flight the shroud's visibility follows the same 3-step attached state as the jettison latch: a clear shorter than 3 frames neither flickers it nor logs a line.
+- **Polish after the final review.** The shown / hidden log lines follow the debounced visibility (a short clear that never hid the shroud logs nothing); an `ignoreNodes` shroud hidden with "Hide shroud" is re-hidden each frame if Redux's variants switch it back on; an engine staged before a 0.6.0 save (`Data_Engine.staged`) no longer shows its shroud again; the limits are added to the checklist.
 - **Audit.** New `redux_fairing` CSV column and `audit: shrouds:` line.
 - No material or texture is written; the shared KSP1 textures are untouched.
 - 1507 EditMode tests (1505 passing, 2 explicit and skipped).

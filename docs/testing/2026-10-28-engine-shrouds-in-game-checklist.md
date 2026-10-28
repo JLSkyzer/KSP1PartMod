@@ -52,6 +52,9 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 - [ ] Moteur `isFairing = False` (BDB) : le carénage disparaît à l'allumage de son étage (`jettisoned (staged)`).
 - [ ] Sauvegarder après le largage et recharger : le carénage reste absent, sans ligne `jettisoned` (état restauré).
 - [ ] Charger un vaisseau enregistré en 0.6.0 avec un moteur KSP1 : il se charge, un seul carénage au plus.
+- [ ] Charger une sauvegarde de 0.6.0 où un moteur `isFairing = False` a déjà été étagé : son carénage reste absent
+  (`shroud '…' jettisoned (restored from the saved state)`), d'après `Data_Engine.staged`. Un moteur allumé à la main
+  (Action Menu) n'a pas ce drapeau et montre son carénage jusqu'au prochain étagement.
 - [ ] Rentrée atmosphérique avec un carénage encore en place : pas de coque de rentrée incohérente autour d'un carénage
   masqué.
 
@@ -68,6 +71,14 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 - Un carénage `isFairing = True` avec `decoupleEnabled = False` disparaît après un découplage, alors que KSP1 le garde :
   c'est un choix du plan.
 - Un carénage n'a ni masse, ni traînée, ni débris.
+- Un carénage visible ne rougeoie jamais à la rentrée : ses rendus sont coupés dans le prefab pour que la coque de
+  rentrée de Redux ne le prenne pas (voulu).
+- Le drapeau d'erreur `_broken` est partagé par le préfixe et le postfixe d'import : si le postfixe lève une exception en
+  cours d'import, les pièces déjà traitées gardent leur carénage masqué et n'ont pas d'entrée d'exécution (aucun carénage),
+  et un prefab reconstruit après l'erreur n'est pas masqué. Une ligne `shroud: patch failed` l'annonce dans le log.
+- Un moteur `isFairing = False` ou `checkBottomNode` dont la sauvegarde 0.6.0 n'a pas d'état de largage n'est restauré
+  comme largué que si le moteur porte `staged` ; `checkBottomNode` ne l'est jamais (l'état d'attache au moment de
+  l'étagement est inconnu).
 - Non vérifiés en jeu : les noms de transformations (`jettisonName`), le signal d'étagement
   (`PartBehavior.ActivateAllModules`), le repli au premier allumage, le coût sur une fusée de 1000 pièces.
 
@@ -77,4 +88,6 @@ Dans `animations.json`, jeu fermé :
 
 - [ ] `"ksp1_engine_shrouds": false` : au démarrage `shroud: off (ksp1_engine_shrouds)`, comportement de 0.6.0
   (`Module_Fairing` de Redux, avec `fix_fairing_init`).
-- [ ] `"skip_modules": ["ModuleJettison"]` : ne prend plus les carénages dans les animations.
+- [ ] `"skip_modules": ["ModuleJettison"]` : ne prend plus les carénages dans les animations, **mais le carénage disparaît
+  alors complètement** (le prefab le masque et le `Module_Fairing` de Redux reste ignoré). Pour revenir à 0.6.0, utiliser
+  `"ksp1_engine_shrouds": false`.
