@@ -132,7 +132,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsTrue(Arm());
             CollectionAssert.Contains(_lines,
                 "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed, ModuleAblator -> Module_Heatshield, " +
-                "ModuleResourceConverter -> Module_ResourceConverter, ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, ModuleResourceScanner -> Module_ResourceScanner");
+                "ModuleResourceConverter -> Module_ResourceConverter, ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler");
             Assert.IsInstanceOf<CrossfeedImporter>(Importers(new Ksp1PartModuleImporterRegistry())[CrossfeedMapping.Ksp1Module]);
             Assert.IsInstanceOf<HeatshieldImporter>(Importers(new Ksp1PartModuleImporterRegistry())["moduleablator"]);
             Assert.IsTrue(NativeModules.IsConverterArmed(AblatorMapping.Ksp1Module));
@@ -142,7 +142,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         [Test] public void SwitchOff_NothingAdded_ReduxAsIn070()
         {
             Assert.IsFalse(Arm("{\"ksp1_crossfeed_toggle\": false, \"ksp1_heatshields\": false, \"ksp1_converters\": false, " +
-                               "\"ksp1_drills\": false, \"ksp1_survey_scanners\": false, \"ksp1_resource_scanners\": false}"));
+                               "\"ksp1_drills\": false, \"ksp1_survey_scanners\": false, \"ksp1_resource_scanners\": false, \"ksp1_radiators\": false}"));
             CollectionAssert.AreEqual(new[]
             {
                 "[KSP1PartMod] native: ModuleToggleCrossfeed -> Module_ToggleCrossfeed off (ksp1_crossfeed_toggle false)",
@@ -151,6 +151,7 @@ namespace KSP1PartMod.Tests.ReduxMu
                 "[KSP1PartMod] native: ModuleResourceHarvester -> Module_Mine off (ksp1_drills false)",
                 "[KSP1PartMod] native: ModuleOrbitalSurveyor -> Module_ResourceScanner off (ksp1_survey_scanners false)",
                 "[KSP1PartMod] native: ModuleResourceScanner -> Module_ResourceScanner off (ksp1_resource_scanners false)",
+                "[KSP1PartMod] native: ModuleActiveRadiator -> Module_Cooler off (ksp1_radiators false)",
                 NativeLines.NoneArmed,
             }, _lines);
             Assert.IsFalse(NativeModules.IsConverterArmed(AblatorMapping.Ksp1Module));
@@ -378,7 +379,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsTrue(Arm("{\"ksp1_heatshields\": false}"));
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: ModuleAblator -> Module_Heatshield off (ksp1_heatshields false)");
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed, ModuleResourceConverter -> Module_ResourceConverter" +
-                                              ", ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, ModuleResourceScanner -> Module_ResourceScanner");
+                                              ", ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler");
             Assert.IsFalse(Importers(new Ksp1PartModuleImporterRegistry()).ContainsKey(AblatorMapping.Ksp1Module));
             Assert.IsFalse(NativeModules.IsConverterArmed(AblatorMapping.Ksp1Module));
         }

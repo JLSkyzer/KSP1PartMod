@@ -186,7 +186,7 @@ namespace KSP1PartMod.Game
         }
 
         /// <summary>The part's module data: the live modules, else the serialized ones.</summary>
-        private static IEnumerable<ModuleData> DataOf(PartCore core)
+        internal static IEnumerable<ModuleData> DataOf(PartCore core)
         {
             if (core.modules != null && core.modules.Count > 0)
             {

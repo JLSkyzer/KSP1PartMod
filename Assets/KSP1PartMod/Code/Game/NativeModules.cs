@@ -122,6 +122,17 @@ namespace KSP1PartMod.Game
                 Create = () => new ResourceScannerImporter(),
                 SummaryLines = ScannerImporters.SummaryLines, // one scanners line for both (the first asks)
             },
+            new Converter
+            {
+                Ksp1Module = RadiatorMapping.Ksp1Module,
+                NativeModule = RadiatorMapping.NativeCooler,
+                SwitchKey = "ksp1_radiators",
+                IsOn = s => s.Ksp1Radiators,
+                MissingMembers = RadiatorImporter.MissingMembers,
+                Create = () => new RadiatorImporter(_settings?.RadiatorFluxScale ?? 1.0, _settings?.RadiatorKsp1Rates ?? false,
+                    _settings?.RadiatorAutoOn ?? true),
+                SummaryLines = RadiatorImporter.SummaryLines,
+            },
         };
 
         private static bool MultiplierIsDefault(AnimationSettings s) =>
