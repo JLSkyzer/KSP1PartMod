@@ -106,7 +106,9 @@ namespace KSP1PartMod.Audit
             "audit: slowest: " + (Slowest.Count == 0 ? "none" : string.Join(", ", Slowest.Select(r => $"{r.Part} {Ms(r.TotalMs)} ms")));
 
         public string PodsLine() =>
-            $"audit: pods: {PodsWithCommand} command part(s) with crew, {PodsWithEngine.Count} with an engine ({string.Join(", ", PodsWithEngine.Take(PodNamesShown))}), {PodsCommandInitialized} of those with Module_Command initialized";
+            $"audit: pods: {PodsWithCommand} command part(s) with crew, {PodsWithEngine.Count} with an engine" +
+            (PodsWithEngine.Count > 0 ? $" ({string.Join(", ", PodsWithEngine.Take(PodNamesShown))})" : "") +
+            $", {PodsCommandInitialized} of those with Module_Command initialized";
 
         /// <summary>One line per part with a kind other than <see cref="AuditKind.ImportWarning"/>.</summary>
         public static string PartLine(AuditRecord r)
@@ -114,11 +116,21 @@ namespace KSP1PartMod.Audit
             var line = $"audit: {r.Part} ({r.Mod}): {AuditKinds.Join(r.Kinds)}";
             if (!string.IsNullOrEmpty(r.ExceptionType))
             {
-                line += $": {r.ExceptionType} in {(string.IsNullOrEmpty(r.FailingModule) ? "FinalizeLoad" : r.FailingModule)}";
+                line += $": {r.ExceptionType} in {FailingStep(r)}";
                 var msg = FirstLine(r.ExceptionMessage, MessageChars);
                 if (msg.Length > 0) line += ": " + msg;
             }
             return line;
+        }
+
+        /// <summary>Where the exception came from: the failing module, else the step that ran (the prefab build or the
+        /// template step for <c>NoPrefab</c>/<c>TemplateFailed</c>, else <c>FinalizeLoad</c>).</summary>
+        internal static string FailingStep(AuditRecord r)
+        {
+            if (!string.IsNullOrEmpty(r.FailingModule)) return r.FailingModule;
+            if ((r.Kinds & AuditKind.NoPrefab) != 0) return "the prefab build";
+            if ((r.Kinds & AuditKind.TemplateFailed) != 0) return "the template step";
+            return "FinalizeLoad";
         }
 
         public static string ProgressLine(int done, int total, int withProblem, double elapsedSeconds) =>
@@ -166,7 +178,8 @@ namespace KSP1PartMod.Audit
 
         // ---- helpers ----
 
-        private static string Seconds(double s) => s.ToString("0", CultureInfo.InvariantCulture);
+        /// <summary>Whole seconds, with one decimal under 10 s (a short run would otherwise read "0 s").</summary>
+        internal static string Seconds(double s) => s.ToString(s < 10 ? "0.0" : "0", CultureInfo.InvariantCulture);
         private static string Ms(double ms) => ms.ToString("0.#", CultureInfo.InvariantCulture);
 
         private static string Cell(string s) => (s ?? "").Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");

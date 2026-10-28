@@ -248,12 +248,12 @@ namespace KSP1PartMod.Animation.Settings
                 if (!double.IsNaN(v) && !double.IsInfinity(v))
                 {
                     var c = Math.Min(max, Math.Max(min, v));
-                    if (c != v) problems.Add($"\"{p.Name}\" is outside {min} to {max}, clamped to {c}");
+                    if (c != v) problems.Add($"\"{p.Name}\" is outside {Inv(min)} to {Inv(max)}, clamped to {Inv(c)}");
                     value = (float)c;
                     return;
                 }
             }
-            problems.Add($"\"{p.Name}\" is not a number of {min} to {max}, default kept");
+            problems.Add($"\"{p.Name}\" is not a number of {Inv(min)} to {Inv(max)}, default kept");
         }
 
         /// <summary>A whole number, clamped to min..max (reported when it was outside). 0 is refused and the default kept.</summary>
@@ -268,12 +268,15 @@ namespace KSP1PartMod.Animation.Settings
                     return;
                 }
                 var c = Math.Min(max, Math.Max(min, v));
-                if (c != v) problems.Add($"\"{p.Name}\" is outside {min} to {max}, clamped to {c}");
+                if (c != v) problems.Add($"\"{p.Name}\" is outside {Inv(min)} to {Inv(max)}, clamped to {Inv(c)}");
                 value = (int)c;
                 return;
             }
-            problems.Add($"\"{p.Name}\" is not a whole number of {min} to {max}, default kept");
+            problems.Add($"\"{p.Name}\" is not a whole number of {Inv(min)} to {Inv(max)}, default kept");
         }
+
+        private static string Inv(double v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        private static string Inv(long v) => v.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
         /// <summary>Trimmed, distinct names (ordinal); null (default kept) when the value is not a list. Items that are not
         /// non-empty strings are skipped and reported.</summary>

@@ -90,7 +90,10 @@ namespace KSP1PartMod.Game
             try
             {
                 if (FairingRule.NeedsEmptyColliders(IsKsp1(__instance, out _), _baseColliders.GetValue(__instance) == null))
+                {
                     _baseColliders.SetValue(__instance, Empty);
+                    Audit.AuditProbe.Note("fairing");
+                }
             }
             catch (Exception e)
             {
@@ -123,6 +126,7 @@ namespace KSP1PartMod.Game
                 if (!FairingRule.SkipMaterialLoaded(ksp1, color != null, __0 != null)) return true;
                 _fairingMaterial.SetValue(__instance, __0);
                 _fairingConeMaterial.SetValue(__instance, __0);
+                Audit.AuditProbe.Note("fairing_material");
                 if (FairingRule.FirstTime(LoggedMaterials, part)) KSP1PartModPlugin.Log?.LogInfo(FairingRule.MaterialLine(part));
                 return false;
             }

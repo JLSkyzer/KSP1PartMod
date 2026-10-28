@@ -367,6 +367,81 @@ namespace KSP1PartMod.Tests.Audit
             Assert.IsNull(AuditResume.FromBreadcrumb(null));
         }
 
+        // ---- Task 1 review follow-ups ----
+        [Test] public void Csv_CellWithCarriageReturn_IsQuotedAndRoundTrips()
+        {
+            var r = Rec("a"); r.ExceptionMessage = "one\rtwo";
+            StringAssert.Contains("\"one\rtwo\"", AuditCsv.Line(r));
+            var rows = ReadCsv(AuditCsv.Document(new[] { r }));
+            Assert.AreEqual("one\rtwo", rows[1][AuditCsv.Columns.ToList().IndexOf("exception_message")]);
+        }
+
+        [Test] public void Csv_Cap_NeverSplitsASurrogatePair()
+        {
+            // 1989 plain characters, then emoji pairs: index 1989 is a high surrogate.
+            var text = new string('x', 1989) + string.Concat(Enumerable.Repeat("\U0001F680", 100));
+            var capped = AuditCsv.Cap(text);
+            var marker = capped.IndexOf('…');
+            Assert.AreEqual(1989, marker);
+            Assert.IsFalse(char.IsHighSurrogate(capped[marker - 1]));
+            Assert.AreEqual("…(+" + (text.Length - 1989) + ")", capped.Substring(marker));
+            var even = AuditCsv.Cap(new string('x', 1990) + string.Concat(Enumerable.Repeat("\U0001F680", 100)));
+            Assert.AreEqual(1990, even.IndexOf('…'));
+        }
+
+        [Test] public void Classifier_NoPrefab_AlsoHidesPlaceholderAndModules()
+        {
+            var o = new AuditObservations { NoPrefab = true, PlaceholderPresent = true, UninitializedModules = new[] { "Module_X" } };
+            Assert.AreEqual(AuditKind.NoPrefab, AuditClassifier.Kinds(o));
+            var t = new AuditObservations { TemplateFailed = true, PlaceholderPresent = true, UninitializedModules = new[] { "Module_X" } };
+            Assert.AreEqual(AuditKind.TemplateFailed, AuditClassifier.Kinds(t));
+        }
+
+        [Test] public void Summary_CrashedPreviousRun_CountsAsAProblem()
+        {
+            var crashed = Rec("crasher", "BDB", AuditKind.CrashedPreviousRun, 0, 0);
+            var s = AuditSummary.From(new[] { crashed, Rec("ok", "BDB") }, 1);
+            Assert.AreEqual(1, s.WithProblem);
+            Assert.AreEqual("audit: by kind: crashed_previous_run 1", s.ByKindLine());
+            Assert.AreEqual("audit: by mod: BDB 1/2", s.ByModLine());
+            Assert.AreEqual("audit: crasher (BDB): crashed_previous_run", AuditSummary.PartLine(crashed));
+        }
+
+        [Test] public void Summary_DoneLine_OneDecimalForShortRuns()
+        {
+            StringAssert.StartsWith("audit: done in 0.4 s:", AuditSummary.From(new AuditRecord[0], 0.4).DoneLine("r"));
+            StringAssert.StartsWith("audit: done in 9.9 s:", AuditSummary.From(new AuditRecord[0], 9.94).DoneLine("r"));
+            StringAssert.StartsWith("audit: done in 10 s:", AuditSummary.From(new AuditRecord[0], 10.2).DoneLine("r"));
+            Assert.AreEqual("audit: 1/2 part(s), 0 with a problem, 0.3 s elapsed", AuditSummary.ProgressLine(1, 2, 0, 0.3));
+        }
+
+        [Test] public void Summary_PartLine_NamesTheStepForNoPrefabAndTemplate()
+        {
+            var noPrefab = Rec("np", "M", AuditKind.NoPrefab | AuditKind.Threw); noPrefab.ExceptionType = "E"; noPrefab.ExceptionMessage = "boom";
+            Assert.AreEqual("audit: np (M): threw|no_prefab: E in the prefab build: boom", AuditSummary.PartLine(noPrefab));
+            var template = Rec("tp", "M", AuditKind.TemplateFailed | AuditKind.Threw); template.ExceptionType = "E";
+            Assert.AreEqual("audit: tp (M): threw|template_failed: E in the template step", AuditSummary.PartLine(template));
+        }
+
+        [Test] public void Summary_PodsLine_NoParenthesesWithoutEngines()
+        {
+            var pod = Rec("pod"); pod.Crew = 1; pod.HasCommand = true; pod.CommandInitialized = true;
+            Assert.AreEqual("audit: pods: 1 command part(s) with crew, 0 with an engine, 0 of those with Module_Command initialized",
+                AuditSummary.From(new[] { pod }, 0).PodsLine());
+        }
+
+        [Test] public void Locator_SkipsThePartBehaviourModuleBaseFrame()
+        {
+            var frames = new[]
+            {
+                F("SomeHelper", false, "Do"),
+                F("KSP.Sim.Definitions.PartBehaviourModule", true, "Init"),
+                F("ObjectAssemblyPart", false, "FinalizeModules"),
+            };
+            Assert.IsNull(StackModuleLocator.FailingModule(frames));
+            Assert.AreEqual("Module_X", StackModuleLocator.FailingModule(new[] { F("PartBehaviourModule", true, "Init"), F("Module_X", true, "OnInitialize") }));
+        }
+
         // ---- Texture eviction ----
         [Test] public void Eviction_KeysAddedSinceStart_IgnoreCase()
         {

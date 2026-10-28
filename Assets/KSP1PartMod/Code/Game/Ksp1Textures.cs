@@ -324,6 +324,39 @@ namespace KSP1PartMod.Game
             KSP1PartModPlugin.Log?.LogError(Prefix + "sharing failed, stopped for this session (one copy per rebuilt part from now on): " + e);
         }
 
+        // ---- Audit hooks (remove cache entries only, never destroy) ----
+
+        /// <summary>Sharing was armed at startup: textures handed out by the cache may be used by several parts.</summary>
+        internal static bool SharingArmed => _sharingArmed;
+
+        /// <summary>The paths in Redux's texture cache now (empty when sharing is not armed: Redux then empties the cache
+        /// around each rebuild itself).</summary>
+        internal static List<string> CacheKeys()
+        {
+            var keys = new List<string>();
+            if (_cache != null) keys.AddRange(_cache.Keys);
+            return keys;
+        }
+
+        /// <summary>Removes these entries from the cache (and their recorded usage). The textures themselves are left
+        /// alone: a live part may use them, and Unity frees only the ones nothing references. Returns how many entries
+        /// were removed.</summary>
+        internal static int Evict(IEnumerable<string> keys)
+        {
+            if (_cache == null || keys == null) return 0;
+            var removed = 0;
+            foreach (var key in keys)
+            {
+                if (key == null) continue;
+                if (_cache.Remove(key)) removed++;
+                UsageByPath.Remove(key);
+            }
+            return removed;
+        }
+
+        /// <summary>The memory and cache lines (<c>textures: memory at &lt;when&gt;</c>), for the audit's progress.</summary>
+        internal static void ReportAt(string when) => Report(when);
+
         // ---- Memory lines and budget ----
 
         private static void AfterImportComplete()

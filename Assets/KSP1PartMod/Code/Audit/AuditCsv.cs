@@ -55,7 +55,9 @@ namespace KSP1PartMod.Audit
         {
             if (cell == null) return "";
             if (cell.Length <= MaxCell) return cell;
-            return cell.Substring(0, KeepWhenCapped) + "…(+" + (cell.Length - KeepWhenCapped).ToString(CultureInfo.InvariantCulture) + ")";
+            // Never split a surrogate pair: keep one character less when the cut falls inside one.
+            var keep = char.IsHighSurrogate(cell[KeepWhenCapped - 1]) ? KeepWhenCapped - 1 : KeepWhenCapped;
+            return cell.Substring(0, keep) + "…(+" + (cell.Length - keep).ToString(CultureInfo.InvariantCulture) + ")";
         }
 
         internal static string Escape(string cell)

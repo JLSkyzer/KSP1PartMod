@@ -13,6 +13,7 @@ using ILogger = SpaceWarp2.API.Logging.ILogger;
 
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.ReduxMu")]
 [assembly: InternalsVisibleTo("KSP1PartMod.Tests.Animation")]
+[assembly: InternalsVisibleTo("KSP1PartMod.Tests.Audit")]
 
 namespace KSP1PartMod
 {
@@ -152,6 +153,14 @@ namespace KSP1PartMod
             Log = SWLogger;
             Log.LogInfo("[KSP1PartMod] loaded " + Version);
             Ksp1Textures.SubscribeToGameStates(Game);
+            try
+            {
+                global::KSP1PartMod.Game.Audit.AuditRunner.Arm(Game, Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] audit: not armed, audit off: " + e);
+            }
             if (Animations.Enabled) EcsTypeRegistration.TryRegister("initialization");
         }
     }

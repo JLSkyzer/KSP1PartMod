@@ -26,9 +26,17 @@ namespace KSP1PartMod.Audit
         {
             if (frames == null) return null;
             for (int i = 0; i < frames.Count; i++)
-                if (frames[i].IsPartModule)
+                if (frames[i].IsPartModule && !IsBase(frames[i].TypeName))
                     return Clean(frames[i].TypeName);
             return null;
+        }
+
+        /// <summary>The <c>PartBehaviourModule</c> base class itself (its <c>Init</c> wraps every module): never the
+        /// failing module, even when a caller marks it as a part module.</summary>
+        internal static bool IsBase(string typeName)
+        {
+            var name = Clean(typeName);
+            return name == "PartBehaviourModule" || name == "KSP.Sim.Definitions.PartBehaviourModule";
         }
 
         /// <summary>Strips a <c>DMD&lt;…&gt;</c> wrapper (and what follows <c>::</c>) and a trailing <c>_Patch</c>[digits].</summary>

@@ -401,5 +401,21 @@ namespace KSP1PartMod.Tests.Animation.Settings
                 StringAssert.Contains($"{key}:", text.Substring(0, text.IndexOf("\"enabled\"", System.StringComparison.Ordinal)), key + " in _note");
             }
         }
+
+        [Test] public void Settings_AuditClampMessages_AreCultureInvariant()
+        {
+            var saved = System.Threading.Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
+                AnimationSettings.Parse("{\"audit_frame_budget_ms\": 60.5, \"audit_unload_every\": 5000}", out var e);
+                StringAssert.Contains("\"audit_frame_budget_ms\" is outside 1 to 50, clamped to 50", e);
+                StringAssert.Contains("\"audit_unload_every\" is outside 10 to 1000, clamped to 1000", e);
+            }
+            finally
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = saved;
+            }
+        }
     }
 }
