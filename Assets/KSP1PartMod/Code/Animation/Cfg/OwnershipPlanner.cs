@@ -93,7 +93,8 @@ namespace KSP1PartMod.Animation.Cfg
         /// <param name="shaderPropertyMap">Settings <c>shader_property_map</c>; null: the built-in map.</param>
         /// <param name="b9AppendSet">B9 overrides (0.9.0): the switches without a Redux set that get an appended set, as
         /// <see cref="B9GatePlanner.Apply"/> takes it. Their gates follow that set. Null: those gates stay at their default
-        /// subtype (0.8.0). Keys never depend on it.</param>
+        /// subtype (0.8.0). Entry keys never depend on it. The set id of a gate does: <c>DropSharedClips</c> compares <c>SetId</c>
+        /// in <c>SameSwitch</c>; no installed part is affected.</param>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules,
             bool pluginModules, bool b9Gates, bool shrouds = false, bool ablatorChar = false,

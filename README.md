@@ -136,6 +136,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - `ksp1_crossfeed_toggle` (0.8.0, default `true`): KSP1's `ModuleToggleCrossfeed` (decouplers, adapters) becomes KSP2's crossfeed toggle: the switch in the VAB and in flight and the three action-group actions, starting in the cfg's `crossfeedStatus`. `false`: Redux drops the module, as in 0.7.0. Line `[KSP1PartMod] native: crossfeed:`.
 - `ksp1_heatshields` (0.8.0, default `true`): KSP1's `ModuleAblator` becomes KSP2's `Module_Heatshield`. It burns the part's Ablator above `ablationTempThresh` and shields the part when its bottom faces the airflow, at KSP2's own shield rate (the same for every size). `lossExp`, `lossConst` and `reentryConductivity` are not reproduced; `Module_Heatshield` takes its Ablator from the whole vessel. A part without the resource gets no shield. `false`: Redux drops the module. Lines `[KSP1PartMod] native: heat shield`.
 - `ablator_rate_scale` (0.8.0, default `1`, 0.01 to 100): multiplies the burn rate of those shields. `ablator_char` (default `true`): the shield's `shieldChar` colour follows the part's Ablator, white when full, black when empty. It is not used where another colour changer of the part writes the same shader property (the KV pods keep their lights); on the stock and KRE shields (`_BurnColor`) it probably shows nothing, since the KSP2 shader of KSP1 parts is not documented with that property.
+- B9 overrides (0.9.0, all default `true`, see "B9PartSwitch overrides"): `b9_mass`, `b9_resources`, `b9_module_data`, `b9_module_active` (needs `b9_module_data`), `b9_part_scalars`, `b9_new_part_switches`.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
 ### Phase 2a: material, light and glow curves (0.4.0)
@@ -157,6 +158,20 @@ Not run in game yet: checklist in `docs/testing/2026-10-27-animations-phase2-in-
 - **B9 gates** (`b9_module_gates`): a B9PartSwitch subtype that switches a module off also switches off that module's animation entries, following the variant picked in the VAB. The gates apply to all our entries, phase 1 kinds included.
 - **Settings.** `plugin_modules` and `b9_module_gates` (default true); `skip_modules` also names plugin modules; `editor_animation_speed` governs the new previews.
 - **Not done yet:** links by module index (cargo bay shielding, docking port gating, science experiments, animation groups with converters), deploy limit and `restrictedNode`, one-shot inflatables, crew capacity when open, radiator and antenna tracking, wheel physics, robotics, Waterfall effects.
+
+## B9PartSwitch overrides (0.9.0)
+
+Redux turns a B9PartSwitch subtype into a KSP2 part variant, but only for its visuals (textures and meshes). Since 0.9.0 the mod also appends to each variant the rest of what a subtype says, through Redux's own variant transformers (V-SwiFT), so the choice made in the VAB or in the Part Action Menu changes the part for real, in the VAB and in flight. Nothing is written to the cfg files; Redux's own transformers and sets are never replaced, only added to. Built, not verified in game. Checklist (French): `docs/testing/2026-10-28-b9-overrides-in-game-checklist.md`. Lines `[KSP1PartMod] b9:`; the first one, `b9: armed: …`, says which of the switches below are on.
+
+- **Mass** (`b9_mass`): `addedMass` plus the tank's `tankMass` times its volume, applied as a part-switch mass modifier. The volume is `baseVolume × volumeMultiplier + volumeAdded` plus the default subtype of each child (`parentID`); the volume formula and the dry-mass product are inferred from B9's public wiki, not read from its code.
+- **Tanks** (`b9_resources`): the subtype's tank type (from the `B9_TANK_TYPE` nodes of the KSP1 files, the first definition wins) and its own RESOURCE nodes replace the base resources and capacities (`unitsPerVolume × volume`, `percentFilled`, an explicit `amount` or `maxAmount` wins). Going back to the first subtype gives the same quantities. A part with a second tank switch keeps Redux's resources: its mass and part values still apply.
+- **Module data** (`b9_module_data`): a subtype's `MODULE` `DATA` block (engine thrust and Isp, gimbal ranges, RCS, solar panel, command) is read as a KSP1 module, imported by Redux's own importer, and the fields that differ from the base are written to the matching KSP2 module. A multi-mode engine (XLR129, UA120) gets one transformer that edits every mode. A behaviour that appears twice on the part (a main engine and its verniers) is skipped: V-SwiFT edits the first instance only (33 edits on 7 installed BDB parts).
+- **Modules turned off** (`b9_module_active`, needs `b9_module_data`): `moduleActive = false` uses the native off form of the module: a gimbal with ranges at 0, an RCS with no thrust, a decoupler no longer stageable (only when it is the part's only stageable module, since staging is per part). Engines are not turned off (a zero thrust would give a NaN Δv and burn time), and a module without an off form stays on; each case has a log line.
+- **Part values** (`b9_part_scalars`): `maxTemp`, `skinMaxTemp`, `crashTolerance` and `CoMOffset`.
+- **New selectors** (`b9_new_part_switches`): a part that had no part switch (a mass or tank switch with no visual) gets one, with readable names (28 installed parts). With `false`, such parts get none, as in 0.8.0.
+- **Gates.** The 2b animation gates (`b9_module_gates`) follow these new selectors too.
+- **Audit.** `b9_overrides` CSV column, `audit: B9 overrides:` line.
+- **Switch off.** Each of the six `b9_*` keys, set to `false` in `animations.json`, restores the 0.8.0 behaviour for its point. They work whatever `enabled` is. An existing `animations.json` without them gets the defaults (all `true`).
 
 ## Audit mode (0.6.0)
 
@@ -183,6 +198,11 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
 
 - Robotics parts of KSP1 are spread over several KSP1 nodes, so only those of `actuators` land in the new robotics node.
 - Native modules, lot 1 (0.8.0): built, not verified in game. `^=`, `!=`, `#$variables$` and vector-component edits (`key[i] *= x`) are not applied; the heat shield ignores KSP1's temperature curve; the BEFORE/AFTER rule now leaves out patches that name an absent mod, which Redux applied in 0.7.0.
+- B9 overrides (0.9.0): built, not verified in game.
+  - **Not applied:** the part cost (computed and logged only; the VAB cost is unchanged), `node` (stack nodes per subtype), `TRANSFORM` offsets, `upgradeRequired`, the child's volume choice (a parent's volume uses the child's default subtype), a second tank switch's resources, engine off forms, and a decoupler off form on a part that stages through another module.
+  - **Parts gaining a selector** (28 installed) have no `Module_PartSwitch` in a vessel saved in 0.8.0: such a vessel in flight keeps its 0.8.0 values until it is saved and reloaded; after that the tank and part values apply, but the mass only after the craft is rebuilt in the VAB.
+  - **Gates:** a gate may name a set that was never appended (a switch whose only override has no native form); this is benign, the part keeps its default subtype.
+  - The volume formula and the dry-mass product are inferred from B9's public wiki.
 - Engine shrouds (0.7.0): built, not verified in game. `ignoreNodes` shrouds keep their reentry geometry after a jettison.
 - Animations: phases 1, 2a and 2b (all built; none verified in game yet beyond what the checklists record). The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.

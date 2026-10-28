@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.9.0 - 2026-10-28
+
+B9PartSwitch overrides: what a B9 subtype says beyond its visuals now reaches the KSP2 part. Not run in game yet; checklist (French) in `docs/testing/2026-10-28-b9-overrides-in-game-checklist.md`.
+
+- **Switches** (`animations.json`, all default true, independent of `enabled`): `b9_mass`, `b9_resources`, `b9_module_data`, `b9_module_active` (needs `b9_module_data`), `b9_part_scalars`, `b9_new_part_switches`. `false` restores the 0.8.0 behaviour for that point. Log line `[KSP1PartMod] b9: armed: …`.
+- **Mass.** `addedMass` plus `tankMass × volume` is added through a part-switch mass modifier, in the VAB and in flight.
+- **Tanks.** The subtype's tank type (`B9_TANK_TYPE`, first definition wins) and RESOURCE nodes replace the base resources and capacities; the first subtype gives Redux's own quantities back. A part with a second tank switch (3 installed, e.g. `bluedog_Gemini_EquipmentModule`) keeps Redux's resources; its mass and part values still apply.
+- **Module data.** A subtype's `MODULE` `DATA` block is imported by Redux's own importer and the differing fields are written to the native module through V-SwiFT (engine thrust and Isp, gimbal, RCS, solar panel, command). One transformer per multi-mode engine edits every mode (XLR129; the UA120 S1SRB main mode reads 486.3 kN against 1311.4). Installed raw cfgs: 191 transformers on 79 parts. 33 edits on 7 BDB parts (LR91 main engine and verniers, AJ260 Inline, S4B APS) are skipped because the behaviour appears twice and V-SwiFT edits the first instance only.
+- **Modules turned off.** Native off forms for the gimbal (ranges 0), the RCS (no thrust) and the decoupler (not stageable, only when it is the part's only stageable module). Engines are never turned off (zero thrust gives NaN Δv). Modules without a native form stay on, with a log line.
+- **Part values.** `maxTemp`, `skinMaxTemp`, `crashTolerance`, `CoMOffset`.
+- **New selectors.** Parts that had no part switch but whose B9 subtypes change something get one, with readable names: 28 installed parts gain a `Module_PartSwitch`. The 2b animation gates follow these selectors.
+- **Audit.** `b9_overrides` CSV column (appended last), `audit: B9 overrides:` line, and a B9 section in the Markdown report.
+- **Not applied.** The part cost (computed and logged; the VAB cost is unchanged), `node`, `TRANSFORM`, `upgradeRequired`, the child's volume choice (the default subtype is used), a second tank switch's resources.
+- **Old saves.** A vessel saved in 0.8.0 keeps its 0.8.0 values until it is saved and reloaded in flight; after that the 0.9.0 tank and part values apply, but not the mass delta, until the craft is rebuilt in the VAB.
+- **Safety.** One try per part around the whole postfix; each transformer is validated (its `Reverter`, types and values) and a bad one is dropped alone; three unexpected failures stop the feature for the session. Redux's own sets and transformers are never replaced.
+- **Clean room.** B9PartSwitch is LGPL: the behaviour comes from its public wiki; no B9 code and no B9 tank data are copied. The volume formula and the dry-mass product are inferred.
+- Doc fixes: the `OwnershipPlanner.Plan` comment on `b9AppendSet`, and a README known limit on gates that name a never-appended set.
+- 1907 EditMode tests (1905 passing, 2 explicit and skipped).
+
 ## 0.8.0 - 2026-10-28
 
 Native modules, lot 1: the ModuleManager gaps in Redux's patcher, `ModuleToggleCrossfeed` and `ModuleAblator`. Not run in game yet; checklist (French) in `docs/testing/2026-10-28-native-modules-1-in-game-checklist.md`.
