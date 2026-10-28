@@ -109,10 +109,13 @@ namespace KSP1PartMod.Native.Science
         public static string Summary(int parts, int generated, int identical, int closest, int storage, int containers, int merged,
             IEnumerable<(string Id, int Count)> skipped, IEnumerable<(string Field, int Count)> notReproduced,
             int labs, int converters, int testSubjects, int ground, int dmagic) =>
-            NativePrefix + $"science: {parts} part(s) got {ScienceMapping.NativeModule} ({generated} generated, {identical} identical, {closest} closest); " +
+            NativePrefix + $"science: {parts} part(s) got {ScienceMapping.NativeModule} (resolutions: {generated} generated, {identical} identical, {closest} closest); " +
             $"report storage on {storage} part(s) ({containers} container(s)); merged: {merged}; skipped: {Counts(skipped)}; " +
             $"not reproduced: {Counts(notReproduced)}; not imported: ModuleScienceLab {labs}, ModuleScienceConverter {converters}, " +
             $"ModuleTestSubject {testSubjects}, ground science {ground}, specialised DMagic {dmagic}";
+
+        public static string DroppedMissing(string part, string id) =>
+            Prefix + $"{part}: {id} not in the experiment store, dropped (definitions missing in this campaign)";
 
         // ---- Task 5: the runtime
 

@@ -299,7 +299,7 @@ MODULE
             Assert.AreEqual(1, record.Configurations[1].Clip.ToggleModuleIndex);
 
             NativeModules.LogImportSummaryOnce();
-            Assert.That(_lines, Has.Some.StartsWith("[KSP1PartMod] native: science: 1 part(s) got Module_ScienceExperiment (2 generated, 0 identical, 0 closest); " +
+            Assert.That(_lines, Has.Some.StartsWith("[KSP1PartMod] native: science: 1 part(s) got Module_ScienceExperiment (resolutions: 2 generated, 0 identical, 0 closest); " +
                                                     "report storage on 1 part(s) (0 container(s)); merged: 1;"));
             Assert.AreEqual(1, _lines.Count(l => l.StartsWith("[KSP1PartMod] native: science: ")), "one summary for the four converters");
         }
@@ -315,7 +315,7 @@ MODULE
             Assert.IsTrue(context.PartData.HasReportStorage);
             CollectionAssert.IsEmpty(NativeModules.Record.ConvertedModules("testBox"));
             NativeModules.LogImportSummaryOnce();
-            Assert.That(_lines, Has.Some.StartsWith("[KSP1PartMod] native: science: 0 part(s) got Module_ScienceExperiment (0 generated, 0 identical, 0 closest); " +
+            Assert.That(_lines, Has.Some.StartsWith("[KSP1PartMod] native: science: 0 part(s) got Module_ScienceExperiment (resolutions: 0 generated, 0 identical, 0 closest); " +
                                                     "report storage on 1 part(s) (1 container(s)); merged: 0; skipped: none; not reproduced: storageRange 1;"));
         }
 
@@ -490,7 +490,7 @@ MODULE
                 Part(PodModules, "pod"),
             };
             NativeModules.LogImportSummaryOnce();
-            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: science: 2 part(s) got Module_ScienceExperiment (1 generated, 1 identical, 0 closest); " +
+            CollectionAssert.Contains(_lines, "[KSP1PartMod] native: science: 2 part(s) got Module_ScienceExperiment (resolutions: 1 generated, 1 identical, 0 closest); " +
                                               "report storage on 3 part(s) (2 container(s)); merged: 0; skipped: evaReport 1; " +
                                               "not reproduced: evaOnlyStorage 1, rerunnable 1, storageRange 2; " +
                                               "not imported: ModuleScienceLab 1, ModuleScienceConverter 1, ModuleTestSubject 1, ground science 1, specialised DMagic 1");

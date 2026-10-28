@@ -123,6 +123,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // With the importer's switch, not enabled: it protects the campaigns where the mod is off.
+                if (Animations.Ksp1Science) ScienceStoreGuardPatch.TryApply(new Harmony(ScienceStoreGuardPatch.HarmonyId));
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.Science.ScienceLines.PatchFailed(e.ToString()));
+            }
+            try
+            {
                 // The runtime of converted drills and scanners: ground probe, deploy bridge (whatever enabled is).
                 IsruRuntime.TryApply(new Harmony(IsruRuntime.HarmonyId), Animations);
             }

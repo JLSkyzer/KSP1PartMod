@@ -105,7 +105,7 @@ PART
 
         [Test] public void ImporterSummary()
         {
-            Assert.AreEqual("[KSP1PartMod] native: science: 286 part(s) got Module_ScienceExperiment (269 generated, 48 identical, 41 closest); report storage on 300 part(s) (74 container(s)); merged: 5; skipped: evaReport 2, ROCScience 11; not reproduced: rerunnable 20, keepDeployedMode 100; not imported: ModuleScienceLab 12, ModuleScienceConverter 12, ModuleTestSubject 247, ground science 3, specialised DMagic 0",
+            Assert.AreEqual("[KSP1PartMod] native: science: 286 part(s) got Module_ScienceExperiment (resolutions: 269 generated, 48 identical, 41 closest); report storage on 300 part(s) (74 container(s)); merged: 5; skipped: evaReport 2, ROCScience 11; not reproduced: rerunnable 20, keepDeployedMode 100; not imported: ModuleScienceLab 12, ModuleScienceConverter 12, ModuleTestSubject 247, ground science 3, specialised DMagic 0",
                 ScienceLines.Summary(286, 269, 48, 41, 300, 74, 5, new[] { ("evaReport", 2), ("ROCScience", 11) },
                     new[] { ("rerunnable", 20), ("keepDeployedMode", 100) }, 12, 12, 247, 3, 0));
             StringAssert.Contains("skipped: none; not reproduced: none;", ScienceLines.Summary(0, 0, 0, 0, 0, 0, 0, null, null, 0, 0, 0, 0, 0));
