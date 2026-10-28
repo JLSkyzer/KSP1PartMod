@@ -1,0 +1,384 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using KSP1PartMod.Audit;
+using NUnit.Framework;
+
+namespace KSP1PartMod.Tests.Audit
+{
+    public class AuditModelTests
+    {
+        // ---- Classifier ----
+        private static AuditObservations Obs() => new AuditObservations { IsFinalized = true };
+
+        [Test] public void Classifier_Clean_IsNone() => Assert.AreEqual(AuditKind.None, AuditClassifier.Kinds(Obs()));
+
+        [Test] public void Classifier_ExceptionWithFinalized_GivesThrewOnly()
+        {
+            var o = Obs(); o.Threw = true;
+            Assert.AreEqual(AuditKind.Threw, AuditClassifier.Kinds(o));
+        }
+
+        [Test] public void Classifier_FairingCase_GivesThreeKinds()
+        {
+            var o = Obs(); o.Threw = true; o.IsFinalized = false; o.PlaceholderPresent = true;
+            Assert.AreEqual(AuditKind.Threw | AuditKind.NotFinalized | AuditKind.PlaceholderLeft, AuditClassifier.Kinds(o));
+        }
+
+        [Test] public void Classifier_CountsAndModules()
+        {
+            var o = Obs();
+            o.UninitializedModules = new[] { "Module_Command" };
+            o.ImportWarnings = 1; o.ImportErrors = 1; o.LoggedErrors = 2; o.Materialless = 1; o.ErrorShader = 3;
+            Assert.AreEqual(AuditKind.ModuleNotInitialized | AuditKind.ImportWarning | AuditKind.ImportError
+                            | AuditKind.LoggedError | AuditKind.MaterialLess | AuditKind.ErrorShader, AuditClassifier.Kinds(o));
+        }
+
+        [Test] public void Classifier_NoPrefab_DoesNotAlsoSayNotFinalized()
+        {
+            var o = new AuditObservations { NoPrefab = true, Threw = true };
+            Assert.AreEqual(AuditKind.NoPrefab | AuditKind.Threw, AuditClassifier.Kinds(o));
+        }
+
+        [Test] public void Classifier_TemplateFailed()
+        {
+            var o = new AuditObservations { TemplateFailed = true };
+            Assert.AreEqual(AuditKind.TemplateFailed, AuditClassifier.Kinds(o));
+        }
+
+        [Test] public void Classifier_CrashedPreviousRun_IsAlone()
+        {
+            var o = new AuditObservations { CrashedPreviousRun = true };
+            Assert.AreEqual(AuditKind.CrashedPreviousRun, AuditClassifier.Kinds(o));
+        }
+
+        [Test] public void Classifier_IsProblem_IgnoresImportWarningOnly()
+        {
+            Assert.IsFalse(AuditClassifier.IsProblem(AuditKind.None));
+            Assert.IsFalse(AuditClassifier.IsProblem(AuditKind.ImportWarning));
+            Assert.IsTrue(AuditClassifier.IsProblem(AuditKind.ImportWarning | AuditKind.LoggedError));
+            Assert.IsTrue(AuditClassifier.IsProblem(AuditKind.Threw));
+        }
+
+        // ---- StackModuleLocator ----
+        private static StackFrameInfo F(string type, bool module, string method) => new StackFrameInfo(type, module, method);
+
+        [Test] public void Locator_FairingUnderInit_GivesFairing()
+        {
+            var frames = new[]
+            {
+                F("Module_Fairing", true, "OnInitialize"),
+                F("PartBehaviourModule", true, "Init"),
+                F("ObjectAssemblyPart", false, "FinalizeModules"),
+                F("ObjectAssemblyPart", false, "FinalizeLoad"),
+            };
+            Assert.AreEqual("Module_Fairing", StackModuleLocator.FailingModule(frames));
+        }
+
+        [Test] public void Locator_ThrowInFinalizeLoad_GivesNull()
+        {
+            var frames = new[] { F("ObjectAssemblyPart", false, "FinalizeLoad"), F("AuditSpawner", false, "Spawn") };
+            Assert.IsNull(StackModuleLocator.FailingModule(frames));
+            Assert.IsNull(StackModuleLocator.FailingModule(new StackFrameInfo[0]));
+            Assert.IsNull(StackModuleLocator.FailingModule(null));
+        }
+
+        [Test] public void Locator_HarmonyPatchFrame_AttributedToModule()
+        {
+            Assert.AreEqual("Module_Fairing", StackModuleLocator.FailingModule(new[] { F("Module_Fairing_Patch1", true, "OnInitialize") }));
+            Assert.AreEqual("Module_Fairing", StackModuleLocator.FailingModule(new[] { F("DMD<Module_Fairing>", true, "OnInitialize") }));
+            Assert.AreEqual("Module_Fairing", StackModuleLocator.FailingModule(new[] { F("DMD<Module_Fairing::OnInitialize>", true, "x") }));
+            Assert.AreEqual("Module_Fairing", StackModuleLocator.FailingModule(new[] { F("Module_Fairing", true, "OnInitialize_Patch1") }));
+        }
+
+        // ---- Csv ----
+        private static AuditRecord Rec(string part, string mod = "Squad", AuditKind kinds = AuditKind.None, double prefab = 1, double fin = 2) =>
+            new AuditRecord { Part = part, Mod = mod, Kinds = kinds, PrefabMs = prefab, FinalizeMs = fin, Available = true };
+
+        /// <summary>Minimal RFC 4180 reader.</summary>
+        private static List<List<string>> ReadCsv(string text)
+        {
+            var rows = new List<List<string>>();
+            var row = new List<string>();
+            var cell = new StringBuilder();
+            bool quoted = false;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (quoted)
+                {
+                    if (c == '"')
+                    {
+                        if (i + 1 < text.Length && text[i + 1] == '"') { cell.Append('"'); i++; }
+                        else quoted = false;
+                    }
+                    else cell.Append(c);
+                }
+                else if (c == '"') quoted = true;
+                else if (c == ',') { row.Add(cell.ToString()); cell.Clear(); }
+                else if (c == '\r') { }
+                else if (c == '\n') { row.Add(cell.ToString()); cell.Clear(); rows.Add(row); row = new List<string>(); }
+                else cell.Append(c);
+            }
+            if (cell.Length > 0 || row.Count > 0) { row.Add(cell.ToString()); rows.Add(row); }
+            return rows;
+        }
+
+        [Test] public void Csv_HeaderMatchesLineWidth()
+        {
+            var rows = ReadCsv(AuditCsv.Document(new[] { Rec("a") }));
+            Assert.AreEqual(2, rows.Count);
+            Assert.AreEqual(AuditCsv.Columns.Count, rows[0].Count);
+            Assert.AreEqual(rows[0].Count, rows[1].Count);
+            Assert.AreEqual("part", rows[0][0]);
+        }
+
+        [Test] public void Csv_QuotesCommaQuoteNewline_AndRoundTrips()
+        {
+            var r = Rec("we,ird \"name\"\nline2");
+            r.ExceptionMessage = "a, b \"c\"\nd";
+            var rows = ReadCsv(AuditCsv.Document(new[] { r }));
+            var cols = AuditCsv.Columns.ToList();
+            Assert.AreEqual(2, rows.Count);
+            Assert.AreEqual("we,ird \"name\"\nline2", rows[1][cols.IndexOf("part")]);
+            Assert.AreEqual("a, b \"c\"\nd", rows[1][cols.IndexOf("exception_message")]);
+        }
+
+        [Test] public void Csv_PlainCell_IsNotQuoted()
+        {
+            StringAssert.StartsWith("plain,Squad,", AuditCsv.Line(Rec("plain")));
+        }
+
+        [Test] public void Csv_StackJoinedWithArrow()
+        {
+            var r = Rec("a"); r.Stack = new[] { "A.f", "B.g", "C.h" };
+            var rows = ReadCsv(AuditCsv.Document(new[] { r }));
+            Assert.AreEqual("A.f <- B.g <- C.h", rows[1][AuditCsv.Columns.ToList().IndexOf("stack")]);
+        }
+
+        [Test] public void Csv_CellIsCappedWithMarker()
+        {
+            var r = Rec("a"); r.ExceptionMessage = new string('x', 5000);
+            var rows = ReadCsv(AuditCsv.Document(new[] { r }));
+            var cell = rows[1][AuditCsv.Columns.ToList().IndexOf("exception_message")];
+            Assert.LessOrEqual(cell.Length, 2000);
+            int kept = cell.IndexOf('…');
+            Assert.Greater(kept, 1900);
+            Assert.AreEqual("…(+" + (5000 - kept) + ")", cell.Substring(kept));
+        }
+
+        [Test] public void Csv_ShortCell_IsKept()
+        {
+            var r = Rec("a"); r.ExceptionMessage = new string('x', 2000);
+            var rows = ReadCsv(AuditCsv.Document(new[] { r }));
+            Assert.AreEqual(2000, rows[1][AuditCsv.Columns.ToList().IndexOf("exception_message")].Length);
+        }
+
+        [Test] public void Csv_InvariantCulture_AndKindNames()
+        {
+            var old = System.Threading.Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("fr-FR");
+                var r = Rec("a", kinds: AuditKind.Threw | AuditKind.NotFinalized, prefab: 1.5, fin: 2.25);
+                var rows = ReadCsv(AuditCsv.Document(new[] { r }));
+                var cols = AuditCsv.Columns.ToList();
+                Assert.AreEqual("1.5", rows[1][cols.IndexOf("prefab_ms")]);
+                Assert.AreEqual("2.25", rows[1][cols.IndexOf("finalize_ms")]);
+                Assert.AreEqual("threw|not_finalized", rows[1][cols.IndexOf("kinds")]);
+                Assert.AreEqual("true", rows[1][cols.IndexOf("available")]);
+            }
+            finally { System.Threading.Thread.CurrentThread.CurrentCulture = old; }
+        }
+
+        // ---- Summary ----
+        private static List<AuditRecord> Fixture()
+        {
+            var fairing = Rec("fairingEngine", "Squad", AuditKind.Threw | AuditKind.NotFinalized | AuditKind.PlaceholderLeft, 5, 20);
+            fairing.ExceptionType = "NullReferenceException"; fairing.FailingModule = "Module_Fairing";
+            fairing.ExceptionMessage = "Object reference not set\nsecond line";
+            fairing.UninitializedModules = new[] { "Module_Fairing", "Module_Color" };
+            var ok = Rec("ok1", "Squad", AuditKind.None, 1, 1);
+            var warn = Rec("warn1", "BDB", AuditKind.ImportWarning, 2, 2); warn.ImportWarnings = 2;
+            var dragon = Rec("crewDragon", "SpaceX", AuditKind.None, 3, 30);
+            dragon.Crew = 7; dragon.HasCommand = true; dragon.CommandInitialized = true; dragon.Engines = 8;
+            var pod = Rec("podBad", "Squad", AuditKind.ModuleNotInitialized, 1, 4);
+            pod.Crew = 1; pod.HasCommand = true; pod.Engines = 1;
+            pod.UninitializedModules = new[] { "Module_Command", "Module_Color" };
+            var log = Rec("logErr", "BDB", AuditKind.LoggedError | AuditKind.MaterialLess, 1, 1); log.LoggedErrors = 1;
+            var c1 = Rec("Control_a", "KSP2", AuditKind.None, 9, 9); c1.Control = true;
+            var c2 = Rec("Control_b", "KSP2", AuditKind.Threw, 1, 1); c2.Control = true; c2.ExceptionType = "X"; c2.FailingModule = "Module_Engine";
+            return new List<AuditRecord> { fairing, ok, warn, dragon, pod, log, c1, c2 };
+        }
+
+        [Test] public void Summary_Counts()
+        {
+            var s = AuditSummary.From(Fixture(), 12.4);
+            Assert.AreEqual(6, s.Total);
+            Assert.AreEqual(2, s.Ok);
+            Assert.AreEqual(1, s.OkWithWarnings);
+            Assert.AreEqual(3, s.WithProblem);
+            Assert.AreEqual("audit: done in 12 s: 6 part(s), 2 ok, 1 ok with import warnings only, 3 with a problem; report r.csv", s.DoneLine("r.csv"));
+        }
+
+        [Test] public void Summary_ByKindLine()
+        {
+            Assert.AreEqual("audit: by kind: threw 1, not_finalized 1, placeholder_left 1, module_not_initialized 1, import_warning 1, logged_error 1, material_less 1",
+                AuditSummary.From(Fixture(), 0).ByKindLine());
+        }
+
+        [Test] public void Summary_ByModLine_SortedByProblemsThenName()
+        {
+            Assert.AreEqual("audit: by mod: Squad 2/3, BDB 1/2, SpaceX 0/1", AuditSummary.From(Fixture(), 0).ByModLine());
+        }
+
+        [Test] public void Summary_ByModuleLine()
+        {
+            Assert.AreEqual("audit: by module: Module_Color 2, Module_Command 1, Module_Fairing 1", AuditSummary.From(Fixture(), 0).ByModuleLine());
+        }
+
+        [Test] public void Summary_Slowest_Top10_Descending()
+        {
+            var records = Enumerable.Range(0, 12).Select(i => Rec("p" + i, prefab: i, fin: 0)).ToList();
+            var s = AuditSummary.From(records, 0);
+            Assert.AreEqual(10, s.Slowest.Count);
+            Assert.AreEqual("p11", s.Slowest[0].Part);
+            Assert.AreEqual("p2", s.Slowest[9].Part);
+            StringAssert.StartsWith("audit: slowest: p11 11 ms, p10 10 ms, ", s.SlowestLine());
+        }
+
+        [Test] public void Summary_Pods()
+        {
+            var s = AuditSummary.From(Fixture(), 0);
+            Assert.AreEqual(2, s.PodsWithCommand);
+            Assert.AreEqual(2, s.PodsWithEngine.Count);
+            Assert.AreEqual(1, s.PodsCommandInitialized);
+            Assert.AreEqual("audit: pods: 2 command part(s) with crew, 2 with an engine (crewDragon, podBad), 1 of those with Module_Command initialized", s.PodsLine());
+        }
+
+        [Test] public void Summary_PodNames_CappedAtTen()
+        {
+            var records = Enumerable.Range(0, 12).Select(i =>
+            { var r = Rec("pod" + i); r.Crew = 1; r.HasCommand = true; r.Engines = 1; return r; }).ToList();
+            var line = AuditSummary.From(records, 0).PodsLine();
+            StringAssert.Contains("12 with an engine (pod0, pod1, pod10, pod11, pod2, pod3, pod4, pod5, pod6, pod7)", line);
+            StringAssert.DoesNotContain("pod8", line);
+        }
+
+        [Test] public void Summary_Controls()
+        {
+            var s = AuditSummary.From(Fixture(), 0);
+            Assert.AreEqual(2, s.Controls.Count);
+            Assert.AreEqual(1, s.FailedControls.Count);
+            Assert.AreEqual("audit: control part Control_b failed (threw): the audit harness is suspect for this kind", AuditSummary.ControlFailedLine(s.FailedControls[0]));
+        }
+
+        [Test] public void Summary_PartLine()
+        {
+            var f = Fixture();
+            Assert.AreEqual("audit: fairingEngine (Squad): threw|not_finalized|placeholder_left: NullReferenceException in Module_Fairing: Object reference not set",
+                AuditSummary.PartLine(f[0]));
+            var noEx = Rec("p", "M", AuditKind.LoggedError);
+            Assert.AreEqual("audit: p (M): logged_error", AuditSummary.PartLine(noEx));
+            var inFin = Rec("q", "M", AuditKind.Threw); inFin.ExceptionType = "E"; inFin.ExceptionMessage = new string('m', 300);
+            Assert.AreEqual("audit: q (M): threw: E in FinalizeLoad: " + new string('m', 200), AuditSummary.PartLine(inFin));
+        }
+
+        [Test] public void Summary_ProgressLine()
+        {
+            Assert.AreEqual("audit: 100/250 part(s), 4 with a problem, 33 s elapsed", AuditSummary.ProgressLine(100, 250, 4, 33.2));
+        }
+
+        [Test] public void Summary_Markdown_HasSections()
+        {
+            var md = AuditSummary.From(Fixture(), 12).Markdown("20261028-120000");
+            StringAssert.Contains("# KSP1PartMod audit 20261028-120000", md);
+            StringAssert.Contains("fairingEngine", md);
+            StringAssert.Contains("Module_Fairing", md);
+            StringAssert.Contains("| Squad | 2 | 3 |", md);
+            StringAssert.Contains("Control_b", md);
+            StringAssert.Contains("crewDragon", md);
+        }
+
+        // ---- Pacer ----
+        [Test] public void Pacer_Continue_UntilBudget_AlwaysForFirst()
+        {
+            var p = new AuditPacer(8, 100, 1000);
+            Assert.IsTrue(p.ShouldContinue(0, 0));
+            Assert.IsTrue(p.ShouldContinue(50, 0));
+            Assert.IsTrue(p.ShouldContinue(7.9, 3));
+            Assert.IsFalse(p.ShouldContinue(8, 3));
+            Assert.IsFalse(p.ShouldContinue(20, 1));
+        }
+
+        [Test] public void Pacer_Unload_EveryN()
+        {
+            var p = new AuditPacer(8, 100, 1000);
+            Assert.IsFalse(p.ShouldUnload(0));
+            Assert.IsFalse(p.ShouldUnload(99));
+            Assert.IsTrue(p.ShouldUnload(100));
+            Assert.IsTrue(p.ShouldUnload(300));
+            Assert.IsFalse(p.ShouldUnload(301));
+        }
+
+        [Test] public void Pacer_Progress_Every100_AndLast()
+        {
+            var p = new AuditPacer(8, 100, 250);
+            Assert.IsFalse(p.ShouldLogProgress(0));
+            Assert.IsFalse(p.ShouldLogProgress(99));
+            Assert.IsTrue(p.ShouldLogProgress(100));
+            Assert.IsTrue(p.ShouldLogProgress(200));
+            Assert.IsFalse(p.ShouldLogProgress(249));
+            Assert.IsTrue(p.ShouldLogProgress(250));
+        }
+
+        [Test] public void Pacer_RefusesZeroUnload()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => new AuditPacer(8, 0, 10));
+        }
+
+        // ---- Resume ----
+        [Test] public void Resume_Pending_ControlsFirst_Ordinal_ExcludesReportedAndSkipped()
+        {
+            var all = new[]
+            {
+                new AuditTarget("b", false), new AuditTarget("Z", false), new AuditTarget("a", false),
+                new AuditTarget("ctl2", true), new AuditTarget("ctl1", true), new AuditTarget("a", false),
+                new AuditTarget("done", false), new AuditTarget("crashy", false),
+            };
+            var pending = AuditResume.Pending(all, new[] { "done" }, new[] { "crashy" });
+            CollectionAssert.AreEqual(new[] { "ctl1", "ctl2", "Z", "a", "b" }, pending.Select(t => t.Name));
+            Assert.IsTrue(pending[0].IsControl);
+            Assert.IsFalse(pending[2].IsControl);
+        }
+
+        [Test] public void Resume_Pending_NullsAreEmpty()
+        {
+            Assert.AreEqual(0, AuditResume.Pending(null, null, null).Count);
+        }
+
+        [Test] public void Resume_Breadcrumb()
+        {
+            Assert.AreEqual("fairingEngine", AuditResume.FromBreadcrumb("fairingEngine\r\n"));
+            Assert.AreEqual("p", AuditResume.FromBreadcrumb("  p  "));
+            Assert.IsNull(AuditResume.FromBreadcrumb(""));
+            Assert.IsNull(AuditResume.FromBreadcrumb("  \r\n "));
+            Assert.IsNull(AuditResume.FromBreadcrumb(null));
+        }
+
+        // ---- Texture eviction ----
+        [Test] public void Eviction_KeysAddedSinceStart_IgnoreCase()
+        {
+            var evict = AuditTextureEviction.KeysToEvict(new[] { "A.png", "b.png" }, new[] { "a.PNG", "B.png", "c.png", "D.png", "d.png" });
+            CollectionAssert.AreEqual(new[] { "c.png", "D.png" }, evict);
+        }
+
+        [Test] public void Eviction_NullsAndNothingNew()
+        {
+            Assert.AreEqual(0, AuditTextureEviction.KeysToEvict(null, null).Count);
+            Assert.AreEqual(0, AuditTextureEviction.KeysToEvict(new[] { "a" }, new[] { "a" }).Count);
+            CollectionAssert.AreEqual(new[] { "x" }, AuditTextureEviction.KeysToEvict(null, new[] { "x" }));
+        }
+    }
+}

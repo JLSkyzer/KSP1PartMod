@@ -67,6 +67,13 @@ namespace KSP1PartMod.Animation.Settings
         /// memory (<c>raise_streaming_budget</c>).</summary>
         public bool RaiseStreamingBudget => _switches041.RaiseStreamingBudget;
 
+        /// <summary>Opt-in (default false): audit every KSP1 part once at the first VAB entry (<c>audit_on_vab_entry</c>).</summary>
+        public bool AuditOnVabEntry => _audit.OnVabEntry;
+        /// <summary>Milliseconds per frame the audit may use (<c>audit_frame_budget_ms</c>, default 8, 1 to 50).</summary>
+        public float AuditFrameBudgetMs => _audit.FrameBudgetMs;
+        /// <summary>Parts between two unloads of the audit's textures (<c>audit_unload_every</c>, default 100, 10 to 1000).</summary>
+        public int AuditUnloadEvery => _audit.UnloadEvery;
+
         /// <summary>Entries for the KSP1 plugin modules of phase 2b (DeployableEngines, Bluedog_DB, DMagic science,
         /// FXModuleAnimateRCS) (<c>plugin_modules</c>).</summary>
         public bool PluginModules => _switches2a.PluginModules;
@@ -91,7 +98,16 @@ namespace KSP1PartMod.Animation.Settings
             public bool RaiseStreamingBudget;
         }
 
+        /// <summary>The audit-mode keys, read together.</summary>
+        private sealed class SwitchesAudit
+        {
+            public bool OnVabEntry;
+            public float FrameBudgetMs = 8f;
+            public int UnloadEvery = 100;
+        }
+
         private readonly Switches041 _switches041;
+        private readonly SwitchesAudit _audit;
 
         private static readonly IReadOnlyCollection<string> NoModules = new ReadOnlyCollection<string>(new string[0]);
         private readonly Switches2a _switches2a;
@@ -109,13 +125,14 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041());
+                new Switches2a(), new Switches041(), new SwitchesAudit());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
-            Switches041 switches041)
+            Switches041 switches041, SwitchesAudit audit)
         {
+            _audit = audit;
             _switches2a = switches2a;
             _switches041 = switches041;
             EditorAnimationSpeed = editorAnimationSpeed;
@@ -153,6 +170,7 @@ namespace KSP1PartMod.Animation.Settings
                 IReadOnlyDictionary<string, string[]> map = null;
                 var s2a = new Switches2a();
                 var s041 = new Switches041();
+                var audit = new SwitchesAudit();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -180,6 +198,9 @@ namespace KSP1PartMod.Animation.Settings
                         case "share_ksp1_textures": ReadBool(p, ref s041.ShareKsp1Textures, problems); break;
                         case "ksp1_textures_follow_quality": ReadBool(p, ref s041.Ksp1TexturesFollowQuality, problems); break;
                         case "raise_streaming_budget": ReadBool(p, ref s041.RaiseStreamingBudget, problems); break;
+                        case "audit_on_vab_entry": ReadBool(p, ref audit.OnVabEntry, problems); break;
+                        case "audit_frame_budget_ms": ReadClampedFloat(p, 1, 50, ref audit.FrameBudgetMs, problems); break;
+                        case "audit_unload_every": ReadClampedInt(p, 10, 1000, ref audit.UnloadEvery, problems); break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
                         case "shader_property_map": map = ReadMap(p, problems) ?? map; break;
                         default:
@@ -188,7 +209,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit);
             }
             catch (Exception e)
             {
@@ -216,6 +237,42 @@ namespace KSP1PartMod.Animation.Settings
                 }
             }
             problems.Add($"\"{p.Name}\" is not a number of 0 or more, default kept");
+        }
+
+        /// <summary>A finite number, clamped to min..max (reported when it was outside).</summary>
+        private static void ReadClampedFloat(JProperty p, double min, double max, ref float value, List<string> problems)
+        {
+            if (p.Value.Type == JTokenType.Integer || p.Value.Type == JTokenType.Float)
+            {
+                var v = (double)p.Value;
+                if (!double.IsNaN(v) && !double.IsInfinity(v))
+                {
+                    var c = Math.Min(max, Math.Max(min, v));
+                    if (c != v) problems.Add($"\"{p.Name}\" is outside {min} to {max}, clamped to {c}");
+                    value = (float)c;
+                    return;
+                }
+            }
+            problems.Add($"\"{p.Name}\" is not a number of {min} to {max}, default kept");
+        }
+
+        /// <summary>A whole number, clamped to min..max (reported when it was outside). 0 is refused and the default kept.</summary>
+        private static void ReadClampedInt(JProperty p, int min, int max, ref int value, List<string> problems)
+        {
+            if (p.Value.Type == JTokenType.Integer)
+            {
+                var v = (long)p.Value;
+                if (v == 0)
+                {
+                    problems.Add($"\"{p.Name}\" is 0, which is refused, default kept");
+                    return;
+                }
+                var c = Math.Min(max, Math.Max(min, v));
+                if (c != v) problems.Add($"\"{p.Name}\" is outside {min} to {max}, clamped to {c}");
+                value = (int)c;
+                return;
+            }
+            problems.Add($"\"{p.Name}\" is not a whole number of {min} to {max}, default kept");
         }
 
         /// <summary>Trimmed, distinct names (ordinal); null (default kept) when the value is not a list. Items that are not

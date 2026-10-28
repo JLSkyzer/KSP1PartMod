@@ -333,5 +333,73 @@ namespace KSP1PartMod.Tests.Animation.Settings
                 StringAssert.Contains($"{key}:", text.Substring(0, text.IndexOf("\"enabled\"", System.StringComparison.Ordinal)), key + " in _note");
             }
         }
+
+        [Test] public void Settings_Audit_Defaults()
+        {
+            foreach (var d in new[] { AnimationSettings.Defaults, AnimationSettings.Parse("{}", out _), AnimationSettings.Parse(File.ReadAllText(ShippedPath), out _) })
+            {
+                Assert.IsFalse(d.AuditOnVabEntry);
+                Assert.AreEqual(8f, d.AuditFrameBudgetMs);
+                Assert.AreEqual(100, d.AuditUnloadEvery);
+            }
+        }
+
+        [Test] public void Settings_Audit_AreRead()
+        {
+            var s = AnimationSettings.Parse("{\"audit_on_vab_entry\": true, \"audit_frame_budget_ms\": 12.5, \"audit_unload_every\": 250}", out var e);
+            Assert.IsNull(e);
+            Assert.IsTrue(s.AuditOnVabEntry);
+            Assert.AreEqual(12.5f, s.AuditFrameBudgetMs);
+            Assert.AreEqual(250, s.AuditUnloadEvery);
+        }
+
+        [Test] public void Settings_Audit_ClampsAndReports()
+        {
+            var s = AnimationSettings.Parse("{\"audit_frame_budget_ms\": 500, \"audit_unload_every\": 5000}", out var e);
+            Assert.AreEqual(50f, s.AuditFrameBudgetMs);
+            Assert.AreEqual(1000, s.AuditUnloadEvery);
+            StringAssert.Contains("audit_frame_budget_ms", e);
+            StringAssert.Contains("audit_unload_every", e);
+            var low = AnimationSettings.Parse("{\"audit_frame_budget_ms\": 0.1, \"audit_unload_every\": 3}", out var e2);
+            Assert.AreEqual(1f, low.AuditFrameBudgetMs);
+            Assert.AreEqual(10, low.AuditUnloadEvery);
+            StringAssert.Contains("audit_unload_every", e2);
+        }
+
+        [Test] public void Settings_Audit_ZeroUnloadIsRefused_DefaultKept()
+        {
+            var s = AnimationSettings.Parse("{\"audit_unload_every\": 0}", out var e);
+            Assert.AreEqual(100, s.AuditUnloadEvery);
+            StringAssert.Contains("audit_unload_every", e);
+            StringAssert.Contains("0", e);
+        }
+
+        [Test] public void Settings_Audit_WrongTypes_KeepDefaultsAndReport()
+        {
+            var s = AnimationSettings.Parse("{\"audit_on_vab_entry\": 1, \"audit_frame_budget_ms\": \"fast\", \"audit_unload_every\": 12.5}", out var e);
+            Assert.IsFalse(s.AuditOnVabEntry);
+            Assert.AreEqual(8f, s.AuditFrameBudgetMs);
+            Assert.AreEqual(100, s.AuditUnloadEvery);
+            StringAssert.Contains("audit_on_vab_entry", e);
+            StringAssert.Contains("audit_frame_budget_ms", e);
+            StringAssert.Contains("audit_unload_every", e);
+        }
+
+        [Test] public void Settings_Audit_OtherKeysUnaffected_AndNoUnknownKeyReport()
+        {
+            var s = AnimationSettings.Parse("{\"audit_on_vab_entry\": true, \"enabled\": false}", out var e);
+            Assert.IsNull(e);
+            Assert.IsFalse(s.Enabled);
+        }
+
+        [Test] public void Settings_ShippedFile_DocumentsAuditKeys()
+        {
+            var text = File.ReadAllText(ShippedPath);
+            foreach (var key in new[] { "audit_on_vab_entry", "audit_frame_budget_ms", "audit_unload_every" })
+            {
+                StringAssert.Contains($"\"{key}\":", text);
+                StringAssert.Contains($"{key}:", text.Substring(0, text.IndexOf("\"enabled\"", System.StringComparison.Ordinal)), key + " in _note");
+            }
+        }
     }
 }
