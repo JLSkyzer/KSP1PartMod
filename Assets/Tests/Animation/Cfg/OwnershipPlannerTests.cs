@@ -174,5 +174,133 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             var p = Plan(Generic("a"), Throttle("t"), Throttle("t"), Throttle("u"));
             CollectionAssert.AreEqual(new[] { "throttle:t:0", "throttle:t:1", "throttle:u:0" }, p.Entries.Select(e => e.Key));
         }
+
+        // ---------------------------------------------------------------- phase 2b: plugin modules and B9 gates
+
+        private static IKsp1Node DeployEngine(string clip, int layer = 1) =>
+            CfgText.Module($"name = ModuleDeployableEngine\nEngineAnimationName = {clip}\nLayer = {layer}");
+        private static IKsp1Node Science(string clip) =>
+            CfgText.Module("name = DMModuleScienceAnimateGeneric\nanimationName = " + clip);
+        private static IKsp1Node LookAt(string rotator, string target) =>
+            CfgText.Module($"name = ModuleAdvancedLookAtConstraint\nCONSTRAINLOOKFX\n{{\nrotatorsName = {rotator}\ntargetName = {target}\n}}");
+        private static IKsp1Node ReduxLookAt(string rotator, string target) =>
+            CfgText.Module($"name = FXModuleLookAtConstraint\nCONSTRAINLOOKFX\n{{\nrotatorsName = {rotator}\ntargetName = {target}\n}}");
+
+        /// <summary>A visual ModuleB9PartSwitch <c>sw</c>: each subtype switches off the modules named by its
+        /// IDENTIFIER bodies (<c>name = …</c> plus any other values).</summary>
+        private static IKsp1Node B9(params (string subtype, string[] offIdentifiers)[] subtypes)
+        {
+            var body = "name = ModuleB9PartSwitch\nmoduleID = sw\n";
+            foreach (var (subtype, off) in subtypes)
+            {
+                body += $"SUBTYPE\n{{\nname = {subtype}\ntransform = {subtype}_t\n";
+                foreach (var id in off) body += "MODULE\n{\nIDENTIFIER\n{\n" + id + "\n}\nmoduleActive = false\n}\n";
+                body += "}\n";
+            }
+            return CfgText.Module(body);
+        }
+
+        private static PartAnimationPlan Plan2b(bool pluginModules, bool b9, params IKsp1Node[] modules) =>
+            OwnershipPlanner.Plan(modules, false, new HashSet<string>(), false, false, null, pluginModules, b9);
+
+        [Test] public void Plan_PluginModulesOff_NoPluginEntries() =>
+            CollectionAssert.IsEmpty(Plan2b(false, true, DeployEngine("a")).Entries);
+
+        [Test] public void Plan_OldOverloads_NoPluginEntries() =>
+            CollectionAssert.IsEmpty(Plan(DeployEngine("a"), Science("s")).Entries);
+
+        [Test] public void Plan_PluginModulesOn_AfterPhase1Entries_OwnOrdinals()
+        {
+            var p = Plan2b(true, true, Science("s"), Generic("a"), Generic("b"), DeployEngine("n"), LookAt("r1", "t"), Throttle("t"),
+                LookAt("r2", "t"));
+            CollectionAssert.AreEqual(new[] { "toggle:b:0", "throttle:t:0", "sciencetoggle:s:0", "enginedeploy:n:0", "lookat::0", "lookat::1" },
+                p.Entries.Select(e => e.Key));
+            CollectionAssert.AreEqual(new[] { 2, 5, 0, 3, 4, 6 }, p.Entries.Select(e => e.ModuleIndex));
+        }
+
+        [Test] public void Plan_PluginModules_Phase1KeysUnchanged()
+        {
+            var modules = new[] { DeployEngine("n"), Generic("a"), Generic("b"), Throttle("t"), Science("b") };
+            CollectionAssert.AreEqual(Plan(modules).Entries.Select(e => e.Key),
+                Plan2b(true, true, modules).Entries.Where(e => e.Kind <= EntryKind.ChuteFollower).Select(e => e.Key));
+        }
+
+        [Test] public void Plan_B9GatesOff_NoGates() =>
+            Assert.IsNull(Plan2b(true, false, DeployEngine("a"), B9(("x", new[] { "name = ModuleDeployableEngine" }), ("y", new string[0])))
+                .Entries.Single().Gates);
+
+        [Test] public void Plan_B9GatesOn_GatesThePluginEntry()
+        {
+            var gate = Plan2b(true, true, DeployEngine("a"), B9(("x", new[] { "name = ModuleDeployableEngine" }), ("y", new string[0])))
+                .Entries.Single().Gates.Single();
+            Assert.AreEqual("sw", gate.SetId);
+            CollectionAssert.AreEqual(new[] { "x" }, gate.InactiveIn);
+        }
+
+        [Test] public void Plan_B9OnReduxSource_NotedNotGated()
+        {
+            var p = Plan2b(true, true, Generic("a"), Generic("b"), B9(("x", new[] { "name = ModuleAnimateGeneric\nanimationName = a" })));
+            Assert.IsNull(p.Entries.Single().Gates);
+            Assert.IsTrue(p.Notes.Any(n => n.Contains("left to Redux, not gated")), string.Join("\n", p.Notes));
+        }
+
+        [Test] public void Plan_PluginClipOfRedux_LeftToReduxWithNote()
+        {
+            var p = Plan2b(true, true, Generic("a"), DeployEngine("a"));
+            CollectionAssert.IsEmpty(p.Entries);
+            StringAssert.Contains("MODULE[1] ModuleDeployableEngine: clip 'a' is played by Redux", p.Notes.Single());
+        }
+
+        [Test] public void Plan_PluginClipOfOurEntry_DroppedWithNote()
+        {
+            var p = Plan2b(true, true, Generic("a"), Generic("b"), DeployEngine("b"));
+            Assert.AreEqual(EntryKind.Toggle, p.Entries.Single().Kind);
+            StringAssert.Contains("MODULE[2] ModuleDeployableEngine: clip 'b' is already ours (MODULE[1] ModuleAnimateGeneric)", p.Notes.Single());
+        }
+
+        [Test] public void Plan_TwoPluginEntriesOnOneClip_GatedApart_BothKept()
+        {
+            var p = Plan2b(true, true, DeployEngine("n", 1), DeployEngine("n", 2),
+                B9(("x", new[] { "name = ModuleDeployableEngine\nLayer = 1" }), ("y", new[] { "name = ModuleDeployableEngine\nLayer = 2" })));
+            Assert.AreEqual(2, p.Entries.Count, string.Join("\n", p.Notes));
+            Assert.IsTrue(B9GatePlanner.GatedApart(p.Entries));
+        }
+
+        [Test] public void Plan_TwoPluginEntriesOnOneClip_NotGatedApart_SecondDropped()
+        {
+            var p = Plan2b(true, true, DeployEngine("n", 1), DeployEngine("n", 2),
+                B9(("x", new[] { "name = ModuleDeployableEngine\nLayer = 1" }), ("y", new string[0])));
+            Assert.AreEqual(0, p.Entries.Single().ModuleIndex);
+            Assert.IsTrue(p.Notes.Any(n => n.Contains("MODULE[1] ModuleDeployableEngine: clip 'n' is already ours (MODULE[0] ModuleDeployableEngine)")),
+                string.Join("\n", p.Notes));
+        }
+
+        [Test] public void Plan_SkipModules_DropsPluginEntry()
+        {
+            var p = OwnershipPlanner.Plan(new[] { DeployEngine("n"), Science("s") }, false, new HashSet<string>(), false, false,
+                new HashSet<string> { "ModuleDeployableEngine" }, true, true);
+            Assert.AreEqual(EntryKind.ScienceToggle, p.Entries.Single().Kind);
+            StringAssert.Contains("MODULE[0] ModuleDeployableEngine: skipped by skip_modules", p.Notes.Single());
+        }
+
+        [Test] public void Plan_LookAtOnReduxRotator_KeptWithNote()
+        {
+            var p = Plan2b(true, true, ReduxLookAt("piston", "anchor"), LookAt("Piston", "anchor2"), LookAt("gimbal", "t"));
+            Assert.AreEqual(2, p.Entries.Count(e => e.Kind == EntryKind.LookAt));
+            StringAssert.Contains("MODULE[1] ModuleAdvancedLookAtConstraint: rotator 'Piston' is also Redux's (FXModuleLookAtConstraint MODULE[0])",
+                p.Notes.Single());
+        }
+
+        [Test] public void GatedApart_Rules()
+        {
+            B9Gate G(params string[] off) => new B9Gate { SetId = "sw", SubtypeIds = new[] { "x", "y", "z" }, InactiveIn = off, DefaultSubtype = "x" };
+            AnimEntryDef E(params B9Gate[] g) => new AnimEntryDef { Gates = g.Length == 0 ? null : g };
+            Assert.IsTrue(B9GatePlanner.GatedApart(new[] { E(G("y", "z")), E(G("x")) }));
+            Assert.IsFalse(B9GatePlanner.GatedApart(new[] { E(G("y")), E(G("x")) }), "both active in z");
+            Assert.IsFalse(B9GatePlanner.GatedApart(new[] { E(G("y", "z")), E() }), "ungated is active everywhere");
+            Assert.IsTrue(B9GatePlanner.GatedApart(new[] { E(G("y", "z")), E(G("x", "z")), E(G("x", "y")) }));
+            var other = new B9Gate { SetId = "other", SubtypeIds = new[] { "x", "y", "z" }, InactiveIn = new[] { "x" }, DefaultSubtype = "y" };
+            Assert.IsFalse(B9GatePlanner.GatedApart(new[] { E(G("y", "z")), E(other) }), "different switches");
+        }
     }
 }

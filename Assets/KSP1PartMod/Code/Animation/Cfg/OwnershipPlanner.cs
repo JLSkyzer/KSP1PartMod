@@ -72,11 +72,23 @@ namespace KSP1PartMod.Animation.Cfg
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules);
 
+        /// <param name="pluginModules">Settings <c>plugin_modules</c>: the KSP1 plugin modules of
+        /// <see cref="PluginEntryParser"/> become entries. They are planned after every phase 1 entry, with ordinals of
+        /// their own kinds, so no older key moves. A plugin entry never takes a clip Redux plays, nor a clip an earlier
+        /// entry of ours plays unless the B9 gates keep the two apart; each refusal is a note.</param>
+        /// <param name="b9Gates">Settings <c>b9_module_gates</c>: <see cref="B9GatePlanner.Apply"/> runs last and gates
+        /// our entries with the part's B9 subtypes. Off: no entry has gates.</param>
+        public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
+            ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules,
+            bool pluginModules, bool b9Gates) =>
+            Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules,
+                pluginModules, b9Gates);
+
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
-        /// table.</summary>
+        /// table. The plugin modules and the B9 gates are off unless asked for: older callers keep the 0.4.0 plan.</summary>
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
-            bool followRedux = false, ISet<string> skipModules = null)
+            bool followRedux = false, ISet<string> skipModules = null, bool pluginModules = false, bool b9Gates = false)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -165,6 +177,9 @@ namespace KSP1PartMod.Animation.Cfg
                 Add(entries, e);
             }
 
+            // Phase 2b: the plugin modules, after every phase 1 entry (their kinds have their own ordinals).
+            if (pluginModules) PlanPluginModules(modules, entries, reduxClips, notes);
+
             // skip_modules, after the keys: dropping an entry never renumbers another.
             if (skipModules != null && skipModules.Count > 0)
             {
@@ -198,8 +213,90 @@ namespace KSP1PartMod.Animation.Cfg
             }
             // FXModuleThrottleEffects: links our Color entries; never an entry itself.
             notes.AddRange(ScalarSourceParser.Apply(modules, entries, skipModules));
+
+            // The modules whose animation Redux keeps: never gated.
+            var reduxOwned = new HashSet<int>(entries.Where(e => e.Kind == EntryKind.GearBridge || e.Kind == EntryKind.ReduxFollower
+                                                                 || e.Kind == EntryKind.ChuteFollower).Select(e => e.ModuleIndex));
+            if (reduxSource != null && !remove) reduxOwned.Add(reduxSource.Index);
+            if (pluginModules)
+            {
+                // A clip has one owner among our entries, unless the B9 gates keep its owners apart.
+                if (b9Gates) B9GatePlanner.Apply(modules, entries, reduxOwned);
+                DropSharedClips(modules, entries, notes);
+            }
+            // B9 gates last (Apply replaces every entry's gates, so the pass above leaves nothing behind).
+            if (b9Gates) notes.AddRange(B9GatePlanner.Apply(modules, entries, reduxOwned));
+            else
+                foreach (var e in entries) e.Gates = null;
             return new PartAnimationPlan(entries, reduxClips, reduxModule, remove, notes);
         }
+
+        /// <summary>The entries of <see cref="PluginEntryParser"/>, in MODULE order. A clip Redux plays stays Redux's.
+        /// An advanced look-at rotator that Redux's look-at runtime also drives (<c>FXModuleLookAtConstraint</c>, matched
+        /// ignoring case as Redux does) is noted: the runtime skips it there.</summary>
+        private static void PlanPluginModules(IReadOnlyList<IKsp1Node> modules, List<AnimEntryDef> entries, List<string> reduxClips,
+            List<string> notes)
+        {
+            for (var i = 0; i < modules.Count; i++)
+            {
+                var name = NameOf(modules[i]);
+                if (!PluginEntryParser.Handles(name)) continue;
+                var e = PluginEntryParser.Parse(modules[i], i, 0);
+                if (e == null) continue;
+                var shared = Clips(e).FirstOrDefault(c => reduxClips.Contains(c, StringComparer.OrdinalIgnoreCase));
+                if (shared != null)
+                {
+                    notes.Add($"MODULE[{i}] {name}: clip '{shared}' is played by Redux, left to Redux");
+                    continue;
+                }
+                if (e.Kind == EntryKind.LookAt && e.RotatorNames != null)
+                    foreach (var rotator in e.RotatorNames)
+                    {
+                        var redux = ReduxLookAtModule(modules, rotator);
+                        if (redux >= 0)
+                            notes.Add($"MODULE[{i}] {name}: rotator '{rotator}' is also Redux's (FXModuleLookAtConstraint MODULE[{redux}]), " +
+                                      "skipped there at runtime");
+                    }
+                Add(entries, e);
+            }
+        }
+
+        /// <summary>The index of the first FXModuleLookAtConstraint whose CONSTRAINLOOKFX names <paramref name="rotator"/>,
+        /// or -1.</summary>
+        private static int ReduxLookAtModule(IReadOnlyList<IKsp1Node> modules, string rotator)
+        {
+            for (var i = 0; i < modules.Count; i++)
+            {
+                if (!"FXModuleLookAtConstraint".Equals(NameOf(modules[i]), StringComparison.OrdinalIgnoreCase)) continue;
+                if (modules[i].GetNodes("CONSTRAINLOOKFX").Any(c =>
+                        string.Equals(c.GetValue("rotatorsName")?.Trim(), rotator, StringComparison.OrdinalIgnoreCase)))
+                    return i;
+            }
+            return -1;
+        }
+
+        /// <summary>Drops each plugin entry whose clip an earlier entry of ours already plays, unless the B9 gates keep
+        /// them all apart (<see cref="B9GatePlanner.GatedApart"/>). Phase 1 entries come first and are never dropped.</summary>
+        private static void DropSharedClips(IReadOnlyList<IKsp1Node> modules, List<AnimEntryDef> entries, List<string> notes)
+        {
+            for (var k = 0; k < entries.Count; k++)
+            {
+                var e = entries[k];
+                if (e.Kind <= EntryKind.ChuteFollower) continue;
+                foreach (var clip in Clips(e))
+                {
+                    var owners = entries.Take(k).Where(o => OwnsClipTime(o) && Clips(o).Contains(clip, StringComparer.OrdinalIgnoreCase)).ToList();
+                    if (owners.Count == 0 || B9GatePlanner.GatedApart(owners.Concat(new[] { e }).ToList())) continue;
+                    notes.Add($"MODULE[{e.ModuleIndex}] {NameOf(modules[e.ModuleIndex])}: clip '{clip}' is already ours " +
+                              $"(MODULE[{owners[0].ModuleIndex}] {NameOf(modules[owners[0].ModuleIndex])}), not taken");
+                    entries.RemoveAt(k--);
+                    break;
+                }
+            }
+        }
+
+        /// <summary>GearBridge plays nothing (Redux plays the clip) and AeroGate has no clip time.</summary>
+        private static bool OwnsClipTime(AnimEntryDef e) => e.Kind != EntryKind.GearBridge && e.Kind != EntryKind.AeroGate;
 
         private sealed class Source
         {

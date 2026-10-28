@@ -67,12 +67,20 @@ namespace KSP1PartMod.Animation.Settings
         /// memory (<c>raise_streaming_budget</c>).</summary>
         public bool RaiseStreamingBudget => _switches041.RaiseStreamingBudget;
 
-        /// <summary>The phase 2a keys, read together.</summary>
+        /// <summary>Entries for the KSP1 plugin modules of phase 2b (DeployableEngines, Bluedog_DB, DMagic science,
+        /// FXModuleAnimateRCS) (<c>plugin_modules</c>).</summary>
+        public bool PluginModules => _switches2a.PluginModules;
+        /// <summary>B9PartSwitch <c>moduleActive = false</c> overrides gate our entries with the part's variant
+        /// (<c>b9_module_gates</c>).</summary>
+        public bool B9ModuleGates => _switches2a.B9ModuleGates;
+
+        /// <summary>The phase 2a and 2b keys, read together.</summary>
         private sealed class Switches2a
         {
             public bool MaterialCurves = true, LightCurves = true, EmissionSetup = true, ThrottleEffects = true, HeatGlow = true;
             public bool PerfCounter;
             public IReadOnlyCollection<string> SkipModules = NoModules;
+            public bool PluginModules = true, B9ModuleGates = true;
         }
 
         /// <summary>The 0.4.1 fix switches, read together.</summary>
@@ -164,6 +172,8 @@ namespace KSP1PartMod.Animation.Settings
                         case "throttle_effects": ReadBool(p, ref s2a.ThrottleEffects, problems); break;
                         case "heat_glow": ReadBool(p, ref s2a.HeatGlow, problems); break;
                         case "perf_counter": ReadBool(p, ref s2a.PerfCounter, problems); break;
+                        case "plugin_modules": ReadBool(p, ref s2a.PluginModules, problems); break;
+                        case "b9_module_gates": ReadBool(p, ref s2a.B9ModuleGates, problems); break;
                         case "fix_fairing_init": ReadBool(p, ref s041.FixFairingInit, problems); break;
                         case "engine_tooltip_stats": ReadBool(p, ref s041.EngineTooltipStats, problems); break;
                         case "subcategory_bar_keeps_grid": ReadBool(p, ref s041.SubcategoryBarKeepsGrid, problems); break;

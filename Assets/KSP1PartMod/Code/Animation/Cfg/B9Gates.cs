@@ -100,6 +100,28 @@ namespace KSP1PartMod.Animation.Cfg
             return notes;
         }
 
+        /// <summary>True when the gates keep <paramref name="entries"/> apart: one switch gates every one of them, and in
+        /// each of its subtypes at most one is active. Fewer than two entries are always apart; an ungated entry is
+        /// active everywhere.</summary>
+        public static bool GatedApart(IReadOnlyList<AnimEntryDef> entries)
+        {
+            if (entries == null || entries.Count < 2) return true;
+            if (entries.Any(e => e?.Gates == null)) return false;
+            foreach (var gate in entries[0].Gates)
+            {
+                if (gate?.SubtypeIds == null) continue;
+                var same = entries.Select(e => e.Gates.FirstOrDefault(g => SameSwitch(g, gate))).ToList();
+                if (same.Any(g => g == null)) continue;
+                if (gate.SubtypeIds.All(v => same.Count(g => g.InactiveIn == null || !g.InactiveIn.Contains(v, StringComparer.Ordinal)) <= 1))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool SameSwitch(B9Gate a, B9Gate b) =>
+            a != null && b != null && string.Equals(a.SetId, b.SetId, StringComparison.Ordinal)
+            && a.SubtypeIds != null && b.SubtypeIds != null && a.SubtypeIds.SequenceEqual(b.SubtypeIds, StringComparer.Ordinal);
+
         /// <summary>Redux's V-SwiFT set id of each ModuleB9PartSwitch of the part, in cfg order; null for a switch Redux
         /// makes no set of.</summary>
         public static IReadOnlyList<string> SetIds(IReadOnlyList<IKsp1Node> modules) =>

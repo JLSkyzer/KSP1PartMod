@@ -85,19 +85,12 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             CollectionAssert.IsEmpty(o.Where(x => x.Matches != 1).Select(x => x.ToString()));
         }
 
-        /// <summary>The phase 1 plan's entries plus the plugin entries (the planner does not add those yet, Task 3 only
-        /// parses them), gated.</summary>
+        /// <summary>The plan with the plugin modules and the B9 gates (the 0.5.0 defaults).</summary>
         private static List<AnimEntryDef> Gated(Part p, List<string> notes = null)
         {
-            var entries = OwnershipPlanner.Plan(p.Modules, false, new HashSet<string>(), false).Entries.ToList();
-            for (var i = 0; i < p.Modules.Count; i++)
-            {
-                var e = PluginEntryParser.Parse(p.Modules[i], i, i);
-                if (e != null) entries.Add(e);
-            }
-            var n = B9GatePlanner.Apply(p.Modules, entries, new HashSet<int>());
-            notes?.AddRange(n.Select(x => p.Name + ": " + x));
-            return entries;
+            var plan = OwnershipPlanner.Plan(p.Modules, false, new HashSet<string>(), false, false, null, true, true);
+            notes?.AddRange(plan.Notes.Where(x => x.StartsWith("B9 ", StringComparison.Ordinal)).Select(x => p.Name + ": " + x));
+            return plan.Entries.ToList();
         }
 
         private static IEnumerable<string> ActiveNozzles(List<AnimEntryDef> entries, string subtype) => entries

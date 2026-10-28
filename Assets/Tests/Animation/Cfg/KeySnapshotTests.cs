@@ -51,7 +51,8 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             foreach (var own in new[] { false, true })
             foreach (var follow in new[] { false, true })
             {
-                var plan = OwnershipPlanner.Plan(modules, HasNativeSolar(modules), new HashSet<string>(), own, follow);
+                // Plugin modules and B9 gates on (the 0.5.0 defaults): the keys of the older kinds must not move.
+                var plan = OwnershipPlanner.Plan(modules, HasNativeSolar(modules), new HashSet<string>(), own, follow, null, true, true);
                 sb.Append("own=").Append(own).Append(" follow=").Append(follow).Append(':');
                 foreach (var key in plan.Entries.Where(e => e.Kind <= lastKind).Select(e => e.Key).OrderBy(k => k, StringComparer.Ordinal))
                     sb.Append('\n').Append(key);

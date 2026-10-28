@@ -35,6 +35,8 @@ namespace KSP1PartMod.Game.Animation
         private static readonly AnimationState[] NoStates = new AnimationState[0];
         private static readonly TrackSampler[] NoSamplers = new TrackSampler[0];
         private static bool _loggedHeatOff;
+        /// <summary>Kinds planned before their runtime exists (phase 2b): one line per kind per load.</summary>
+        private static readonly OncePerLoad LoggedNoBinder = new OncePerLoad();
         private static readonly MethodInfo ActionContextKeySetter =
             typeof(ModuleActionGroupAction).GetProperty("ContextKey", BindingFlags.Instance | BindingFlags.Public)?.GetSetMethod(true);
         private static bool _loggedContextKeyFallback;
@@ -146,6 +148,13 @@ namespace KSP1PartMod.Game.Animation
             foreach (var def in data.Entries)
             {
                 if (def == null) continue;
+                if (!RuntimeKinds.HasBinder(def.Kind))
+                {
+                    // Planned for a later version of the runtime: left unbound, its clip at rest, as before it was planned.
+                    if (LoggedNoBinder.First(def.Kind, generation))
+                        Log($"{def.Kind} entries planned but not driven yet in this version, left at rest (first: {_name} '{Subject(def)}')");
+                    continue;
+                }
                 if (def.Kind == EntryKind.Heat && settings != null && !settings.HeatGlow)
                 {
                     // heat_glow off: no entry, no tracks, no material copies; the clip stays out of Redux's runtime too

@@ -298,5 +298,40 @@ namespace KSP1PartMod.Tests.Animation.Settings
             Assert.IsFalse(s.ShaderPropertyMap.ContainsKey("_Bad"));
             StringAssert.Contains("_Bad", e);
         }
+
+        [Test] public void Settings_PluginKeys_DefaultTrue()
+        {
+            Assert.IsTrue(AnimationSettings.Defaults.PluginModules && AnimationSettings.Defaults.B9ModuleGates);
+            Assert.IsTrue(AnimationSettings.Parse("{}", out _).PluginModules && AnimationSettings.Parse("{}", out _).B9ModuleGates);
+            var s = AnimationSettings.Parse(File.ReadAllText(ShippedPath), out var e);
+            Assert.IsNull(e);
+            Assert.IsTrue(s.PluginModules && s.B9ModuleGates);
+        }
+
+        [Test] public void Settings_PluginKeys_AreRead()
+        {
+            var s = AnimationSettings.Parse("{\"plugin_modules\": false, \"b9_module_gates\": false}", out var e);
+            Assert.IsNull(e);
+            Assert.IsFalse(s.PluginModules);
+            Assert.IsFalse(s.B9ModuleGates);
+        }
+
+        [Test] public void Settings_PluginKeys_WrongType_KeepDefaultAndReport()
+        {
+            var s = AnimationSettings.Parse("{\"plugin_modules\": 0, \"b9_module_gates\": \"no\"}", out var e);
+            StringAssert.Contains("plugin_modules", e);
+            StringAssert.Contains("b9_module_gates", e);
+            Assert.IsTrue(s.PluginModules && s.B9ModuleGates);
+        }
+
+        [Test] public void Settings_ShippedFile_DocumentsPluginKeys()
+        {
+            var text = File.ReadAllText(ShippedPath);
+            foreach (var key in new[] { "plugin_modules", "b9_module_gates" })
+            {
+                StringAssert.Contains($"\"{key}\":", text);
+                StringAssert.Contains($"{key}:", text.Substring(0, text.IndexOf("\"enabled\"", System.StringComparison.Ordinal)), key + " in _note");
+            }
+        }
     }
 }

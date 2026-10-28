@@ -106,6 +106,16 @@ namespace KSP1PartMod.Tests.Animation.Cfg
         [Test] public void Parse_EveryListedModuleName_IsHandled() =>
             Assert.IsTrue(PluginEntryParser.ModuleNames.All(PluginEntryParser.Handles));
 
+        /// <summary>DMagic cfgs carry inline comments (<c>oneWayAnimation = false   //Default…</c>). Redux's
+        /// <c>Ksp1ConfigNode.PreFormatConfig</c> cuts every line at <c>//</c> before splitting <c>key = value</c>, as
+        /// <see cref="CfgText"/> does: the parser never sees the comment.</summary>
+        [Test] public void Parse_DmScience_InlineCommentsCutByTheCfgReader()
+        {
+            var e = P("name = DMModuleScienceAnimateGeneric   // DMagic\nanimationName = boom //the clip\n" +
+                      "oneWayAnimation = true   //Default false\nanimSpeed = 2 // x2\nshowEditorEvents = false//no editor");
+            Assert.AreEqual(("boom", true, 2f, false), (e.Clip, e.OneWay, e.SpeedMultiplier, e.ToggleInEditor));
+        }
+
         [Test] public void EntryParser_DelegatesPluginModules() =>
             Assert.AreEqual("enginedeploy:a:1", EntryParser.Parse(CfgText.Module("name = ModuleDeployableEngine\nEngineAnimationName = a"), 0, 1).Key);
     }
