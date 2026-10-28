@@ -103,6 +103,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // Before Redux's import (the curve must be in the part JSON); independent of enabled.
+                EngineCurveFix.TryApply(new Harmony(EngineCurveFix.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.EngineCurveLines.Stopped(e.ToString()));
+            }
+            try
+            {
                 // Before Redux's import (tanks, B9 tank types, converters) and before NativeModules; independent of enabled.
                 OreRemap.Arm(new Harmony(OreRemap.HarmonyId), Animations.OreRemapTarget);
                 // Old saves: their Ore was stored as TestRocks; moved to the target on load (KSP1 parts only).
