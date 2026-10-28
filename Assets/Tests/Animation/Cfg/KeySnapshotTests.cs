@@ -257,6 +257,61 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             Assert.AreEqual(5, bridged, "the three folding radiators and the two BDB louvers");
         }
 
+        /// <summary>0.12.0: the science rules read the cfg and plan nothing. The keys of the stock goo canister, materials bay and
+        /// Mk1 pod, and of four BDB parts with <c>DMModuleScienceAnimateGeneric</c>, are in both snapshots, and every key (2b's
+        /// <c>ScienceToggle</c> included) is the same before and after the science mapping has run with each science switch on and
+        /// off. The experiments find their clip among those entries (the stock <c>FxModules</c> Deploy or Redux follower entry, the
+        /// DMagic <c>ScienceToggle</c> entry).</summary>
+        [Test] public void Plan_ScienceParts_KeysUnchanged_WithTheScienceSwitchesOnAndOff()
+        {
+            var snapshot032 = new HashSet<string>(Snapshot(), StringComparer.Ordinal);
+            var snapshot040 = new HashSet<string>(Snapshot(Snapshot040Name), StringComparer.Ordinal);
+            bool IsDMagic(IKsp1Node m) => "DMModuleScienceAnimateGeneric".Equals(m.GetValue("name")?.Trim(), StringComparison.OrdinalIgnoreCase);
+            var bdb = RealParts().Where(p => p.Name.StartsWith("bluedog", StringComparison.OrdinalIgnoreCase) && p.Modules.Any(IsDMagic))
+                .Select(p => p.Name).Distinct().OrderBy(n => n, StringComparer.Ordinal).Take(4).ToList();
+            Assert.AreEqual(4, bdb.Count, "four BDB DMagic Generic parts installed");
+            var names = new[] { "GooExperiment", "science_module", "mk1pod_v2" }.Concat(bdb).ToList();
+            var switches = new[]
+            {
+                "{}", "{\"ksp1_science\": false}", "{\"science_generate_definitions\": false}", "{\"science_report_storage\": false}",
+                "{\"science_transmit_split\": false}", "{\"science_deploy_animations\": false}", "{\"science_wait_for_animation\": false}",
+                "{\"science_definitions_via_patch_manager\": false}", "{\"science_value_scale\": 2}", "{\"enabled\": false}",
+            };
+            var natives = KSP1PartMod.Native.Science.NativeExperiments.Redux26w42c;
+            var clips = 0;
+            foreach (var name in names)
+            {
+                var parts = RealParts().Where(p => p.Name == name).ToList();
+                Assert.AreEqual(1, parts.Count, name + " installed once");
+                var modules = parts[0].Modules;
+                var line = Hex(name, 12) + " " + Hex(KeysOf(modules, Last032Kind), 16);
+                Assert.IsTrue(snapshot032.Contains(line), name + ": 0.3.2 snapshot");
+                Assert.IsTrue(snapshot040.Contains(line), name + ": 0.4.0 snapshot");
+                var every = KeysOf(modules, (EntryKind)int.MaxValue);
+                var found = false;
+                // An invented definition for each id of the part, so the BDB ids resolve (the real ones are read in the census).
+                var definitions = new Dictionary<string, KSP1PartMod.Native.Science.ScienceDefinitionModel>(StringComparer.Ordinal);
+                foreach (var id in modules.Select(m => m.GetValue("experimentID")?.Trim()).Where(i => !string.IsNullOrEmpty(i)).Distinct())
+                    definitions[id] = KSP1PartMod.Native.Science.ScienceDefinitionBuilder.From(
+                        CfgText.Parse($"EXPERIMENT_DEFINITION\n{{\nid = {id}\ntitle = Invented\nbaseValue = 1\nsituationMask = 63\nbiomeMask = 0\n}}")
+                            .GetNodes("EXPERIMENT_DEFINITION").First(), null, KSP1PartMod.Animation.Settings.AnimationSettings.Defaults, null);
+                foreach (var json in switches)
+                {
+                    var settings = KSP1PartMod.Animation.Settings.AnimationSettings.Parse(json, out var error);
+                    Assert.IsNull(error, json);
+                    var science = KSP1PartMod.Native.Science.ScienceMapping.Resolve(modules, definitions, natives, settings);
+                    Assert.AreEqual(line, Hex(name, 12) + " " + Hex(KeysOf(modules, Last032Kind), 16), $"{name}: 0.3.2 kinds after {json}");
+                    Assert.AreEqual(every, KeysOf(modules, (EntryKind)int.MaxValue), $"{name}: every key after {json}");
+                    var plan = OwnershipPlanner.Plan(modules, HasNativeSolar(modules), new HashSet<string>(), false, true, null, true, true, false, false);
+                    foreach (var config in science.Configurations)
+                        if (KSP1PartMod.Native.Science.ScienceAnimRules.TargetsFor(config, plan.Entries, true).First != null) found = true;
+                }
+                if (found) clips++;
+                TestContext.WriteLine($"{name}: keys unchanged with the science switches on and off; clip found {found}");
+            }
+            Assert.That(clips, Is.GreaterThanOrEqualTo(6), "the goo canister, the materials bay and the four BDB parts find their clip");
+        }
+
         /// <summary>Run alone, on the 0.4.0 planner only (4695d2b, before phase 2b Task 5): it (re)writes the 0.4.0
         /// snapshot. 0.4.0 adds no entry kind: its kinds are those of 0.3.2.</summary>
         [Test, Explicit("writes the 0.4.0 key snapshot")]

@@ -174,6 +174,34 @@ namespace KSP1PartMod.Animation.Settings
         /// per kW).</summary>
         public bool RadiatorKsp1Rates => _radiators.Ksp1Rates;
 
+        /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
+        public bool Ksp1Science => _science.Science;
+        /// <summary>A KSP1 <c>EXPERIMENT_DEFINITION</c> becomes a KSP2 definition <c>KSP1_&lt;id&gt;</c>
+        /// (<c>science_generate_definitions</c>, default true).</summary>
+        public bool ScienceGenerateDefinitions => _science.GenerateDefinitions;
+        /// <summary>Generated definitions are Patch Manager duplicates, gated by the campaign feature
+        /// (<c>science_definitions_via_patch_manager</c>, default true; false: added to the live store).</summary>
+        public bool ScienceDefinitionsViaPatchManager => _science.ViaPatchManager;
+        /// <summary>KSP1 container and experiment parts store research reports (<c>science_report_storage</c>, default true).</summary>
+        public bool ScienceReportStorage => _science.ReportStorage;
+        /// <summary>Multiplies KSP1's <c>baseValue</c> into the KSP2 values (<c>science_value_scale</c>, default 1, 0.01 to 100).</summary>
+        public double ScienceValueScale => _science.ValueScale;
+        /// <summary><c>xmitDataScalar</c> below 1 splits the value between a data report and a sample (<c>science_transmit_split</c>,
+        /// default true).</summary>
+        public bool ScienceTransmitSplit => _science.TransmitSplit;
+        /// <summary>KSP1 ids that use an identical KSP2 experiment (<c>science_native_ids</c>, ordinal keys).</summary>
+        public IReadOnlyDictionary<string, string> ScienceNativeIds => _science.NativeIds;
+        /// <summary>The KSP2 experiment of a KSP1 id with no definition on disk (<c>science_fallback_ids</c>, ordinal keys).</summary>
+        public IReadOnlyDictionary<string, string> ScienceFallbackIds => _science.FallbackIds;
+        /// <summary>KSP1 ids that get no experiment (<c>science_skip_ids</c>), trimmed, distinct, ordinal.</summary>
+        public IReadOnlyCollection<string> ScienceSkipIds => _science.SkipIds;
+        /// <summary>Running an experiment opens its KSP1 clip (<c>science_deploy_animations</c>, default true; needs
+        /// <see cref="Enabled"/>).</summary>
+        public bool ScienceDeployAnimations => _science.DeployAnimations;
+        /// <summary>A DMagic experiment with <c>experimentWaitForAnimation</c> completes once its clip is open
+        /// (<c>science_wait_for_animation</c>, default true; needs <see cref="Enabled"/>).</summary>
+        public bool ScienceWaitForAnimation => _science.WaitForAnimation;
+
         /// <summary>Redux's own mapping of KSP1 Ore.</summary>
         public const string ReduxOreResource = "TestRocks";
 
@@ -197,6 +225,22 @@ namespace KSP1PartMod.Animation.Settings
         }
 
         private readonly SwitchesRadiators _radiators;
+
+        /// <summary>The science keys of 0.12.0, read together. Each object has its own tables.</summary>
+        private sealed class SwitchesScience
+        {
+            public bool Science = true, GenerateDefinitions = true, ViaPatchManager = true, ReportStorage = true, TransmitSplit = true;
+            public bool DeployAnimations = true, WaitForAnimation = true;
+            public double ValueScale = 1.0;
+            public IReadOnlyDictionary<string, string> NativeIds = CopyMap(Native.Science.ScienceDefaults.NativeIds);
+            public IReadOnlyDictionary<string, string> FallbackIds = CopyMap(Native.Science.ScienceDefaults.FallbackIds);
+            public IReadOnlyCollection<string> SkipIds = ReadOnlyNames(Native.Science.ScienceDefaults.SkipIds);
+        }
+
+        private static IReadOnlyDictionary<string, string> CopyMap(IEnumerable<KeyValuePair<string, string>> map) =>
+            new ReadOnlyDictionary<string, string>(map.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.Ordinal));
+
+        private readonly SwitchesScience _science;
 
         /// <summary>The <c>b9_*</c> keys of 0.9.0, read together.</summary>
         private sealed class SwitchesB9
@@ -265,13 +309,14 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
-            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators)
+            Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators, SwitchesScience science)
         {
+            _science = science;
             _radiators = radiators;
             _isru = isru;
             _b9 = b9;
@@ -319,6 +364,7 @@ namespace KSP1PartMod.Animation.Settings
                 var b9 = new SwitchesB9();
                 var isru = new SwitchesIsru();
                 var radiators = new SwitchesRadiators();
+                var science = new SwitchesScience();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -380,6 +426,17 @@ namespace KSP1PartMod.Animation.Settings
                         case "radiator_auto_on": ReadBool(p, ref radiators.AutoOn, problems); break;
                         case "radiator_flux_scale": ReadClampedDouble(p, 0.01, 100, ref radiators.FluxScale, problems); break;
                         case "radiator_ksp1_rates": ReadBool(p, ref radiators.Ksp1Rates, problems); break;
+                        case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
+                        case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
+                        case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;
+                        case "science_report_storage": ReadBool(p, ref science.ReportStorage, problems); break;
+                        case "science_value_scale": ReadClampedDouble(p, 0.01, 100, ref science.ValueScale, problems); break;
+                        case "science_transmit_split": ReadBool(p, ref science.TransmitSplit, problems); break;
+                        case "science_native_ids": science.NativeIds = ReadStringMap(p, problems) ?? science.NativeIds; break;
+                        case "science_fallback_ids": science.FallbackIds = ReadStringMap(p, problems) ?? science.FallbackIds; break;
+                        case "science_skip_ids": science.SkipIds = ReadNames(p, problems) ?? science.SkipIds; break;
+                        case "science_deploy_animations": ReadBool(p, ref science.DeployAnimations, problems); break;
+                        case "science_wait_for_animation": ReadBool(p, ref science.WaitForAnimation, problems); break;
                         case "mm_plugin_folders": mm.PluginFolders = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.PluginFolders; break;
                         case "mm_needs_keep": mm.NeedsKeep = ReadNames(p, problems, StringComparer.OrdinalIgnoreCase) ?? mm.NeedsKeep; break;
                         case "skip_modules": s2a.SkipModules = ReadNames(p, problems) ?? s2a.SkipModules; break;
@@ -390,7 +447,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science);
             }
             catch (Exception e)
             {
@@ -522,6 +579,26 @@ namespace KSP1PartMod.Animation.Settings
                 else problems.Add($"{p.Name}.{entry.Name} is not a list of property names, ignored");
             }
             return ReadOnly(map);
+        }
+
+        /// <summary>An object of non-empty strings (keys and values trimmed, <c>_note</c> skipped), which replaces the default; null
+        /// (default kept) when the value is not an object. Items that are not non-empty strings are ignored and reported.</summary>
+        private static IReadOnlyDictionary<string, string> ReadStringMap(JProperty p, List<string> problems)
+        {
+            if (!(p.Value is JObject obj))
+            {
+                problems.Add($"\"{p.Name}\" is not an object, default kept");
+                return null;
+            }
+            var map = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var entry in obj.Properties())
+            {
+                if (entry.Name == "_note") continue;
+                var key = entry.Name.Trim();
+                if (key.Length > 0 && IsName(entry.Value)) map[key] = ((string)entry.Value).Trim();
+                else problems.Add($"{p.Name}.{entry.Name} is not a non-empty name, ignored");
+            }
+            return new ReadOnlyDictionary<string, string>(map);
         }
 
         private static IReadOnlyDictionary<string, string[]> ReadOnly(Dictionary<string, string[]> map) =>

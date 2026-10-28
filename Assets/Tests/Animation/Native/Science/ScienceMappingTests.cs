@@ -1,0 +1,362 @@
+using System.Collections.Generic;
+using System.Linq;
+using KSP1PartMod.Animation.Cfg;
+using KSP1PartMod.Animation.Settings;
+using KSP1PartMod.Native.Science;
+using NUnit.Framework;
+
+namespace KSP1PartMod.Tests.Animation.Native.Science
+{
+    /// <summary><see cref="ScienceMapping"/>: the experiment and container modules of a part into one <c>Module_ScienceExperiment</c>
+    /// (science plan (h)). Cfg text in the shape of the stock and BDB files, names and titles invented.</summary>
+    public class ScienceMappingTests
+    {
+        private const string Pod = @"
+PART
+{
+    name = testPod
+    MODULE
+    {
+        name = ModuleCommand
+        minimumCrew = 1
+    }
+    MODULE
+    {
+        name = ModuleScienceExperiment
+        experimentID = crewReport
+        experimentActionName = Crew Report
+        resetActionName = Discard
+        reviewActionName = Review
+        useStaging = False
+        useActionGroups = True
+        hideUIwhenUnavailable = True
+        rerunnable = True
+        xmitDataScalar = 1.0
+        usageReqMaskInternal = 5
+        usageReqMaskExternal = -1
+    }
+    MODULE
+    {
+        name = ModuleScienceContainer
+        reviewActionName = Review
+        storeActionName = Store
+        evaOnlyStorage = True
+        storageRange = 1.3
+    }
+}";
+
+        private const string Goo = @"
+PART
+{
+    name = testGoo
+    MODULE
+    {
+        name = ModuleAnimateGeneric
+        animationName = Deploy
+    }
+    MODULE
+    {
+        name = ModuleScienceExperiment
+        experimentID = mysteryGoo
+        experimentActionName = Observe
+        rerunnable = False
+        resettable = True
+        resettableOnEVA = True
+        xmitDataScalar = 0.3
+        usageReqMaskInternal = 1
+        FxModules = 0
+    }
+}";
+
+        private const string Bdb = @"
+PART
+{
+    name = testBdbProbe
+    MODULE
+    {
+        name = DMModuleScienceAnimateGeneric
+        experimentID = bd_invented1
+        animationName = Open
+        experimentAnimation = true
+        experimentWaitForAnimation = true
+        waitForAnimationTime = 2.5
+        keepDeployedMode = 2
+        xmitDataScalar = 1
+        usageReqMaskInternal = 1
+        resourceExpCost = 0.5
+    }
+    MODULE
+    {
+        name = DMModuleScienceAnimateGeneric
+        experimentID = bd_invented2
+        animationName = Boom
+        experimentAnimation = true
+        experimentWaitForAnimation = false
+        xmitDataScalar = 0.5
+        sitMask = 48
+        bioMask = 16
+    }
+}";
+
+        private static IReadOnlyList<IKsp1Node> Modules(string part) => CfgText.Parse(part).GetNodes("PART").Single().GetNodes("MODULE").ToList();
+
+        private static ScienceDefinitionModel Definition(string id, int sit = 63, int bio = 3, double x = 1) =>
+            ScienceDefinitionBuilder.From(CfgText.Parse($@"
+EXPERIMENT_DEFINITION
+{{
+    id = {id}
+    title = Invented {id}
+    baseValue = 10
+    situationMask = {sit}
+    biomeMask = {bio}
+}}").GetNodes("EXPERIMENT_DEFINITION").Single(), new DefinitionOverrides(x, null, null), AnimationSettings.Defaults, null);
+
+        private static Dictionary<string, ScienceDefinitionModel> Defs(params ScienceDefinitionModel[] d) => d.ToDictionary(x => x.Ksp1Id);
+
+        private static SciencePart Resolve(string part, Dictionary<string, ScienceDefinitionModel> defs = null, string json = "{}") =>
+            ScienceMapping.Resolve(Modules(part), defs ?? new Dictionary<string, ScienceDefinitionModel>(), NativeExperiments.Redux26w42c,
+                AnimationSettings.Parse(json, out _));
+
+        [Test] public void StockPod_CrewReport_CrewObservation_Crew1_Storage()
+        {
+            var p = Resolve(Pod);
+            Assert.IsTrue(p.HasModule);
+            var c = p.Configurations.Single();
+            Assert.AreEqual("CrewObservation", c.ExperimentDefinitionId);
+            Assert.AreEqual(ScienceResolutionKind.Identical, c.Kind);
+            Assert.AreEqual(1, c.CrewRequired, "usageReqMaskInternal 5: crew in the part");
+            Assert.AreEqual(0, c.TimeToComplete, 1e-12);
+            Assert.IsFalse(c.DenyInterruption);
+            Assert.IsFalse(c.ContextualExperiment);
+            Assert.AreEqual("", c.DeployedBoolAnimatorParamName);
+            Assert.AreEqual("", c.CFXName);
+            Assert.AreEqual(1, c.ModuleIndex);
+            Assert.IsFalse(c.Clip.HasSource);
+            Assert.IsTrue(p.NotifyOnCompletion);
+            Assert.IsTrue(p.HasContainer);
+            Assert.IsTrue(p.ReportStorage);
+            Assert.AreEqual(1, p.CrewRequired);
+            Assert.AreEqual("crewReport", p.Resolutions.Single().Ksp1Id);
+            Assert.IsTrue(p.NotReproduced.Contains("evaOnlyStorage"), string.Join(", ", p.NotReproduced));
+        }
+
+        [Test] public void Goo_NoDefinition_ClosestEnvironmentSurvey_FxModules()
+        {
+            var p = Resolve(Goo);
+            var c = p.Configurations.Single();
+            Assert.AreEqual("EnvironmentSurvey", c.ExperimentDefinitionId);
+            Assert.AreEqual(ScienceResolutionKind.Closest, c.Kind);
+            Assert.AreEqual(0, c.CrewRequired);
+            CollectionAssert.AreEqual(new[] { 0 }, c.Clip.FxModules.ToArray());
+            Assert.AreEqual(-1, c.Clip.ToggleModuleIndex);
+            Assert.IsFalse(c.Waits);
+            Assert.IsTrue(p.ReportStorage, "an instrument stores, as in KSP1");
+            Assert.IsTrue(p.Notes.Any(n => n.Contains("science_fallback_ids")), string.Join("\n", p.Notes));
+            CollectionAssert.Contains(p.NotReproduced, "rerunnable");
+            CollectionAssert.Contains(p.NotReproduced, "resettable");
+        }
+
+        [Test] public void Goo_WithADefinition_Generated()
+        {
+            var p = Resolve(Goo, Defs(Definition("mysteryGoo", x: 0.3)));
+            var c = p.Configurations.Single();
+            Assert.AreEqual("KSP1_mysteryGoo", c.ExperimentDefinitionId);
+            Assert.AreEqual(ScienceResolutionKind.Generated, c.Kind);
+
+            var off = Resolve(Goo, Defs(Definition("mysteryGoo")), "{\"science_generate_definitions\": false}");
+            Assert.AreEqual("EnvironmentSurvey", off.Configurations.Single().ExperimentDefinitionId, "closest from the definition's mask (63, Both)");
+            Assert.AreEqual(ScienceResolutionKind.Closest, off.Configurations.Single().Kind);
+        }
+
+        [Test] public void Bdb_TwoDMagicGenericModules_TwoConfigurations_Waits()
+        {
+            var p = Resolve(Bdb, Defs(Definition("bd_invented1"), Definition("bd_invented2")));
+            Assert.AreEqual(2, p.Configurations.Count);
+            var a = p.Configurations[0];
+            var b = p.Configurations[1];
+            Assert.AreEqual("KSP1_bd_invented1", a.ExperimentDefinitionId);
+            Assert.AreEqual("KSP1_bd_invented2", b.ExperimentDefinitionId);
+            Assert.AreEqual(0, a.Clip.ToggleModuleIndex);
+            Assert.AreEqual(1, b.Clip.ToggleModuleIndex);
+            Assert.IsTrue(a.Clip.ExperimentAnimation);
+            Assert.IsTrue(a.Clip.WaitForAnimation);
+            Assert.AreEqual(2.5, a.Clip.WaitForAnimationTime, 1e-12);
+            Assert.IsTrue(a.Waits);
+            Assert.AreEqual(2.5, a.TimeToComplete, 1e-12);
+            Assert.IsFalse(b.Waits);
+            Assert.AreEqual(0, b.TimeToComplete, 1e-12);
+            CollectionAssert.Contains(p.NotReproduced, "keepDeployedMode");
+            CollectionAssert.Contains(p.NotReproduced, "resourceExpCost");
+            CollectionAssert.IsEmpty(a.Clip.FxModules);
+
+            var noWait = Resolve(Bdb, Defs(Definition("bd_invented1"), Definition("bd_invented2")), "{\"science_wait_for_animation\": false}");
+            Assert.IsFalse(noWait.Configurations[0].Waits);
+            Assert.AreEqual(0, noWait.Configurations[0].TimeToComplete, 1e-12);
+            Assert.IsFalse(Resolve(Bdb, Defs(Definition("bd_invented1")), "{\"enabled\": false}").Configurations[0].Waits, "animations off");
+            Assert.IsFalse(Resolve(Bdb, Defs(Definition("bd_invented1")), "{\"science_deploy_animations\": false}").Configurations[0].Waits);
+        }
+
+        [Test] public void WaitTime_AtLeastATenth()
+        {
+            var p = Resolve(Bdb.Replace("waitForAnimationTime = 2.5", "waitForAnimationTime = 0"), Defs(Definition("bd_invented1")));
+            Assert.AreEqual(0.1, p.Configurations[0].TimeToComplete, 1e-12);
+        }
+
+        [Test] public void Bdb_NoDefinitionForTheSecond_UsesItsSitMaskForNothing_FallsToTheTable()
+        {
+            var p = Resolve(Bdb, Defs(Definition("bd_invented1")));
+            Assert.AreEqual(1, p.Configurations.Count, "bd_invented2: no definition, no table entry");
+            var skipped = p.Resolutions.Single(r => r.Ksp1Id == "bd_invented2");
+            Assert.AreEqual(ScienceResolutionKind.Skipped, skipped.Kind);
+            Assert.AreEqual(ScienceSkipReason.NoDefinitionNoCounterpart, skipped.SkipReason);
+        }
+
+        [Test] public void RepeatedKsp2Id_KeptOnce()
+        {
+            const string twoInstruments = @"
+PART
+{
+    name = testTwo
+    MODULE
+    {
+        name = ModuleScienceExperiment
+        experimentID = mysteryGoo
+        xmitDataScalar = 0.3
+    }
+    MODULE
+    {
+        name = ModuleScienceExperiment
+        experimentID = temperatureScan
+        xmitDataScalar = 0.5
+    }
+    MODULE
+    {
+        name = ModuleScienceExperiment
+        experimentID = temperatureScan
+        xmitDataScalar = 0.5
+    }
+}";
+            var p = Resolve(twoInstruments);
+            Assert.AreEqual(1, p.Configurations.Count, "both go to EnvironmentSurvey");
+            Assert.AreEqual(2, p.Resolutions.Count, "unique per KSP1 id");
+            Assert.IsTrue(p.Resolutions[1].DuplicateKsp2);
+            Assert.AreEqual(1, p.DuplicateKsp2);
+            Assert.AreEqual(1, p.MergedModules, "the second temperatureScan module");
+            Assert.IsTrue(p.Notes.Any(n => n.Contains("score once per location together")), string.Join("\n", p.Notes));
+        }
+
+        [Test] public void SkipIds_DefaultAndCustom()
+        {
+            const string eva = @"
+PART
+{
+    name = testKerbal
+    MODULE
+    {
+        name = ModuleScienceExperiment
+        experimentID = evaReport
+    }
+    MODULE
+    {
+        name = ModuleScienceExperiment
+        experimentID = ROCScience
+    }
+}";
+            var p = Resolve(eva);
+            Assert.IsFalse(p.HasModule);
+            Assert.AreEqual(ScienceSkipReason.EvaKerbal, p.Resolutions[0].SkipReason);
+            Assert.AreEqual(ScienceSkipReason.NoCounterpart, p.Resolutions[1].SkipReason);
+            Assert.IsFalse(p.ReportStorage, "nothing resolved, no container");
+
+            var custom = Resolve(Pod, null, "{\"science_skip_ids\": [\"crewReport\"]}");
+            Assert.IsFalse(custom.HasModule);
+            Assert.AreEqual(ScienceSkipReason.NoCounterpart, custom.Resolutions.Single().SkipReason);
+            Assert.IsTrue(custom.ReportStorage, "the container still stores");
+        }
+
+        [Test] public void GooLabLike_NoDefinitionNoTable_Skipped()
+        {
+            var p = Resolve(Goo.Replace("experimentID = mysteryGoo", "experimentID = bd_InventedLab"));
+            Assert.IsFalse(p.HasModule);
+            Assert.AreEqual(ScienceSkipReason.NoDefinitionNoCounterpart, p.Resolutions.Single().SkipReason);
+            Assert.IsFalse(p.ReportStorage);
+        }
+
+        [Test] public void ContainerOnly_Storage_NoModule()
+        {
+            var p = Resolve(@"
+PART
+{
+    name = testBox
+    MODULE
+    {
+        name = ModuleScienceContainer
+        storageRange = 2
+        allowRepeatedSubjects = True
+    }
+}");
+            Assert.IsFalse(p.HasModule);
+            Assert.IsTrue(p.HasContainer);
+            Assert.IsTrue(p.ReportStorage);
+            CollectionAssert.IsEmpty(p.Resolutions);
+            Assert.IsFalse(Resolve(@"
+PART
+{
+    name = testBox
+    MODULE
+    {
+        name = ModuleScienceContainer
+    }
+}", null, "{\"science_report_storage\": false}").ReportStorage);
+        }
+
+        [Test] public void Ksp1ScienceOff_Nothing()
+        {
+            var p = Resolve(Pod, null, "{\"ksp1_science\": false}");
+            Assert.IsFalse(p.HasModule);
+            Assert.IsFalse(p.ReportStorage);
+            CollectionAssert.IsEmpty(p.Resolutions);
+            Assert.IsTrue(p.Notes.Any(n => n.Contains("ksp1_science")));
+        }
+
+        [Test] public void NativeIdsReplaced_And_NativeMissing()
+        {
+            var custom = Resolve(Goo, null, "{\"science_native_ids\": {\"mysteryGoo\": \"MarineSurvey\"}}");
+            Assert.AreEqual("MarineSurvey", custom.Configurations.Single().ExperimentDefinitionId);
+            Assert.AreEqual(ScienceResolutionKind.Identical, custom.Configurations.Single().Kind);
+
+            var live = new NativeExperiments(NativeExperiments.Redux26w42c.All.Where(e => e.Id != "CrewObservation"));
+            var p = ScienceMapping.Resolve(Modules(Pod), new Dictionary<string, ScienceDefinitionModel>(), live, AnimationSettings.Defaults);
+            Assert.IsFalse(p.HasModule, "CrewObservation absent and crewReport has no definition or table entry");
+        }
+
+        [Test] public void ScientistBit_Noted_CrewStillOne()
+        {
+            var p = Resolve(Goo.Replace("usageReqMaskInternal = 1", "usageReqMaskInternal = 9"));
+            Assert.AreEqual(1, p.Configurations.Single().CrewRequired);
+            Assert.IsTrue(p.Notes.Any(n => n.Contains("scientist")), string.Join("\n", p.Notes));
+        }
+
+        [Test] public void DMagicAnimate_NoClipEntry_Noted()
+        {
+            var p = Resolve(Bdb.Replace("DMModuleScienceAnimateGeneric", "DMModuleScienceAnimate"), Defs(Definition("bd_invented1"), Definition("bd_invented2")));
+            Assert.AreEqual(2, p.Configurations.Count);
+            Assert.IsFalse(p.Configurations[0].Clip.HasSource);
+            Assert.IsFalse(p.Configurations[0].Waits, "no clip to wait for");
+            Assert.IsTrue(p.Notes.Any(n => n.Contains("DMModuleScienceAnimate")), string.Join("\n", p.Notes));
+        }
+
+        [Test] public void OutOfScope_Categories()
+        {
+            Assert.AreEqual("ModuleScienceLab", ScienceMapping.OutOfScope("ModuleScienceLab"));
+            Assert.AreEqual("ModuleScienceConverter", ScienceMapping.OutOfScope("ModuleScienceConverter"));
+            Assert.AreEqual("ModuleTestSubject", ScienceMapping.OutOfScope("ModuleTestSubject"));
+            Assert.AreEqual("ground science", ScienceMapping.OutOfScope("ModuleGroundExperiment"));
+            Assert.AreEqual("ground science", ScienceMapping.OutOfScope("ModuleGroundSciencePart"));
+            Assert.AreEqual("specialised DMagic", ScienceMapping.OutOfScope("DMSeismicSensor"));
+            Assert.AreEqual("specialised DMagic", ScienceMapping.OutOfScope("DMUniversalStorageScience"));
+            Assert.IsNull(ScienceMapping.OutOfScope("DMModuleScienceAnimateGeneric"));
+            Assert.IsNull(ScienceMapping.OutOfScope("ModuleScienceExperiment"));
+        }
+    }
+}
