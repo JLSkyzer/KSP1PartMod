@@ -213,6 +213,18 @@ namespace KSP1PartMod.Animation.Settings
         /// default true; false: KSP2's 0.98/0.02, no stand-in collider).</summary>
         public bool WheelKsp1DeployTiming => _wheels.Ksp1DeployTiming;
 
+        /// <summary>The canopy bone of a followed KSP1 parachute is put back to its parent's rotation each frame before Redux
+        /// orients it, when Redux's Animator is not on that bone (<c>chute_canopy_reset</c>, default true; false: 0.13.0, radial
+        /// canopies spread out and turn).</summary>
+        public bool ChuteCanopyReset => _fixes0131.ChuteCanopyReset;
+        /// <summary>Logs the plume objects of KSP1 engines in flight, at bind and 3 s after the first ignition, at most twice per part
+        /// type (<c>plume_diagnostics</c>, default true for the 0.13.1 test; diagnostic only).</summary>
+        public bool PlumeDiagnostics => _fixes0131.PlumeDiagnostics;
+        /// <summary>Fills <c>Data_Engine.EmissiveTemperatureCurve</c>, which Redux's KSP1 engine importer leaves null, so a saved
+        /// vessel with a KSP1 engine is no longer skipped as corrupted at load (<c>fix_engine_emissive_curve</c>, default true;
+        /// false: 0.13.0).</summary>
+        public bool FixEngineEmissiveCurve => _fixes0131.EngineEmissiveCurve;
+
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
         /// <summary>A KSP1 <c>EXPERIMENT_DEFINITION</c> becomes a KSP2 definition <c>KSP1_&lt;id&gt;</c>
@@ -273,6 +285,14 @@ namespace KSP1PartMod.Animation.Settings
         }
 
         private readonly SwitchesWheels _wheels;
+
+        /// <summary>The keys of the 0.13.1 in-game fixes, read together.</summary>
+        private sealed class SwitchesFixes0131
+        {
+            public bool ChuteCanopyReset = true, PlumeDiagnostics = true, EngineEmissiveCurve = true;
+        }
+
+        private readonly SwitchesFixes0131 _fixes0131;
 
         /// <summary>The science keys of 0.12.0, read together. Each object has its own tables.</summary>
         private sealed class SwitchesScience
@@ -367,14 +387,15 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf(), new SwitchesWheels());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf(), new SwitchesWheels(), new SwitchesFixes0131());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
             Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators, SwitchesScience science, SwitchesPerf perf,
-            SwitchesWheels wheels)
+            SwitchesWheels wheels, SwitchesFixes0131 fixes0131)
         {
+            _fixes0131 = fixes0131;
             _wheels = wheels;
             _perf = perf;
             _science = science;
@@ -428,6 +449,7 @@ namespace KSP1PartMod.Animation.Settings
                 var science = new SwitchesScience();
                 var perf = new SwitchesPerf();
                 var wheels = new SwitchesWheels();
+                var fixes0131 = new SwitchesFixes0131();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -503,6 +525,9 @@ namespace KSP1PartMod.Animation.Settings
                         case "wheel_bogeys": ReadBool(p, ref wheels.Bogeys, problems); break;
                         case "wheel_ksp1_friction": ReadBool(p, ref wheels.Ksp1Friction, problems); break;
                         case "wheel_ksp1_deploy_timing": ReadBool(p, ref wheels.Ksp1DeployTiming, problems); break;
+                        case "chute_canopy_reset": ReadBool(p, ref fixes0131.ChuteCanopyReset, problems); break;
+                        case "plume_diagnostics": ReadBool(p, ref fixes0131.PlumeDiagnostics, problems); break;
+                        case "fix_engine_emissive_curve": ReadBool(p, ref fixes0131.EngineEmissiveCurve, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;
@@ -524,7 +549,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf, wheels);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf, wheels, fixes0131);
             }
             catch (Exception e)
             {

@@ -429,6 +429,7 @@ namespace KSP1PartMod.Game.Animation
                         if (hasFull) LogTracksOnly(def, def.SecondClip, fullLength);
                     }
                     e.Machine = e.Chute = new ChuteFollower(semiLength, fullLength, def.SpeedFactorIn, def.SpeedFactorOut);
+                    if (PartBackingMode == PartBackingModes.Flight) e.Canopy = CanopyReset.TryCreate(this, _name);
                     Log($"{_name} follows Redux parachute '{def.Clip}'/'{def.SecondClip}' (Module_Parachute)");
                     break;
                 }
@@ -935,6 +936,7 @@ namespace KSP1PartMod.Game.Animation
                         e.SeenState = true;
                         Show(e.States, e.Tracks, e.Chute.SemiPose, e.Def.Layer, ref e.StatesOn);
                         Show(e.ActiveStates, e.ActiveTracks, e.Chute.FullPose, e.Def.Layer, ref e.ActiveOn);
+                        if (!inEditor) e.Canopy?.Tick(state);
                         break;
                     }
                     case EntryKind.EngineDeploy:
@@ -1334,6 +1336,8 @@ namespace KSP1PartMod.Game.Animation
             public AeroGate Aero;
             public ReduxFollower Follower;
             public ChuteFollower Chute;
+            /// <summary>ChuteFollower in flight with <c>chute_canopy_reset</c> (0.13.1), else null.</summary>
+            public CanopyReset Canopy;
             public EngineDeployMachine EngineDeploy;
             public EngineModeMachine EngineMode;
             public DecouplerClipMachine Decoupler;
