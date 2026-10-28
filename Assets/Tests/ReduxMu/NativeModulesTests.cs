@@ -289,7 +289,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual("PartComponentModule_Heatshield", module.ComponentType.Name);
             var data = context.ModuleData.OfType<Data_Heatshield>().Single();
             Assert.AreEqual("Ablator", data.requiredResources.Single().ResourceName);
-            Assert.AreEqual((float)(8e-8 * 0.25 * 2), data.requiredResources[0].Rate, 1e-15f, "median Rate x capacity ratio x scale");
+            Assert.AreEqual((float)(8e-8 * 2), data.requiredResources[0].Rate, 1e-15f, "median Rate x scale, no capacity ratio");
             Assert.AreEqual(0.0, data.requiredResources[0].AcceptanceThreshold);
             Assert.AreEqual(500.0, data.AblationTempThreshold);
             Assert.AreEqual(1.0, data.PyrolysisLossFactor);
@@ -304,7 +304,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             {
                 "[KSP1PartMod] native: heat shield reference: 3 KSP2 shield(s), median Rate 8E-08, capacity 0.8",
                 "[KSP1PartMod] native: heat shield reference: Rate/capacity of each: 1E-08/0.8, 8E-08/0.8, 1E-07/0.8",
-                "[KSP1PartMod] native: testPart: ModuleAblator -> Module_Heatshield: Ablator capacity 0.2, Rate 4E-08 (reference 8E-08 for 0.8, " +
+                "[KSP1PartMod] native: testPart: ModuleAblator -> Module_Heatshield: Ablator capacity 0.2, Rate 1.6E-07 (reference 8E-08 for 0.8, " +
                 "pyrolysisLossFactor 6000, ablator_rate_scale 2), ablation from 500 K, shielding along local -Y",
             }, _lines.Where(l => l.Contains("heat shield reference") || l.Contains("testPart")));
 

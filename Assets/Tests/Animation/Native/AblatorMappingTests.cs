@@ -45,11 +45,11 @@ PART
 
         private static IKsp1Node Bare(string body) => Module("PART\n{\nname = p\nMODULE\n{\nname = ModuleAblator\n" + body + "\n}\n}\n");
 
-        [Test] public void Stock25_AgainstTheReference_RateIsTheNativeRateTimesTheCapacityRatio()
+        [Test] public void Stock25_AgainstTheReference_RateIsTheNativeRate_WhateverTheCapacity()
         {
             var m = AblatorMapping.From(Module(Shield25), 0.8, Reference, 1, n => n == "Ablator" ? "Ablator" : "?");
             Assert.AreEqual("Ablator", m.ResourceName);
-            Assert.AreEqual(8e-8, m.Rate, 1e-20, "same capacity as the reference: its Rate");
+            Assert.AreEqual(8e-8, m.Rate, 1e-20, "stock pyrolysisLossFactor: the reference Rate");
             Assert.AreEqual(500, m.AblationTempThreshold);
             Assert.AreEqual(1, m.PyrolysisLossFactor);
             Assert.AreEqual(1f, m.ShieldingScale);
@@ -60,8 +60,13 @@ PART
             CollectionAssert.IsEmpty(m.Notes, "lossExp, lossConst and reentryConductivity go to the summary only");
             CollectionAssert.IsEmpty(m.NotReproduced);
 
-            var quarter = AblatorMapping.From(Module(Shield25), 0.2, Reference, 1);
-            Assert.AreEqual(8e-8 * 0.25, quarter.Rate, 1e-20, "a quarter of the capacity: a quarter of the Rate");
+            // The flux already grows with the shield's area: the Rate is constant per shield, whatever its capacity.
+            foreach (var capacity in new[] { 0.02, 0.05, 0.2, 1.8 })
+            {
+                var other = AblatorMapping.From(Module(Shield25), capacity, Reference, 1);
+                Assert.AreEqual(8e-8, other.Rate, 1e-20, "capacity " + capacity);
+                Assert.AreEqual(capacity, other.Capacity, "logged only");
+            }
         }
 
         [Test] public void HighPyrolysisLossFactor_Burns6000Over145833AsFast()
@@ -99,7 +104,7 @@ PART
 
             var m = AblatorMapping.From(Module(Shield25), 0.4, null, 1);
             Assert.AreSame(NativeShieldRef.Fallback, m.Reference);
-            Assert.AreEqual(NativeShieldRef.FallbackRate * 0.4 / NativeShieldRef.FallbackCapacity, m.Rate, 1e-20);
+            Assert.AreEqual(NativeShieldRef.FallbackRate, m.Rate, 1e-20, "no capacity ratio");
             StringAssert.Contains(", fallback,", m.ValuesNote());
         }
 
@@ -143,16 +148,16 @@ PART
                             "pyrolysisLossFactor 6000, ablator_rate_scale 1), ablation from 500 K, shielding along local -Y", m.ValuesNote());
         }
 
-        [Test] public void Median_PicksTheMiddleShieldByRatePerCapacity_LowerOfAnEvenCount()
+        [Test] public void Median_PicksTheMiddleShieldByRate_LowerOfAnEvenCount()
         {
-            var odd = NativeShieldRef.Median(new[] { (3.0, 1.0), (1.0, 1.0), (4.0, 2.0) }); // ratios 3, 1, 2
-            Assert.AreEqual((4.0, 2.0), (odd.Rate, odd.Capacity));
+            var odd = NativeShieldRef.Median(new[] { (3.0, 1.0), (1.0, 1.0), (4.0, 2.0) }); // by Rate alone: 1, 3, 4
+            Assert.AreEqual((3.0, 1.0), (odd.Rate, odd.Capacity));
             Assert.AreEqual(3, odd.Count);
             Assert.IsFalse(odd.IsFallback);
 
-            var even = NativeShieldRef.Median(new[] { (3.0, 1.0), (1.0, 1.0), (4.0, 2.0), (8.0, 2.0) }); // 3, 1, 2, 4
-            Assert.AreEqual((4.0, 2.0), (even.Rate, even.Capacity));
-            CollectionAssert.AreEqual(new[] { (1.0, 1.0), (4.0, 2.0), (3.0, 1.0), (8.0, 2.0) }, even.Shields);
+            var even = NativeShieldRef.Median(new[] { (3.0, 1.0), (1.0, 1.0), (4.0, 2.0), (8.0, 2.0) }); // 1, 3, 4, 8
+            Assert.AreEqual((3.0, 1.0), (even.Rate, even.Capacity));
+            CollectionAssert.AreEqual(new[] { (1.0, 1.0), (3.0, 1.0), (4.0, 2.0), (8.0, 2.0) }, even.Shields);
         }
 
         [Test] public void Lines_AreExact()

@@ -10,9 +10,10 @@ namespace KSP1PartMod.Native
     /// <item><c>ablativeResource</c> (default <c>Ablator</c>) → the resource, through the injected mapper (Redux's
     /// <c>Ksp1ResourceMapper.MapResourceName</c> in game);</item>
     /// <item><c>ablationTempThresh</c> (default 500 K, S) → <c>AblationTempThreshold</c>;</item>
-    /// <item><c>Rate = reference Rate × (capacity / reference capacity) × (6000 / pyrolysisLossFactor) × ablator_rate_scale</c>:
-    /// a higher <c>pyrolysisLossFactor</c> removes more heat per unit and burns slower, 6000 being the stock KSP1 value.
-    /// The capacity is the part's capacity of that resource in KSP2 units (after Redux's conversion), as the reference's;</item>
+    /// <item><c>Rate = reference Rate × (6000 / pyrolysisLossFactor) × ablator_rate_scale</c>, constant per shield: KSP2's
+    /// shielded flux grows with the part's area and KSP1 capacities grow with area too, so every size lasts about as long
+    /// below the 50 MW compression (S). A higher <c>pyrolysisLossFactor</c> removes more heat per unit and burns slower,
+    /// 6000 being the stock KSP1 value. The capacity (KSP2 units) is only logged;</item>
     /// <item>fixed: <c>PyrolysisLossFactor</c> 1 (folded into the Rate), <c>ShieldingScale</c> 1, <c>ShieldingDirection</c>
     /// local -Y (KSP1 shields face down the stack, S), <c>DisabledWhenRetracted</c> false, <c>UseChar</c> false (the char is
     /// our Color entry), no char material;</item>
@@ -87,7 +88,7 @@ namespace KSP1PartMod.Native
         private readonly List<string> _notes = new List<string>();
 
         /// <param name="module">The KSP1 <c>ModuleAblator</c> node.</param>
-        /// <param name="capacity">The part's capacity of the shield resource, in KSP2 units (above 0).</param>
+        /// <param name="capacity">The part's capacity of the shield resource, in KSP2 units (above 0): logged, not in the Rate.</param>
         /// <param name="reference">The native shield (<see cref="NativeShieldRef.Fallback"/> when null).</param>
         /// <param name="scale"><c>ablator_rate_scale</c>; not finite or not above 0: 1.</param>
         /// <param name="mapResource">KSP1 resource name → KSP2 name; null or a null result keeps the KSP1 name.</param>
@@ -143,7 +144,9 @@ namespace KSP1PartMod.Native
             }
             m.ResourceName = mapResource?.Invoke(m.Ksp1Resource) ?? m.Ksp1Resource;
             var r = m.Reference;
-            m.Rate = r.Rate * (capacity / r.Capacity) * (StockPyrolysisLossFactor / m.Ksp1PyrolysisLossFactor) * m.Scale;
+            // Constant per shield: shielded flux already grows with the shield's area, as KSP1 capacities do, so equal
+            // lifetimes across sizes need no capacity ratio (controller ruling, Task 4 review).
+            m.Rate = r.Rate * (StockPyrolysisLossFactor / m.Ksp1PyrolysisLossFactor) * m.Scale;
             return m;
         }
 
