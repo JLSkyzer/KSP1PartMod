@@ -49,10 +49,20 @@ namespace KSP1PartMod.Game.Audit
         private readonly ObjectAssemblyBuilder _builder;
         private readonly HashSet<string> _available;
 
+        /// <summary>Registry entries by prefab key (<c>&lt;part&gt;.prefab</c>), for Patch Manager remaps to another KSP1
+        /// part's prefab.</summary>
+        private readonly Dictionary<string, Ksp1ImportedPartRegistry.Entry> _byPrefabKey =
+            new Dictionary<string, Ksp1ImportedPartRegistry.Entry>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Paths our spawns loaded fresh into the shared texture cache: the only entries the audit may evict.</summary>
+        public readonly HashSet<string> TextureKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         public AuditSpawner(AuditTargets targets, ObjectAssemblyBuilder builder)
         {
             _targets = targets;
             _builder = builder;
+            foreach (var e in Ksp1ImportedPartRegistry.ImportedParts)
+                if (e?.PartName != null) _byPrefabKey[Ksp1ImportedPartRegistry.GetPrefabKey(e.PartName)] = e;
             _available = new HashSet<string>(StringComparer.Ordinal);
             var parts = builder.Stats?.AvailableParts;
             if (parts != null)
@@ -75,14 +85,25 @@ namespace KSP1PartMod.Game.Audit
             }
         }
 
-        /// <summary>The asset address the VAB would load, when the part does not come from the KSP1 registry under its own
-        /// key (a control part, or a Patch Manager remap): the caller loads it and waits. Null for a registry prefab.</summary>
+        /// <summary>The asset address the VAB would load, when it is not a KSP1 registry prefab (a control part, or a Patch
+        /// Manager remap to a non-KSP1 asset): the caller loads it and waits. Null when the registry builds the prefab
+        /// (<see cref="RegistryKey"/>), inside the spawn and its log capture.</summary>
         public string AsyncAddress(PartCore core, bool isControl)
+        {
+            var address = _targets.PrefabAddress(core.data.partName);
+            if (isControl) return address;
+            return RegistryKey(core) != null ? null : address;
+        }
+
+        /// <summary>The registry key of the prefab the VAB would get: the part's own key, or the key a Patch Manager
+        /// remap points to when that is another KSP1 part (the asset system would call the same
+        /// <c>TryGetPrefab</c>). Null otherwise.</summary>
+        public string RegistryKey(PartCore core)
         {
             var name = core.data.partName;
             var address = _targets.PrefabAddress(name);
-            if (isControl) return address;
-            return string.Equals(address, Ksp1ImportedPartRegistry.GetPrefabKey(name), StringComparison.Ordinal) ? null : address;
+            if (string.Equals(address, Ksp1ImportedPartRegistry.GetPrefabKey(name), StringComparison.Ordinal)) return address;
+            return address != null && _byPrefabKey.ContainsKey(address) ? address : null;
         }
 
         /// <summary>One part, start to end, in this frame. <paramref name="loadedPrefab"/> is the prefab the caller loaded
@@ -104,10 +125,13 @@ namespace KSP1PartMod.Game.Audit
             Exception error = null;
             GameObject prefab = null, template = null, createdTemplate = null, root = null;
             var rebuilt = false;
+            string key = null;
+            Ksp1ImportedPartRegistry.Entry source = entry;
             ObjectAssemblyPart part = null;
             var clock = Stopwatch.StartNew();
             capture.Attach();
             AuditProbe.Begin();
+            Ksp1Textures.RecordFreshLoads(TextureKeys);
             try
             {
                 try
@@ -117,11 +141,13 @@ namespace KSP1PartMod.Game.Audit
                     {
                         template = null;
                         if (loadedPrefab != null) prefab = loadedPrefab;
-                        else if (!isControl && entry != null && loadError == null)
+                        else if (!isControl && loadError == null && (key = RegistryKey(core)) != null)
                         {
-                            var wasReleased = entry.Prefab == null;
-                            Ksp1ImportedPartRegistry.TryGetPrefab(Ksp1ImportedPartRegistry.GetPrefabKey(name), out prefab);
-                            rebuilt = wasReleased && prefab != null;
+                            // A remap to another KSP1 part: that part's entry holds the prefab we may rebuild.
+                            if (!_byPrefabKey.TryGetValue(key, out source)) source = entry;
+                            var wasReleased = source == null || source.Prefab == null;
+                            Ksp1ImportedPartRegistry.TryGetPrefab(key, out prefab);
+                            rebuilt = wasReleased && source != null && prefab != null;
                         }
                         if (prefab == null)
                         {
@@ -192,10 +218,11 @@ namespace KSP1PartMod.Game.Audit
             {
                 try
                 {
-                    Dispose(name, root, createdTemplate, template, rebuilt ? prefab : null, entry, rec);
+                    Dispose(name, root, createdTemplate, template, rebuilt ? prefab : null, source, rec);
                 }
                 finally
                 {
+                    Ksp1Textures.RecordFreshLoads(null);
                     rec.ModFixes = AuditProbe.End();
                     capture.Detach();
                 }

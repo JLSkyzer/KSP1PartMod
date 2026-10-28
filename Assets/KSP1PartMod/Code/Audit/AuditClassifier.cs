@@ -12,6 +12,8 @@ namespace KSP1PartMod.Audit
         public bool NoPrefab;
         public bool TemplateFailed;
         public bool CrashedPreviousRun;
+        /// <summary>The audit's own code failed on this part.</summary>
+        public bool HarnessFault;
         public IReadOnlyList<string> UninitializedModules;
         public int ImportWarnings;
         public int ImportErrors;
@@ -22,13 +24,15 @@ namespace KSP1PartMod.Audit
 
     public static class AuditClassifier
     {
-        /// <summary>Observations to kinds. A part skipped after a crash gives only <see cref="AuditKind.CrashedPreviousRun"/>.
+        /// <summary>Observations to kinds. A part skipped after a crash gives only <see cref="AuditKind.CrashedPreviousRun"/>, a harness fault only
+        /// <see cref="AuditKind.HarnessFault"/>.
         /// With no prefab, or a failed template step, nothing was finalized, so the finalize kinds are left out. An exception with <c>IsFinalized</c>
         /// gives <c>Threw</c> only.</summary>
         public static AuditKind Kinds(AuditObservations o)
         {
             if (o == null) return AuditKind.None;
             if (o.CrashedPreviousRun) return AuditKind.CrashedPreviousRun;
+            if (o.HarnessFault) return AuditKind.HarnessFault;
             var k = AuditKind.None;
             if (o.Threw) k |= AuditKind.Threw;
             if (o.NoPrefab) k |= AuditKind.NoPrefab;

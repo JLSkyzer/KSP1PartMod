@@ -127,6 +127,7 @@ namespace KSP1PartMod.Audit
         /// template step for <c>NoPrefab</c>/<c>TemplateFailed</c>, else <c>FinalizeLoad</c>).</summary>
         internal static string FailingStep(AuditRecord r)
         {
+            if ((r.Kinds & AuditKind.HarnessFault) != 0) return "the audit harness";
             if (!string.IsNullOrEmpty(r.FailingModule)) return r.FailingModule;
             if ((r.Kinds & AuditKind.NoPrefab) != 0) return "the prefab build";
             if ((r.Kinds & AuditKind.TemplateFailed) != 0) return "the template step";

@@ -32,6 +32,8 @@ namespace KSP1PartMod.Audit
         ErrorShader = 1 << 10,
         /// <summary>The previous run stopped during this part; it was skipped.</summary>
         CrashedPreviousRun = 1 << 11,
+        /// <summary>The audit harness itself failed on this part (not a game failure); the part was not judged.</summary>
+        HarnessFault = 1 << 12,
     }
 
     /// <summary>Names of the kinds, as written in logs and reports.</summary>
@@ -43,6 +45,7 @@ namespace KSP1PartMod.Audit
             AuditKind.Threw, AuditKind.NotFinalized, AuditKind.PlaceholderLeft, AuditKind.ModuleNotInitialized,
             AuditKind.NoPrefab, AuditKind.TemplateFailed, AuditKind.ImportWarning, AuditKind.ImportError,
             AuditKind.LoggedError, AuditKind.MaterialLess, AuditKind.ErrorShader, AuditKind.CrashedPreviousRun,
+            AuditKind.HarnessFault,
         };
 
         /// <summary>The snake_case name of one flag.</summary>
@@ -62,6 +65,7 @@ namespace KSP1PartMod.Audit
                 case AuditKind.MaterialLess: return "material_less";
                 case AuditKind.ErrorShader: return "error_shader";
                 case AuditKind.CrashedPreviousRun: return "crashed_previous_run";
+                case AuditKind.HarnessFault: return "harness_fault";
                 default: return single.ToString();
             }
         }

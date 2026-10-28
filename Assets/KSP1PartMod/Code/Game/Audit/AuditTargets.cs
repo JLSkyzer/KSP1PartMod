@@ -25,7 +25,8 @@ namespace KSP1PartMod.Game.Audit
         public MethodInfo ApplyOnGameObjectMethod;   // PartModuleLoadPatcher.ApplyOnGameObject(ref GameObject, PartData, bool), internal
         public MethodInfo HotswapPartShadersMethod;  // ShaderUtils.HotswapPartShaders(GameObject)
         public MethodInfo AssetsLoadMethod;    // AssetProvider.Load<GameObject>(string, Action<GameObject>, bool), the VAB's load
-        public MethodInfo DestroyPrefabGraphMethod;  // Ksp1ImportedPartRegistry.DestroyPrefabGraph(GameObject, bool), private
+        public MethodInfo DestroyPrefabGraphMethod;
+        public FieldInfo MessageSubscriptions; // MessageCenter._subscriptions (Dictionary<Type, List<SubscriptionHandle>>), for the leak check  // Ksp1ImportedPartRegistry.DestroyPrefabGraph(GameObject, bool), private
 
         /// <summary>Every target, or null with the missing ones named (comma-separated).</summary>
         public static AuditTargets Resolve(out string missing)
@@ -110,6 +111,10 @@ namespace KSP1PartMod.Game.Audit
             Property(entry, "PartName", typeof(string), miss);
 
             Property(typeof(PartBehaviourModule), "IsInitialized", typeof(bool), miss);
+            Property(typeof(ObjectAssemblyBuilder), "ActiveBuilderVariant", typeof(OABVariant), miss);
+            t.MessageSubscriptions = AccessTools.Field(typeof(KSP.Messages.MessageCenter), "_subscriptions");
+            if (t.MessageSubscriptions == null || !typeof(System.Collections.IDictionary).IsAssignableFrom(t.MessageSubscriptions.FieldType))
+                miss.Add("MessageCenter._subscriptions");
 
             missing = string.Join(", ", miss);
             return miss.Count == 0 ? t : null;

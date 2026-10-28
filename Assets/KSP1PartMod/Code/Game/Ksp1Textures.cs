@@ -235,7 +235,11 @@ namespace KSP1PartMod.Game
                     return;
                 }
                 _fresh++;
-                if (path != null && SharingActive) UsageByPath[path] = _pendingClass;
+                if (path != null && SharingActive)
+                {
+                    UsageByPath[path] = _pendingClass;
+                    _recorded?.Add(path);
+                }
                 if (_followQuality) FollowQuality(__result);
             }
             catch (Exception e)
@@ -353,6 +357,13 @@ namespace KSP1PartMod.Game
             }
             return removed;
         }
+
+        // Paths freshly loaded into the shared cache while the audit records (its own spawns only).
+        private static HashSet<string> _recorded;
+
+        /// <summary>Starts (or stops, with null) recording the paths that fresh loads add to the shared cache. The audit
+        /// records only around its own spawn, so the player's VAB loads are never evicted.</summary>
+        internal static void RecordFreshLoads(HashSet<string> into) => _recorded = into;
 
         /// <summary>The memory and cache lines (<c>textures: memory at &lt;when&gt;</c>), for the audit's progress.</summary>
         internal static void ReportAt(string when) => Report(when);

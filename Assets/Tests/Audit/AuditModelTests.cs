@@ -442,6 +442,15 @@ namespace KSP1PartMod.Tests.Audit
             Assert.AreEqual("Module_X", StackModuleLocator.FailingModule(new[] { F("PartBehaviourModule", true, "Init"), F("Module_X", true, "OnInitialize") }));
         }
 
+        [Test] public void Classifier_HarnessFault_IsAlone()
+        {
+            var o = new AuditObservations { HarnessFault = true, Threw = true, NoPrefab = true };
+            Assert.AreEqual(AuditKind.HarnessFault, AuditClassifier.Kinds(o));
+            Assert.AreEqual("harness_fault", AuditKinds.Name(AuditKind.HarnessFault));
+            Assert.AreEqual(AuditKind.HarnessFault, AuditKinds.All[AuditKinds.All.Count - 1]);
+            Assert.AreEqual(1 << 12, (int)AuditKind.HarnessFault);
+        }
+
         // ---- Texture eviction ----
         [Test] public void Eviction_KeysAddedSinceStart_IgnoreCase()
         {
