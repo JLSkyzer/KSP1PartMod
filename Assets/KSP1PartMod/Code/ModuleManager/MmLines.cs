@@ -47,7 +47,8 @@ namespace KSP1PartMod.ModuleManager
             $"{Prefix}index: {c.IndexValueEdits} value edit(s), {c.IndexNodeEdits} node edit(s), {c.IndexOutOfRange} out of range";
 
         public static string UnindexedMultiMatch(int count, bool firstMatch) =>
-            $"{Prefix}unindexed edits that matched more than one value/node: {count} (first-match edits {OnOff(firstMatch)})";
+            $"{Prefix}unindexed edits that matched more than one value/node: {count} (first-match edits {OnOff(firstMatch)}; " +
+            "counted only in the patches KSP1PartMod applies, those with an operator or an index)";
 
         public static string Variables(int count) =>
             $"{Prefix}{count} value(s) with #$ variables left as text (not supported yet)";

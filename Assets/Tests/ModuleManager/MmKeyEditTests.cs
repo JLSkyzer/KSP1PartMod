@@ -179,5 +179,39 @@ namespace KSP1PartMod.Tests.ModuleManager
                 if (any) throw new System.Exception("unexpected");
             }, Is.Not.AllocatingGCMemory());
         }
+
+        [TestCase("@mass *", MmCommand.Edit, "mass *")]
+        [TestCase("@mass,0 *", MmCommand.Edit, "mass")]
+        [TestCase("@volume,1", MmCommand.Edit, "volume")]
+        [TestCase("%cost +", MmCommand.CreateOrEdit, "cost +")]
+        [TestCase("!key,2", MmCommand.Delete, "key")]
+        [TestCase("@node_stack_top[1,,] *", MmCommand.Edit, "node_stack_top")]
+        [TestCase("mass", MmCommand.None, "mass")]
+        public void AsRedux_ReadsTheLineAsRedux(string name, MmCommand command, string key)
+        {
+            var e = MmKeyEdit.AsRedux(name, "2");
+            Assert.AreEqual(command, e.Command);
+            Assert.AreEqual(key, e.Key);
+            Assert.AreEqual(MmIndexKind.None, e.Index.Kind);
+            Assert.AreEqual(MmOperator.None, e.Operator);
+            Assert.IsTrue(e.PassedBack);
+            Assert.IsFalse(e.IsOurs);
+            Assert.IsFalse(e.SkippedVectorEdit);
+            Assert.AreEqual("2", e.Value);
+        }
+
+        [Test] public void AsRedux_AppliedGivesReduxsResult()
+        {
+            var values = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, string>>
+            {
+                new System.Collections.Generic.KeyValuePair<string, string>("mass", "1"),
+                new System.Collections.Generic.KeyValuePair<string, string>("mass", "3"),
+            };
+            var c = new MmCounters();
+            Assert.IsFalse(MmValueEditor.Apply(values, MmKeyEdit.AsRedux("@mass *", "2"), true, c), "base 'mass *' matches nothing");
+            Assert.IsTrue(MmValueEditor.Apply(values, MmKeyEdit.AsRedux("@mass,0 *", "2"), true, c), "Redux edits every mass");
+            CollectionAssert.AreEqual(new[] { "2", "2" }, System.Linq.Enumerable.Select(values, v => v.Value));
+            Assert.AreEqual(0, c.ArithmeticApplied);
+        }
     }
 }

@@ -114,6 +114,19 @@ namespace KSP1PartMod.ModuleManager
                 bracketOperator);
         }
 
+        /// <summary>The line as Redux reads it, for a line whose feature is switched off: command from the first character,
+        /// <see cref="Key"/> = <see cref="ReduxBaseName"/>, no index, no operator, never skipped. Applied by
+        /// <see cref="MmValueEditor"/>, it gives Redux's plain result (<c>@mass *</c> edits nothing,
+        /// <c>@mass,0 *</c> writes the operand over every <c>mass</c>).</summary>
+        public static MmKeyEdit AsRedux(string rawName, string rawValue)
+        {
+            var name = (rawName ?? "").Trim();
+            var command = name.Length > 0 ? CommandOf(name[0]) : MmCommand.None;
+            var rest = command == MmCommand.None ? name : name.Substring(1).Trim();
+            return new MmKeyEdit(command, ReduxBaseName(rest), MmIndex.None, MmOperator.None, rawValue, true,
+                rest.IndexOf('[') >= 0 || rest.IndexOf(']') >= 0);
+        }
+
         /// <summary>The operator character ending the name, unless it is the <c>*</c> of a <c>,*</c> index.</summary>
         private static MmOperator TrailingOperator(string rest)
         {

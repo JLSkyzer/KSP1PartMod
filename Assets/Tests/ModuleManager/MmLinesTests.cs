@@ -56,7 +56,8 @@ namespace KSP1PartMod.Tests.ModuleManager
         }
 
         [Test] public void UnindexedMultiMatch() =>
-            Assert.AreEqual("[KSP1PartMod] mm: unindexed edits that matched more than one value/node: 42 (first-match edits off)",
+            Assert.AreEqual("[KSP1PartMod] mm: unindexed edits that matched more than one value/node: 42 (first-match edits off; " +
+                "counted only in the patches KSP1PartMod applies, those with an operator or an index)",
                 MmLines.UnindexedMultiMatch(42, false));
 
         [Test] public void Variables() =>

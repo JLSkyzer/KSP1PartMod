@@ -45,6 +45,15 @@ namespace KSP1PartMod
             // First: nothing about animations may cost the tech-tree placement.
             TechTreeLoadStep.Register();
             Animations = ReadAnimationSettings();
+            try
+            {
+                // Before Redux's import (which finalizes the cfgs) and before every other import patch.
+                MmPatches.TryApply(new Harmony(MmPatches.HarmonyId), MmPatches.Switches.From(Animations));
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.ModuleManager.MmLines.PatchFailed(e.ToString()));
+            }
             Log.LogInfo("[KSP1PartMod] anim: VAB animation speed: " + EditorSpeed.Describe(Animations.EditorAnimationSpeed) +
                 $" (editor_animation_speed {Animations.EditorAnimationSpeed.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
             ApplyMuReaderFix(Animations);
