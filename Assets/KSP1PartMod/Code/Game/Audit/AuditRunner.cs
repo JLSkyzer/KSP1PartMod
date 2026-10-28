@@ -343,6 +343,7 @@ namespace KSP1PartMod.Game.Audit
             log.LogInfo(summary.ByModuleLine());
             log.LogInfo(summary.SlowestLine());
             log.LogInfo(summary.PodsLine());
+            log.LogInfo(summary.ShroudsLine());
             WriteMarkdown(summary);
             run.Close();
             _run = null;

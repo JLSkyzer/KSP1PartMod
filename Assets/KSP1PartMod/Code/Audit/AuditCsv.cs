@@ -17,7 +17,7 @@ namespace KSP1PartMod.Audit
             "exception_type", "exception_message", "failing_module", "stack",
             "uninitialized_modules", "import_warnings", "import_warning_samples", "import_errors",
             "logged_errors", "logged_error_samples", "materialless", "materialless_hidden", "error_shader",
-            "crew", "has_command", "command_initialized", "engines", "mod_fixes",
+            "crew", "has_command", "command_initialized", "engines", "mod_fixes", "redux_fairing",
         };
 
         public static string Header() => string.Join(",", Columns);
@@ -32,6 +32,7 @@ namespace KSP1PartMod.Audit
                 Join(r.UninitializedModules, ";"), Int(r.ImportWarnings), Join(r.ImportWarningSamples, " || "), Int(r.ImportErrors),
                 Int(r.LoggedErrors), Join(r.LoggedErrorSamples, " || "), Int(r.Materialless), Int(r.MateriallessHidden), Int(r.ErrorShader),
                 Int(r.Crew), Bool(r.HasCommand), Bool(r.CommandInitialized), Int(r.Engines), Join(r.ModFixes, ";"),
+                Bool(r.ReduxFairing),
             };
             var sb = new StringBuilder();
             for (int i = 0; i < cells.Length; i++)

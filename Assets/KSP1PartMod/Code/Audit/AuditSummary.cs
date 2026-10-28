@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using KSP1PartMod.Animation.Runtime;
 
 namespace KSP1PartMod.Audit
 {
@@ -46,6 +47,12 @@ namespace KSP1PartMod.Audit
         public int PodsWithCommand { get; private set; }
         public IReadOnlyList<string> PodsWithEngine { get; private set; }
         public int PodsCommandInitialized { get; private set; }
+        /// <summary>Parts whose <c>mod_fixes</c> say <c>shroud_kept</c>, <c>shroud_missing</c>, <c>shroud_no_node</c>, and parts
+        /// with <see cref="AuditRecord.ReduxFairing"/> (engine shrouds, 0.7.0).</summary>
+        public int ShroudsKept { get; private set; }
+        public int ShroudsMissing { get; private set; }
+        public int ShroudsNoNode { get; private set; }
+        public int ReduxFairings { get; private set; }
 
         public static AuditSummary From(IEnumerable<AuditRecord> records, double elapsedSeconds)
         {
@@ -83,6 +90,11 @@ namespace KSP1PartMod.Audit
             s.PodsWithEngine = pods.Where(r => r.Engines > 0).Select(r => r.Part).OrderBy(n => n, StringComparer.Ordinal).ToList();
             s.PodsCommandInitialized = pods.Count(r => r.Engines > 0 && r.CommandInitialized);
 
+            s.ShroudsKept = parts.Count(r => HasFix(r, "shroud_kept"));
+            s.ShroudsMissing = parts.Count(r => HasFix(r, "shroud_missing"));
+            s.ShroudsNoNode = parts.Count(r => HasFix(r, "shroud_no_node"));
+            s.ReduxFairings = parts.Count(r => r.ReduxFairing);
+
             s.Controls = all.Where(r => r.Control).ToList();
             s.FailedControls = s.Controls.Where(r => AuditClassifier.IsProblem(r.Kinds)).ToList();
             return s;
@@ -113,6 +125,8 @@ namespace KSP1PartMod.Audit
             $"audit: pods: {PodsWithCommand} command part(s) with crew, {PodsWithEngine.Count} with an engine" +
             (PodsWithEngine.Count > 0 ? $" ({string.Join(", ", PodsWithEngine.Take(PodNamesShown))})" : "") +
             $", {PodsCommandInitialized} of those with Module_Command initialized";
+
+        public string ShroudsLine() => ShroudLines.AuditSummary(ShroudsKept, ShroudsMissing, ShroudsNoNode, ReduxFairings);
 
         /// <summary>One line per part with a kind other than <see cref="AuditKind.ImportWarning"/>.</summary>
         public static string PartLine(AuditRecord r)
@@ -171,6 +185,8 @@ namespace KSP1PartMod.Audit
             if (PodsWithEngine.Count > 0) sb.Append(" (").Append(string.Join(", ", PodsWithEngine.Take(PodNamesShown))).Append(')');
             sb.Append($"\n- of those with Module_Command initialized: {PodsCommandInitialized}\n");
 
+            sb.Append("\n## Shrouds\n\n").Append(ShroudsLine()).Append('\n');
+
             sb.Append("\n## Controls\n\n");
             if (Controls.Count == 0) sb.Append("No control part was audited.\n");
             else if (FailedControls.Count == 0) sb.Append($"All {Controls.Count} control part(s) are clean.\n");
@@ -183,6 +199,8 @@ namespace KSP1PartMod.Audit
         }
 
         // ---- helpers ----
+
+        private static bool HasFix(AuditRecord r, string fix) => r.ModFixes != null && r.ModFixes.Contains(fix);
 
         /// <summary>Whole seconds, with one decimal under 10 s (a short run would otherwise read "0 s").</summary>
         internal static string Seconds(double s) => s.ToString(s < 10 ? "0.0" : "0", CultureInfo.InvariantCulture);

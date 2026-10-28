@@ -76,6 +76,7 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         [TestCase(EntryKind.LandingBag, true)]
         [TestCase(EntryKind.AccelSpring, true)]
         [TestCase(EntryKind.EngineMode, false)]
+        [TestCase(EntryKind.Shroud, false)]
         public void HasAction_PerKind(EntryKind kind, bool expected) => Assert.AreEqual(expected, ControlLabels.HasAction(kind));
 
         [TestCase(EntryKind.EngineDeploy, true)]
@@ -86,6 +87,7 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         [TestCase(EntryKind.EngineMode, false)]
         [TestCase(EntryKind.LookAt, false)]
         [TestCase(EntryKind.RcsGlow, false)]
+        [TestCase(EntryKind.Shroud, true)]
         public void HasButton_PluginKinds(EntryKind kind, bool expected)
         {
             Assert.AreEqual(expected, ControlLabels.HasButton(kind));
@@ -125,6 +127,20 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         [TestCase(false, true, false)]
         public void Allowed_EngineDeploy_EditorPreviewOnlyWithEditorToggle(bool inEditor, bool editorToggle, bool expected) =>
             Assert.AreEqual(expected, ControlLabels.Allowed(new AnimEntryDef { Kind = EntryKind.EngineDeploy, EditorToggle = editorToggle }, inEditor));
+
+        [TestCase(true, true, true)]
+        [TestCase(true, false, false)]
+        [TestCase(false, true, false)]
+        public void Allowed_Shroud_EditorOnlyWithAllowShroudToggle(bool inEditor, bool allow, bool expected) =>
+            Assert.AreEqual(expected, ControlLabels.Allowed(new AnimEntryDef { Kind = EntryKind.Shroud, AllowShroudToggle = allow }, inEditor));
+
+        [Test] public void Button_Shroud_NamesTheNextAction()
+        {
+            var e = new AnimEntryDef { Kind = EntryKind.Shroud, StartLabel = "ignored" };
+            Assert.AreEqual("Hide shroud", ControlLabels.Button(e, on: false), "override off: the shroud may show");
+            Assert.AreEqual("Show shroud", ControlLabels.Button(e, on: true));
+            Assert.IsTrue(ControlLabels.EditorOnly(EntryKind.Shroud));
+        }
 
         [TestCase(true, true)]
         [TestCase(false, false)]

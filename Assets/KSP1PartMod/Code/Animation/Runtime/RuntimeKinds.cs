@@ -25,6 +25,7 @@ namespace KSP1PartMod.Animation.Runtime
                 case EntryKind.RcsEmissive:
                 case EntryKind.MeshHider:
                 case EntryKind.LookAt:
+                case EntryKind.Shroud:
                     return true;
                 default:
                     return false;

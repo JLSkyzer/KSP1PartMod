@@ -475,5 +475,37 @@ namespace KSP1PartMod.Tests.Audit
             Assert.AreEqual(0, AuditTextureEviction.KeysToEvict(new[] { "a" }, new[] { "a" }).Count);
             CollectionAssert.AreEqual(new[] { "x" }, AuditTextureEviction.KeysToEvict(null, new[] { "x" }));
         }
+
+        // ---- engine shrouds (0.7.0) ----
+
+        [Test] public void Csv_ReduxFairing_IsTheLastColumn()
+        {
+            var cols = AuditCsv.Columns.ToList();
+            Assert.AreEqual("redux_fairing", cols[cols.Count - 1]);
+            var r = Rec("a"); r.ReduxFairing = true;
+            var rows = ReadCsv(AuditCsv.Document(new[] { r, Rec("b") }));
+            Assert.AreEqual("true", rows[1][cols.IndexOf("redux_fairing")]);
+            Assert.AreEqual("false", rows[2][cols.IndexOf("redux_fairing")]);
+            Assert.AreEqual(cols.IndexOf("mod_fixes") + 1, cols.IndexOf("redux_fairing"), "no older column moves");
+        }
+
+        [Test] public void Summary_ShroudsLine_CountsNotesAndFairings()
+        {
+            var kept = Rec("kept"); kept.ModFixes = new[] { "shroud_kept" };
+            var partial = Rec("partial"); partial.ModFixes = new[] { "fairing", "shroud_kept", "shroud_missing" };
+            var lost = Rec("lost"); lost.ModFixes = new[] { "shroud_missing", "shroud_no_node" };
+            var legacy = Rec("legacy"); legacy.ReduxFairing = true;
+            var control = Rec("ctrl"); control.Control = true; control.ReduxFairing = true; control.ModFixes = new[] { "shroud_kept" };
+            var s = AuditSummary.From(new[] { kept, partial, lost, legacy, control, Rec("plain") }, 1);
+            Assert.AreEqual("audit: shrouds: 2 part(s) with a KSP1 shroud kept, 2 with a shroud transform missing, 1 without the node, " +
+                            "1 still carrying Redux's Module_Fairing", s.ShroudsLine());
+            StringAssert.Contains("## Shrouds\n\n" + s.ShroudsLine() + "\n", s.Markdown("x"));
+        }
+
+        [Test] public void Summary_ShroudsLine_Empty()
+        {
+            Assert.AreEqual("audit: shrouds: 0 part(s) with a KSP1 shroud kept, 0 with a shroud transform missing, 0 without the node, " +
+                            "0 still carrying Redux's Module_Fairing", AuditSummary.From(new AuditRecord[0], 0).ShroudsLine());
+        }
     }
 }

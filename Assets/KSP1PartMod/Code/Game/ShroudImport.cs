@@ -5,6 +5,7 @@ using System.Reflection;
 using HarmonyLib;
 using KSP.Sim.Definitions;
 using KSP.Sim.impl;
+using KSP1PartMod.Animation.Behaviours;
 using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.Settings;
@@ -23,7 +24,8 @@ namespace KSP1PartMod.Game
     /// shroud roots of the prefab, after Redux's node-size and drag-cube steps;</item>
     /// <item>a postfix on <c>PartBehavior.ActivateAllModules</c> tells our module that its part was staged.</item>
     /// </list>
-    /// Only <c>GameObject.activeSelf</c> is written, never a material or texture. Every member is resolved by name; the
+    /// Only <c>GameObject.activeSelf</c> and <c>Renderer.enabled</c> of the shroud renderers are written (Redux's reentry hull
+    /// takes every enabled renderer, inactive ones too), never a material or texture. Every member is resolved by name; the
     /// two import patches are armed together or not at all. Never throws into the game: after one failure the import
     /// patches stop for the session (Redux's own behaviour, kept quiet by <c>fix_fairing_init</c>), with one log line.
     /// Session-wide: armed at pre-initialization, before Redux's import.</summary>
@@ -91,8 +93,9 @@ namespace KSP1PartMod.Game
             return t;
         }
 
-        /// <summary>The import patches are armed (Redux adds no <c>Module_Fairing</c> to KSP1 parts this session).</summary>
-        internal static bool IsArmed { get; private set; }
+        /// <summary>The import patches are armed and have not failed (Redux adds no <c>Module_Fairing</c> to KSP1 parts this
+        /// session, and every prefab built so far hides its shrouds). The runtime plans shroud entries only then.</summary>
+        internal static bool IsArmed => _armed && !_broken;
 
         /// <summary>Staging reaches <see cref="Module_Ksp1Animations.OnPartStaged"/> through <c>ActivateAllModules</c>;
         /// when false, the runtime uses the first engine ignition instead.</summary>
@@ -100,7 +103,9 @@ namespace KSP1PartMod.Game
 
         private static Func<Ksp1ConfigNode, IEnumerable<string>> _shroudNames;
         private static readonly Tally Counts = new Tally();
-        private static bool _broken, _stagingBroken, _summaryLogged;
+        private static bool _armed, _broken, _stagingBroken, _summaryLogged;
+        /// <summary>By part name: the paths (<see cref="RendererPath"/>) of the shroud renderers the prefab postfix disabled.</summary>
+        private static readonly Dictionary<string, HashSet<string>> OwnedRenderers = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
 
         public static void TryApply(Harmony harmony, ShroudArming arming)
         {
@@ -128,13 +133,13 @@ namespace KSP1PartMod.Game
             {
                 harmony.Patch(targets.AddFairingModule, prefix: new HarmonyMethod(typeof(ShroudImport), nameof(BeforeAddFairingModule)));
                 harmony.Patch(targets.BuildConfiguredPrefab, postfix: new HarmonyMethod(typeof(ShroudImport), nameof(AfterBuildConfiguredPrefab)));
-                IsArmed = true;
+                _armed = true;
             }
             catch (Exception e)
             {
                 // Never one half without the other.
                 harmony.UnpatchAll(HarmonyId);
-                IsArmed = false;
+                _armed = false;
                 log.LogError(ShroudLines.PatchFailed(e.ToString()));
                 return;
             }
@@ -161,7 +166,7 @@ namespace KSP1PartMod.Game
         /// <summary>Once per session, from the animation load step (the import is over by then).</summary>
         public static void LogImportSummaryOnce()
         {
-            if (!IsArmed || _summaryLogged) return;
+            if (!_armed || _summaryLogged) return;
             _summaryLogged = true;
             KSP1PartModPlugin.Log?.LogInfo(ShroudLines.ImportSummary(Counts.Kept, Counts.WithMissing, Counts.Rebuilds));
         }
@@ -194,7 +199,9 @@ namespace KSP1PartMod.Game
                 var names = ShroudParser.ConvertibleNames(Ksp1NodeAdapter.Modules(__1));
                 if (names.Count == 0) return;
                 var part = __4 ?? __1.GetValue("name") ?? "?";
-                var hidden = HideRoots(__result, names, out var missing);
+                var owned = new HashSet<string>(StringComparer.Ordinal);
+                var hidden = HideRoots(__result, names, out var missing, owned);
+                OwnedRenderers[part] = owned; // a rebuild gives the same paths
                 if (!Counts.Built(part, missing.Count > 0)) return; // a rebuild: counted, silent
                 if (hidden > 0) KSP1PartModPlugin.Log?.LogInfo(ShroudLines.HiddenInPrefab(part, hidden));
                 if (missing.Count > 0) KSP1PartModPlugin.Log?.LogWarning(ShroudLines.NotFoundInModel(part, missing));
@@ -205,27 +212,71 @@ namespace KSP1PartMod.Game
             }
         }
 
+        /// <summary>The paths of the shroud renderers the prefab of <paramref name="part"/> disabled, or null when no prefab of
+        /// that name went through the postfix this session.</summary>
+        internal static IReadOnlyCollection<string> OwnedRendererPaths(string part) =>
+            part != null && OwnedRenderers.TryGetValue(part, out var paths) ? paths : null;
+
         /// <summary><c>SetActive(false)</c> on the outermost transforms under <paramref name="prefab"/> (never the prefab
-        /// itself) whose name is one of <paramref name="names"/>, compared ignoring case as Redux does.</summary>
+        /// itself) whose name is one of <paramref name="names"/>, compared ignoring case as Redux does. With
+        /// <paramref name="ownedRenderers"/>, the renderers under those roots that the shroud owns
+        /// (<see cref="ShroudRule.OwnsRenderer"/>) are also disabled, and their paths added.</summary>
         /// <returns>The number of transforms hidden.</returns>
         /// <param name="missing">The names matched by no transform, in their order.</param>
-        internal static int HideRoots(GameObject prefab, ICollection<string> names, out List<string> missing)
+        internal static int HideRoots(GameObject prefab, ICollection<string> names, out List<string> missing,
+            ICollection<string> ownedRenderers = null)
+        {
+            var roots = FindRoots(prefab.transform, names, out missing);
+            foreach (var root in roots)
+            {
+                root.gameObject.SetActive(false);
+                if (ownedRenderers == null) continue;
+                foreach (var r in root.GetComponentsInChildren<Renderer>(true))
+                {
+                    if (!Owns(r)) continue;
+                    r.enabled = false;
+                    ownedRenderers.Add(RendererPath(root, r.transform));
+                }
+            }
+            return roots.Count;
+        }
+
+        /// <summary>The outermost transforms under <paramref name="partRoot"/> (never itself) whose name is one of
+        /// <paramref name="names"/>, ignoring case; two siblings that share a name are both roots.</summary>
+        internal static List<Transform> FindRoots(Transform partRoot, ICollection<string> names, out List<string> missing)
         {
             var nameSet = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
             var matches = new List<(string path, Transform transform)>();
             var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            Collect(prefab.transform, "", nameSet, matches, found);
+            Collect(partRoot, "", nameSet, matches, found);
             missing = names.Where(n => !found.Contains(n)).ToList();
             var roots = new HashSet<string>(ShroudImportRule.RootsToHide(names, matches.Select(m => m.path)), StringComparer.Ordinal);
-            var hidden = 0;
-            foreach (var (path, transform) in matches)
+            return matches.Where(m => roots.Contains(m.path)).Select(m => m.transform).ToList();
+        }
+
+        /// <summary><see cref="ShroudRule.OwnsRenderer"/> on a live renderer (its material slots are read, never written).</summary>
+        internal static bool Owns(Renderer r)
+        {
+            if (r == null) return false;
+            var slots = r.sharedMaterials;
+            var nulls = 0;
+            for (var i = 0; i < slots.Length; i++)
+                if (slots[i] == null) nulls++;
+            return ShroudRule.OwnsRenderer(r is ParticleSystemRenderer, r.enabled, slots.Length, nulls);
+        }
+
+        /// <summary>The shroud root's name, then the names down to <paramref name="t"/>, joined by <c>/</c>: the same on the
+        /// prefab and on its clones.</summary>
+        internal static string RendererPath(Transform root, Transform t)
+        {
+            var path = t.name;
+            for (var p = t; p != root && p.parent != null; )
             {
-                if (!roots.Contains(path)) continue;
-                // Two siblings may share a name, hence a path: both are roots.
-                transform.gameObject.SetActive(false);
-                hidden++;
+                p = p.parent;
+                path = p.name + "/" + path;
+                if (p == root) break;
             }
-            return hidden;
+            return path;
         }
 
         private static void Collect(Transform parent, string prefix, HashSet<string> names, List<(string, Transform)> matches, HashSet<string> found)

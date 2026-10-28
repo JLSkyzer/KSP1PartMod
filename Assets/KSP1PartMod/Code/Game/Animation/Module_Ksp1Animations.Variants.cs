@@ -137,6 +137,7 @@ namespace KSP1PartMod.Game.Animation
                             InitGate(e);
                             e.Rested = false;
                         }
+                        ReinitShroudGates();
                         return;
                     case VariantRetry.GiveUp:
                         _variantRetry = false;
@@ -173,6 +174,7 @@ namespace KSP1PartMod.Game.Animation
                     e.Rested = false;
                     Log($"{_name} B9 '{label}' -> '{id}': {e.Def.Key} {(e.Gate.Active ? "active" : "inactive")}");
                 }
+                NoteShroudVariant(set, id, label);
             }
             Rebind(RebindRule.For(RebindRule.KnownEffects), reason.ToString(), inEditor);
         }

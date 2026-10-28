@@ -294,6 +294,7 @@ namespace KSP1PartMod.Game.Audit
             rec.HasCommand = command != null;
             rec.CommandInitialized = command != null && command.IsInitialized;
             rec.Engines = root.GetComponentsInChildren<Module_Engine>(true).Length;
+            rec.ReduxFairing = root.GetComponentInChildren<Module_Fairing>(true) != null;
         }
 
         /// <summary>Command and engines from the part's definition, when no model could be spawned.</summary>
@@ -307,6 +308,7 @@ namespace KSP1PartMod.Game.Audit
                 if (type == null) continue;
                 if (typeof(Module_Command).IsAssignableFrom(type)) rec.HasCommand = true;
                 if (typeof(Module_Engine).IsAssignableFrom(type)) rec.Engines++;
+                if (typeof(Module_Fairing).IsAssignableFrom(type)) rec.ReduxFairing = true;
             }
         }
 

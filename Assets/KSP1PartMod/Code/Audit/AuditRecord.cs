@@ -50,5 +50,7 @@ namespace KSP1PartMod.Audit
         public bool CommandInitialized;
         public int Engines;
         public IReadOnlyList<string> ModFixes = None;
+        /// <summary>Redux's <c>Module_Fairing</c> is on the part (0.7.0: a bug on a fresh definition of a KSP1 part).</summary>
+        public bool ReduxFairing;
     }
 }

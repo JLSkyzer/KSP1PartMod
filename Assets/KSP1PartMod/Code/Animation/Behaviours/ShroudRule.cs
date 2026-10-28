@@ -30,6 +30,23 @@ namespace KSP1PartMod.Animation.Behaviours
             if (!inEditor && jettisoned) return false;
             return attached || ignoreNodes;
         }
+
+        /// <summary>A renderer under a shroud root that the shroud owns: disabled in the prefab, enabled only while the shroud
+        /// is shown. Redux's reentry hull (<c>ReentryMeshGenerator</c>) takes every renderer with <c>enabled</c> set, inactive
+        /// ones too, so a hidden shroud must not keep it set. Particle renderers are left alone, and so is a renderer that is
+        /// already off or whose material slots are all null (our <c>RenderFixes</c> hides those on the instance).</summary>
+        public static bool OwnsRenderer(bool isParticle, bool enabled, int materialSlots, int nullMaterials) =>
+            !isParticle && enabled && !(materialSlots > 0 && nullMaterials == materialSlots);
+
+        /// <summary>The audit notes of a resolved shroud entry (<c>AuditProbe</c>): <c>shroud_kept</c> when a transform was
+        /// found, <c>shroud_missing</c> when one is missing, <c>shroud_no_node</c> when the node is missing and the shroud
+        /// needs it.</summary>
+        public static void AuditNotes(int found, int names, bool nodeFound, bool ignoreNodes, out bool kept, out bool missing, out bool noNode)
+        {
+            kept = found > 0;
+            missing = found < names;
+            noNode = !nodeFound && !ignoreNodes;
+        }
     }
 
     /// <summary>The one-way jettison of a shroud in flight. It latches in two ways, as KSP1 does:

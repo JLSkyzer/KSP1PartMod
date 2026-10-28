@@ -214,6 +214,7 @@ namespace KSP1PartMod.Game.Animation
             ResolveMeshHiders();
             // Gates before controls and before any entry is driven: an inactive entry never shows its button or its pose.
             BindVariants();
+            ResolveShrouds();
             try
             {
                 if (_tracksWanted && !_tracksPending) BindTracks(tracks, generation, inEditor, late: false);
@@ -496,6 +497,10 @@ namespace KSP1PartMod.Game.Animation
                 case EntryKind.LookAt:
                     BuildLookAt(e);
                     break;
+                case EntryKind.Shroud:
+                    e.ShroudRt = new ShroudRuntime(def);
+                    e.Machine = e.ShroudRt.Machine;
+                    break; // its objects, node and name gates are resolved once the variants are bound (ResolveShrouds)
                 case EntryKind.AccelSpring:
                 {
                     if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
@@ -792,6 +797,7 @@ namespace KSP1PartMod.Game.Animation
                 {
                     // B9 gate closed: the rest pose once (RestInactive did it before the other entries), no machine tick.
                     if (!e.Rested) Rest(e);
+                    if (e.ShroudRt != null) StepShroud(e, inEditor); // an inactive entry hides its shroud
                     RefreshControls(e, inEditor);
                     return;
                 }
@@ -898,6 +904,9 @@ namespace KSP1PartMod.Game.Animation
                         break;
                     case EntryKind.LookAt:
                         if (e.LookAt != null && !e.LookAt.enabled) e.LookAt.enabled = true; // a B9 gate opened again
+                        break;
+                    case EntryKind.Shroud:
+                        StepShroud(e, inEditor);
                         break;
                     case EntryKind.AccelSpring:
                         e.Spring.Tick(dt, PluginRules.SpringAcceleration(inEditor, e.Accel != null, e.Accel != null ? e.Accel() : 0f));
@@ -1042,6 +1051,7 @@ namespace KSP1PartMod.Game.Animation
                 case EntryKind.Group: return e.Group.Deployed;
                 case EntryKind.Color: return e.Color.On;
                 case EntryKind.GearBridge: return e.ReduxState != null && e.ReduxState.GetValue();
+                case EntryKind.Shroud: return e.ShroudRt.Machine.HideOverride; // "on": the player hid it
                 default: return false;
             }
         }
@@ -1076,6 +1086,7 @@ namespace KSP1PartMod.Game.Animation
                     if (IsOn(e) == on) return false;
                     e.ReduxSet(on);
                     return true;
+                case EntryKind.Shroud: return e.ShroudRt.Machine.SetHideOverride(on); // VAB only (ControlLabels.Allowed)
                 default: return false;
             }
         }
@@ -1087,6 +1098,7 @@ namespace KSP1PartMod.Game.Animation
         private static bool ButtonVisible(Entry e, bool inEditor)
         {
             if (Inactive(e) || !Allowed(e.Def, inEditor)) return false;
+            if (e.ShroudRt != null && e.ShroudRt.Objects == null) return false; // no shroud transform found
             if (e.Toggle != null && e.Toggle.IsFixed) return false;
             if (e.Def.Kind == EntryKind.Deploy && !inEditor && !e.Def.Retractable && e.Deploy.State == DeployState.Extended) return false;
             return true;
@@ -1275,6 +1287,8 @@ namespace KSP1PartMod.Game.Animation
             public IHiderObjects HiderObjects;
             /// <summary>LookAt: our component on the part, null when no constraint was found.</summary>
             public AdvancedLookAt LookAt;
+            /// <summary>Shroud: its machine, objects, node and name gates.</summary>
+            public ShroudRuntime ShroudRt;
             /// <summary>An engine machine took its flight-start pose (<see cref="PluginRules.StartsNow"/>).</summary>
             public bool Started;
             public Func<ReduxDeployState> ReadDeploy;

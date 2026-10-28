@@ -160,7 +160,9 @@ namespace KSP1PartMod.Game.Animation
                 StringComparer.Ordinal);
             var plan = OwnershipPlanner.Plan(Ksp1NodeAdapter.Modules(entry.PartNode), behaviours.Contains("Module_SolarPanel"),
                 behaviours, ownFirstDeployable, followRedux, skipModules, KSP1PartModPlugin.Animations.PluginModules,
-                KSP1PartModPlugin.Animations.B9ModuleGates);
+                KSP1PartModPlugin.Animations.B9ModuleGates,
+                // Shroud entries only when the import kept the meshes: otherwise Redux destroyed them.
+                shrouds: ShroudImport.IsArmed);
             action = ModuleInjection.Decide(modules.Select(m => m.Name).ToList(), plan, ModuleName);
             // From here on the caller rewrites PartJson, even if an edit below throws. Notes once per session: on
             // the first load (Add), not on each reload that refreshes the same core.
