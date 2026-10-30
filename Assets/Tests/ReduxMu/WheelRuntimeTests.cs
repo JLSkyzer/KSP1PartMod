@@ -113,18 +113,16 @@ namespace KSP1PartMod.Tests.ReduxMu
             return w;
         }
 
-        /// <summary>What the wheel base's <c>OnInitialize</c> leaves that we read: its subsystems set, its collider host found or
-        /// not (it returns early without one, before adding its Gear toggle).</summary>
-        private static void Initialized(Module_WheelBase w, bool hostFound)
+        /// <summary>The part's model as <c>FindModelTransform</c> sees it: only <paramref name="names"/> are found.</summary>
+        private static void Model(params string[] names) =>
+            WheelRuntime.FindForTests = (m, n) => names.Contains(n) ? m.gameObject.transform : null;
+
+        /// <summary>What a wheel base that did not return early leaves: its collider host set.</summary>
+        private static void HostSet(Module_WheelBase w)
         {
-            var f = AccessTools.Field(typeof(Module_WheelBase), "_inopSystems");
-            f.SetValue(w, Activator.CreateInstance(f.FieldType));
-            if (hostFound)
-            {
-                var host = new GameObject("wheelCollider");
-                host.transform.SetParent(w.gameObject.transform, false);
-                w.WheelColliderHost = host.transform;
-            }
+            var host = new GameObject("wheelCollider");
+            host.transform.SetParent(w.gameObject.transform, false);
+            w.WheelColliderHost = host.transform;
         }
 
         private static PartBehaviourModule Any(GameObject go) => go.GetComponent<PartBehaviourModule>();
@@ -140,7 +138,6 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual("OnInitialize", m.OnInitialize.Name);
             Assert.AreEqual(typeof(Transform), m.Host.FieldType);
             Assert.AreEqual(typeof(Transform), m.Transform.FieldType);
-            Assert.IsNotNull(m.InopSystems);
         }
 
         [Test] public void Arm_AllKinds_OnePostfixOnOnInitialize()
@@ -174,23 +171,45 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsTrue(WheelRuntime.NativeWheelGear(w, "GearSmall"));
         }
 
-        [Test] public void GearBridge_NativeDeployable_Flight_HostFound_StandsDown_OneGearAction()
+        /// <summary>Decided by the wheel base's own early-return lookups, so before and after its <c>OnInitialize</c> alike
+        /// (review: independent of the init order).</summary>
+        [Test] public void GearBridge_NativeDeployable_Flight_TransformsFound_StandsDown_WhateverTheInitOrder()
         {
             Record("GearSmall", true);
             var w = Part("GearSmall", Deploy.Native);
-            Assert.IsTrue(WheelRuntime.NativeWheelGear(w, "GearSmall"), "before the wheel base's init: assumed to succeed");
-            Initialized(w, hostFound: true);
-            Assert.IsTrue(WheelRuntime.NativeWheelGear(w, "GearSmall"));
+            Model("wheelCollider");
+            Assert.IsTrue(WheelRuntime.NativeWheelGear(w, "GearSmall"), "before the wheel base's init");
+            HostSet(w);
+            Assert.IsTrue(WheelRuntime.NativeWheelGear(w, "GearSmall"), "after it");
         }
 
-        /// <summary>The wheel base returned before adding its Gear toggle: the bridge keeps its own (never zero Gear actions in
-        /// flight when our module initializes after it).</summary>
-        [Test] public void GearBridge_NativeDeployable_Flight_HostMissing_KeepsItsAction()
+        /// <summary>The wheel base will return (or returned) before adding its Gear toggle: the bridge keeps its own, before
+        /// and after the wheel base's init, so never zero Gear actions in flight.</summary>
+        [Test] public void GearBridge_NativeDeployable_Flight_HostMissing_KeepsItsAction_WhateverTheInitOrder()
         {
             Record("GearSmall", true);
             var w = Part("GearSmall", Deploy.Native);
-            Initialized(w, hostFound: false);
-            Assert.IsFalse(WheelRuntime.NativeWheelGear(w, "GearSmall"));
+            Model();
+            Assert.IsFalse(WheelRuntime.NativeWheelGear(w, "GearSmall"), "before the wheel base's init");
+            HostSet(w); // even a stale field does not decide
+            Assert.IsFalse(WheelRuntime.NativeWheelGear(w, "GearSmall"), "after it");
+        }
+
+        [Test] public void GearBridge_NativeDeployable_Flight_NamedWheelTransformMissing_KeepsItsAction()
+        {
+            Record("roverWheel2", true, wheelTransform: "foot");
+            var w = Part("roverWheel2", Deploy.Native);
+            Model("wheelCollider");
+            Assert.IsFalse(WheelRuntime.NativeWheelGear(w, "roverWheel2"), "the wheel base returns on the wheel transform first");
+            Model("foot", "wheelCollider");
+            Assert.IsTrue(WheelRuntime.NativeWheelGear(w, "roverWheel2"));
+        }
+
+        [Test] public void GearBridge_NativeDeployable_Flight_NoPartBehavior_KeepsItsAction()
+        {
+            Record("GearSmall", true);
+            var w = Part("GearSmall", Deploy.Native);
+            Assert.IsFalse(WheelRuntime.NativeWheelGear(w, "GearSmall"), "no part to look in: nothing found");
         }
 
         /// <summary>Review F5: Redux's legacy deployable does not derive from <c>Module_Deployable</c>; the wheel base finds none
@@ -201,7 +220,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             Record("landingLeg1", true);
             var w = Part("landingLeg1", Deploy.Legacy);
             Assert.IsNull(w.GetComponent<Module_Deployable>());
-            Initialized(w, hostFound: true);
+            Model("wheelCollider");
             Assert.IsFalse(WheelRuntime.NativeWheelGear(w, "landingLeg1"), "flight");
             var vab = Part("landingLeg1", Deploy.Legacy, oab: true);
             Assert.IsFalse(WheelRuntime.NativeWheelGear(vab, "landingLeg1"), "VAB");
@@ -246,7 +265,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.IsEmpty(_lines, "VAB");
 
             var w = Part("GearSmall", Deploy.Native);
-            Initialized(w, hostFound: true);
+            HostSet(w);
             WheelRuntime.AfterInitialize(w);
             CollectionAssert.AreEqual(new[] { "[KSP1PartMod] wheel: GearSmall: FREE, collider host 'wheelCollider' found, wheel transform '' none, deploy gate native Module_Deployable" }, _lines);
             var again = Part("GearSmall", Deploy.Native);
@@ -255,24 +274,32 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsFalse(WheelRuntime.Broken);
         }
 
-        [Test] public void Setup_LegacyKept_AlwaysActive_HostAndTransformMissing()
+        /// <summary>The wheel base returned on its missing wheel transform and left the host unset: the host is looked up as it
+        /// would have been (review item 2), found here, missing in the second part.</summary>
+        [Test] public void Setup_LegacyKept_AlwaysActive_TransformMissing_HostLookedUp()
         {
             Assert.IsTrue(Arm());
             Record("landingLeg1", true, wheelTransform: "foot");
+            Record("landingLeg2", true, wheelTransform: "foot");
             _lines.Clear();
-            var w = Part("landingLeg1", Deploy.Legacy);
-            Initialized(w, hostFound: false);
-            WheelRuntime.AfterInitialize(w);
-            CollectionAssert.AreEqual(new[] { "[KSP1PartMod] wheel: landingLeg1: LEG, collider host 'wheelCollider' MISSING, wheel transform 'foot' MISSING, deploy gate none: always active (Redux kept its legacy deployable)" }, _lines);
+            Model("wheelCollider");
+            WheelRuntime.AfterInitialize(Part("landingLeg1", Deploy.Legacy));
+            Model();
+            WheelRuntime.AfterInitialize(Part("landingLeg2", Deploy.Legacy));
+            CollectionAssert.AreEqual(new[]
+            {
+                "[KSP1PartMod] wheel: landingLeg1: LEG, collider host 'wheelCollider' found, wheel transform 'foot' MISSING, deploy gate none: always active (Redux kept its legacy deployable)",
+                "[KSP1PartMod] wheel: landingLeg2: LEG, collider host 'wheelCollider' MISSING, wheel transform 'foot' MISSING, deploy gate none: always active (Redux kept its legacy deployable)",
+            }, _lines);
         }
 
         [Test] public void Setup_OwnFirst_AlwaysActive()
         {
             Assert.IsTrue(Arm("{\"own_first_deployable\": true}"));
-            Record("landingLeg2", true);
+            Record("landingLeg3", true);
             _lines.Clear();
-            WheelRuntime.AfterInitialize(Part("landingLeg2", Deploy.None));
-            CollectionAssert.AreEqual(new[] { "[KSP1PartMod] wheel: landingLeg2: LEG, collider host 'wheelCollider' MISSING, wheel transform '' none, deploy gate none: always active (own_first_deployable)" }, _lines);
+            WheelRuntime.AfterInitialize(Part("landingLeg3", Deploy.None));
+            CollectionAssert.AreEqual(new[] { "[KSP1PartMod] wheel: landingLeg3: LEG, collider host 'wheelCollider' MISSING, wheel transform '' none, deploy gate none: always active (own_first_deployable)" }, _lines);
         }
 
         [Test] public void Setup_FixedWheel()

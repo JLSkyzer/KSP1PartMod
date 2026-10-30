@@ -23,18 +23,17 @@ namespace KSP1PartMod.Tests.Animation.Runtime
         public void NeedsOwnAction_UnlessReduxOrANativeWheelBaseIsOnGear(string group, bool nativeWheelGear, bool expected) =>
             Assert.AreEqual(expected, GearBridgeRule.NeedsOwnAction(group, nativeWheelGear));
 
-        // ourBase, wheelBase, nativeDeployable, inFlight, wheelInitialized, hostFound -> the wheel base owns the Gear toggle
-        [TestCase(true, true, true, false, false, false, true, TestName = "VAB: stands down (S, no Gear toggle listed)")]
-        [TestCase(true, true, true, true, false, false, true, TestName = "Flight, wheel base not yet initialized: assumed")]
-        [TestCase(true, true, true, true, true, true, true, TestName = "Flight, host found: the wheel base's toggle")]
-        [TestCase(true, true, true, true, true, false, false, TestName = "Flight, host missing: no native toggle, bridge kept")]
-        [TestCase(true, true, false, true, true, true, false, TestName = "Legacy deployable only: bridge kept")]
-        [TestCase(true, true, false, false, false, false, false, TestName = "Legacy deployable only, VAB: bridge kept")]
-        [TestCase(false, true, true, true, true, true, false, TestName = "Base not ours (refused or no record): bridge kept")]
-        [TestCase(true, false, true, true, false, false, false, TestName = "No wheel base: bridge kept")]
-        public void NativeWheelGear_Cases(bool ourBase, bool wheelBase, bool nativeDeployable, bool inFlight, bool initialized,
-            bool hostFound, bool expected) =>
-            Assert.AreEqual(expected, GearBridgeRule.NativeWheelGear(ourBase, wheelBase, nativeDeployable, inFlight, initialized, hostFound));
+        // ourBase, wheelBase, nativeDeployable, inFlight, transformsFound -> the wheel base owns the Gear toggle
+        [TestCase(true, true, true, false, false, true, TestName = "VAB: stands down (S, no Gear toggle listed)")]
+        [TestCase(true, true, true, true, true, true, TestName = "Flight, transforms found: the wheel base's toggle")]
+        [TestCase(true, true, true, true, false, false, TestName = "Flight, a transform missing: early return, bridge kept")]
+        [TestCase(true, true, false, true, true, false, TestName = "Legacy deployable only: bridge kept")]
+        [TestCase(true, true, false, false, false, false, TestName = "Legacy deployable only, VAB: bridge kept")]
+        [TestCase(false, true, true, true, true, false, TestName = "Base not ours (refused or no record): bridge kept")]
+        [TestCase(true, false, true, true, true, false, TestName = "No wheel base: bridge kept")]
+        public void NativeWheelGear_Cases(bool ourBase, bool wheelBase, bool nativeDeployable, bool inFlight, bool transformsFound,
+            bool expected) =>
+            Assert.AreEqual(expected, GearBridgeRule.NativeWheelGear(ourBase, wheelBase, nativeDeployable, inFlight, transformsFound));
 
         [TestCase("ModuleWheelDeployment", "animationStateName")]
         [TestCase("ModuleLandingLeg", "animationName")]

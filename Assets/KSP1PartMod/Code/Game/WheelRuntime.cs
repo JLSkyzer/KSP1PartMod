@@ -18,9 +18,11 @@ namespace KSP1PartMod.Game
     /// part name, with its base); KSP2's own wheels are never touched.
     /// <list type="bullet">
     /// <item><b>setup line</b>: a postfix on <c>Module_WheelBase.OnInitialize</c>, flight only, once per part name per session,
-    /// from public members only (<c>WheelColliderHost</c>, <c>WheelTransform</c>, the part's deployables);</item>
+    /// from public members only (<c>WheelColliderHost</c>, <c>WheelTransform</c>, the part's <c>FindModelTransform</c> for a host
+    /// left unset by an early return, the part's deployables). Its names and values are the import's (a B9 edit does not show);</item>
     /// <item><b>gear bridge</b>: <see cref="NativeWheelGear"/> tells <c>Module_Ksp1Animations</c> when the wheel base owns the
-    /// part's Gear toggle (<see cref="GearBridgeRule.NativeWheelGear"/>). It resolves its members whether the postfix is armed
+    /// part's Gear toggle (<see cref="GearBridgeRule.NativeWheelGear"/>), from the wheel base's own early-return lookups, so
+    /// whatever the init order. It resolves its members whether the postfix is armed
     /// or not; a missing member keeps the bridge's own action, as before 0.14.0.</item>
     /// </list>
     /// Read only: nothing of the wheel is written. A missing member turns the line off (one line). A patch that throws stops the
@@ -35,7 +37,6 @@ namespace KSP1PartMod.Game
             public Type WheelBase;
             public MethodInfo OnInitialize;
             public FieldInfo Host, Transform;
-            public MethodInfo InopSystems;
             /// <summary>The first member not found (null: all found).</summary>
             public string Missing;
         }
@@ -62,12 +63,9 @@ namespace KSP1PartMod.Game
             m.OnInitialize = AccessTools.DeclaredMethod(type, "OnInitialize", Type.EmptyTypes);
             m.Host = PublicTransform(type, "WheelColliderHost");
             m.Transform = PublicTransform(type, "WheelTransform");
-            var inop = type.GetProperty("InopSystems", BindingFlags.Public | BindingFlags.Instance);
-            m.InopSystems = inop?.GetGetMethod();
             if (m.OnInitialize == null || m.OnInitialize.ReturnType != typeof(void)) m.Missing = name + ".OnInitialize";
             else if (m.Host == null) m.Missing = name + ".WheelColliderHost";
             else if (m.Transform == null) m.Missing = name + ".WheelTransform";
-            else if (m.InopSystems == null || m.InopSystems.ReturnType.IsValueType) m.Missing = name + ".InopSystems";
             return m;
         }
 
@@ -122,11 +120,14 @@ namespace KSP1PartMod.Game
                 if (record == null || !record.Summary.BaseConverted || record.Base == null) return;
                 if (!Logged.Add(part)) return;
                 var m = Get();
+                // The fields the wheel base set; it leaves the host unset when it returned early on a missing wheel transform,
+                // so the host is then looked up as the wheel base would have.
                 var host = m.Host.GetValue(__instance) as Transform;
                 var wheel = m.Transform.GetValue(__instance) as Transform;
+                var hostFound = host != null || Find(__instance, record.Base.WheelColliderTransformName) != null;
                 Deployables(__instance.gameObject, out var native, out var legacy);
                 var gate = WheelLines.Gate(native, legacy, record.HasDeployment, _ownFirst);
-                NativeModules.Info(WheelLines.Setup(part, record.Type, record.Base.WheelColliderTransformName, host != null,
+                NativeModules.Info(WheelLines.Setup(part, record.Type, record.Base.WheelColliderTransformName, hostFound,
                     record.Base.WheelTransformName, wheel != null, gate));
             }
             catch (Exception e)
@@ -164,14 +165,32 @@ namespace KSP1PartMod.Game
                 var hasWheel = wheel != null;
                 Deployables(go, out var native, out _);
                 var inFlight = module.PartBackingMode == PartBehaviourModule.PartBackingModes.Flight;
-                var initialized = hasWheel && m.InopSystems.Invoke(wheel, null) != null;
-                var host = hasWheel && (m.Host.GetValue(wheel) as Transform) != null;
-                return GearBridgeRule.NativeWheelGear(true, hasWheel, native, inFlight, initialized, host);
+                var found = inFlight && hasWheel && native && TransformsFound(module, record.Base);
+                return GearBridgeRule.NativeWheelGear(true, hasWheel, native, inFlight, found);
             }
             catch (Exception)
             {
                 return false; // the bridge keeps its own action, as before 0.14.0
             }
+        }
+
+        /// <summary>The wheel base's two early-return lookups in flight: its wheel transform (only when named), then its
+        /// collider host, both by the part's <c>FindModelTransform</c>. Once, at init.</summary>
+        internal static bool TransformsFound(PartBehaviourModule module, WheelBaseValues b)
+        {
+            if (b == null) return false;
+            if (!string.IsNullOrEmpty(b.WheelTransformName) && Find(module, b.WheelTransformName) == null) return false;
+            return Find(module, b.WheelColliderTransformName) != null;
+        }
+
+        /// <summary>Tests: the part's <c>FindModelTransform</c> (EditMode parts have no <c>PartBehavior</c>).</summary>
+        internal static Func<PartBehaviourModule, string, Transform> FindForTests;
+
+        private static Transform Find(PartBehaviourModule module, string name)
+        {
+            if (FindForTests != null) return FindForTests(module, name);
+            var part = module != null ? module.part : null;
+            return part != null ? part.FindModelTransform(name) : null;
         }
 
         private static void Break(Exception e)
@@ -185,6 +204,7 @@ namespace KSP1PartMod.Game
         {
             _on = _broken = _ownFirst = false;
             _members = null;
+            FindForTests = null;
             Logged.Clear();
         }
     }
