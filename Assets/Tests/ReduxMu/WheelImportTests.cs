@@ -529,6 +529,32 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.That(_lines, Has.Some.Contains(WheelImporter.NotCheckedNote(bare)));
         }
 
+        /// <summary>Review M1 on the real installed GearLarge (KSP1 files optional): a bogey wheel base name found in the model is
+        /// kept, one absent from it clears both wheel names with a note, and without the cfg file both are kept.</summary>
+        [Test] public void BogeyWheels_RealModel_FoundKept_AbsentCleared_UncheckedKept()
+        {
+            var cfg = InstalledKsp1.AllCfg().FirstOrDefault(p => File.ReadAllText(p).Contains("wheelTransformBaseName = wheels2"));
+            if (cfg == null) Assert.Ignore("no installed cfg with wheelTransformBaseName = wheels2");
+            var root = InstalledKsp1.Root;
+            var text = File.ReadAllText(cfg);
+            Assert.IsTrue(Arm());
+
+            (string Ref, string Base) Run(string baseName, bool withFile)
+            {
+                var fileNode = Ksp1ConfigNode.Parse(text.Replace("wheelTransformBaseName = wheels2", "wheelTransformBaseName = " + baseName));
+                var part = fileNode.GetNodes("PART").First();
+                if (withFile) WheelImporter.RememberFileForTests(part, new Ksp1ConfigFile(new Ksp1ModRoot(root, root), cfg, "Squad", fileNode));
+                var context = Context(part);
+                ImportAll(part, context);
+                return ((string)Read(context, WheelKind.Bogey, "wheelTransformRefName"), (string)Read(context, WheelKind.Bogey, "wheelTransformBaseName"));
+            }
+
+            Assert.AreEqual(("wheels1", "wheels2"), Run("wheels2", true), "in the model: kept");
+            Assert.AreEqual(("", ""), Run("absentWheels", true), "not in the model: both cleared");
+            Assert.That(_lines, Has.Some.Contains(WheelMapping.BogeyWheelsClearedNote("wheels1", "absentWheels", "wheelTransformBaseName not in the model")));
+            Assert.AreEqual(("wheels1", "absentWheels"), Run("absentWheels", false), "model not checked: kept");
+        }
+
         [Test] public void Arm_HooksTheTranslatorForTheColliderCheck()
         {
             Assert.IsTrue(Arm());
@@ -542,7 +568,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             RadiatorAccess.HideListFormForTests = true;
             Assert.IsTrue(Arm());
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: wheels: Ksp1PartModuleImporterRegistry.CreateSerialized(Type, IReadOnlyList<ModuleData>, " +
-                                              "Ksp1PartImportContext) not found, motor-steering off (Redux drops it, as in 0.13.0)");
+                                              "Ksp1PartImportContext) not found, motor-steering off (Redux drops it, as in 0.13.1)");
             var part = Part(M(RoverBase) + M(MotorSteering));
             var context = Context(part);
             Assert.AreEqual(new[] { true, false }, ImportAll(part, context).Select(r => r.Ok).ToArray(), "no motor");

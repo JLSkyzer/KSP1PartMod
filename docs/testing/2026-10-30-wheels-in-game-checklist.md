@@ -7,7 +7,7 @@ qui ne roulait pas et ne s'enfonçait pas. 0.14.0 les importe comme les modules 
 aucune friction ni aucun ressort à nous. `ModuleWheelDeployment` reste celui de Redux (`Module_Deployable` natif), et la
 roue de KSP2 s'allume et s'éteint d'elle-même avec lui. Le bouton Gear du pont de 0.2.x se retire sur ces pièces, pour que
 G ne bascule le train qu'une fois. Couples supposés en kN·m (non documenté dans les cfg). Tout est lu dans la décompilation
-de Redux 26w42c et testé dans l'éditeur (2589 tests EditMode, 2 explicites ignorés) ; **rien n'a été lancé dans le jeu**.
+de Redux 26w42c et testé dans l'éditeur (2592 tests EditMode, 2 explicites ignorés) ; **rien n'a été lancé dans le jeu**.
 
 Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, filtrer sur `[KSP1PartMod] native:`,
 `[KSP1PartMod] wheel:`, `[KSP1PartMod] anim:` et `[KSP1PartMod] audit:`.
@@ -102,6 +102,13 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
   du PAM sont gardés.
 - [ ] Un vaisseau sauvegardé en 0.13.1 avec des roues KSP1 reçoit les modules de roue au chargement : il se charge sans
   erreur et ses roues marchent.
+- [ ] **Posé en 0.13.1, chargé en 0.14.0.** Un atterrisseur ou un rover sauvegardé posé en 0.13.1 ne doit ni sauter ni
+  rebondir au chargement en 0.14.0. Ses jambes et ses roues reçoivent maintenant des colliders de roue, qui peuvent
+  descendre plus bas que les colliders de pièce sur lesquels il reposait. Faire une sauvegarde de secours avant, et noter
+  s'il saute, de combien, et s'il casse quelque chose.
+- [ ] Ligne `native: <pièce>: … ModuleWheelBogey: wheelTransformRefName '…' and wheelTransformBaseName '…' cleared (…)` :
+  aucune attendue sur l'installation actuelle (les deux trains `GearLarge` et `GearExtraLarge` ont leurs roues `wheels2`
+  dans le modèle) ; si une apparaît, la recopier.
 
 ## 8. Points supposés, à lire dans le log
 

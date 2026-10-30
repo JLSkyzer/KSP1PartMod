@@ -336,6 +336,22 @@ namespace KSP1PartMod.Native.Wheels
             return m;
         }
 
+        /// <summary>KSP2's bogey copies the rotation of <c>wheelTransformRefName</c> onto every object named
+        /// <c>wheelTransformBaseName</c> each frame once the reference is found, without checking that it found any of them: an
+        /// empty or absent base name throws every frame. Clears both names (no wheel copy, the bogey itself still pitches) and
+        /// returns the note.</summary>
+        public static string ClearBogeyWheels(WheelBogeyValues v, string reason)
+        {
+            var note = BogeyWheelsClearedNote(v.WheelTransformRefName, v.WheelTransformBaseName, reason);
+            v.WheelTransformRefName = "";
+            v.WheelTransformBaseName = "";
+            return note;
+        }
+
+        public static string BogeyWheelsClearedNote(string refName, string baseName, string reason) =>
+            $"ModuleWheelBogey: wheelTransformRefName '{refName ?? ""}' and wheelTransformBaseName '{baseName ?? ""}' cleared ({reason}): " +
+            "KSP2's bogey would fail every frame";
+
         public static WheelMapped<WheelBogeyValues> Bogey(IKsp1Node node)
         {
             var v = new WheelBogeyValues();
@@ -354,6 +370,8 @@ namespace KSP1PartMod.Native.Wheels
             v.BogeyAxis = r.V("bogeyAxis", v.BogeyAxis);
             v.BogeyUpAxis = r.V("bogeyUpAxis", v.BogeyUpAxis);
             r.NotReproduced("deployModuleIndex", "ModuleWheelBogey: deployModuleIndex not reproduced (KSP2 finds the deployable by component)");
+            if (!string.IsNullOrEmpty(v.WheelTransformRefName) && string.IsNullOrEmpty(v.WheelTransformBaseName))
+                r.Note(ClearBogeyWheels(v, "no wheelTransformBaseName"));
             r.Finish();
             m.Converted = true;
             return m;

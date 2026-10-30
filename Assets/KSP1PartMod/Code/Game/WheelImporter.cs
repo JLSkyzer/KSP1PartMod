@@ -28,7 +28,7 @@ namespace KSP1PartMod.Game
     /// (<see cref="B9ModuleDiff.IsScratch"/>), once per slot (<see cref="WheelPartRule.Slot"/>: the two motors share one);</item>
     /// <item>a context that already holds the kind's data type (a future Redux importer) gets nothing, noted;</item>
     /// <item>any exception removes what the call added to <c>context.ModuleData</c> and returns false: the module is then
-    /// dropped by Redux, as in 0.13.0. A failed base leaves the context unmarked, so the part gets no sub-module.</item>
+    /// dropped by Redux, as in 0.13.1. A failed base leaves the context unmarked, so the part gets no sub-module.</item>
     /// </list>
     /// A B9 scratch context converts but records, counts and logs nothing. The per-part lines and the summary come once, after
     /// Redux's import (<see cref="SummaryLines"/>).</summary>
@@ -299,7 +299,13 @@ namespace KSP1PartMod.Game
                 case WheelKind.Brakes: return Of(WheelMapping.Brakes(node));
                 case WheelKind.Damage: return Of(WheelMapping.Damage(node));
                 case WheelKind.Lock: return Of(WheelMapping.Lock(node));
-                default: return Of(WheelMapping.Bogey(node));
+                default:
+                {
+                    var m = WheelMapping.Bogey(node);
+                    var notes = m.Notes.ToList();
+                    if (m.Converted) GuardBogeyWheels(m.Values, context, notes);
+                    return (m.Converted, m.Values, m.NotReproduced, m.UnusedBySolver, notes);
+                }
             }
         }
 
@@ -373,6 +379,16 @@ namespace KSP1PartMod.Game
                 v.SuspensionColliderName = "";
                 notes.Add(SuspensionColliderRule.ClearedNote(name));
             }
+        }
+
+        /// <summary>Review M1: a <c>wheelTransformBaseName</c> that no object of the part's models carries leaves KSP2's bogey
+        /// with no wheel list while its reference is found, and it then throws every frame. Both names are cleared, with a note;
+        /// an unreadable model keeps them.</summary>
+        private static void GuardBogeyWheels(WheelBogeyValues v, Ksp1PartImportContext context, List<string> notes)
+        {
+            if (string.IsNullOrEmpty(v.WheelTransformRefName) || string.IsNullOrEmpty(v.WheelTransformBaseName)) return;
+            if (ColliderState(context.PartNode, v.WheelTransformBaseName) == SuspensionColliderState.Absent)
+                notes.Add(WheelMapping.ClearBogeyWheels(v, "wheelTransformBaseName not in the model"));
         }
 
         private static string ColliderKey(string cfgPath, string partName, string colliderName) =>

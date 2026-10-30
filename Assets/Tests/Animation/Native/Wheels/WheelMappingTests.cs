@@ -367,6 +367,35 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             CollectionAssert.AreEqual(new[] { "deployModuleIndex" }, m.NotReproduced);
         }
 
+        /// <summary>Review M1: a wheel reference without a wheel base name would make KSP2's bogey throw every frame; it is cleared
+        /// with a note. Both names together, or neither, are kept.</summary>
+        [Test] public void Bogey_WheelRefWithoutBase_Cleared_BothOrNeitherKept()
+        {
+            var m = WheelMapping.Bogey(M("name = ModuleWheelBogey\nbogeyTransformName = Foot\nwheelTransformRefName = WheelRef"));
+            Assert.IsTrue(m.Converted, "the bogey itself still pitches");
+            Assert.AreEqual("Foot", m.Values.BogeyTransformName);
+            Assert.AreEqual("", m.Values.WheelTransformRefName);
+            Assert.AreEqual("", m.Values.WheelTransformBaseName);
+            CollectionAssert.Contains(m.Notes, WheelMapping.BogeyWheelsClearedNote("WheelRef", "", "no wheelTransformBaseName"));
+
+            var both = WheelMapping.Bogey(M("name = ModuleWheelBogey\nwheelTransformRefName = WheelRef\nwheelTransformBaseName = Wheel"));
+            Assert.AreEqual(("WheelRef", "Wheel"), (both.Values.WheelTransformRefName, both.Values.WheelTransformBaseName));
+            Assert.IsFalse(both.Notes.Any(n => n.Contains("cleared")));
+
+            var baseOnly = WheelMapping.Bogey(M("name = ModuleWheelBogey\nwheelTransformBaseName = Wheel"));
+            Assert.AreEqual("Wheel", baseOnly.Values.WheelTransformBaseName, "no reference: KSP2's loop never runs");
+            Assert.IsFalse(baseOnly.Notes.Any(n => n.Contains("cleared")));
+        }
+
+        [Test] public void ClearBogeyWheels_ClearsBothNames_AndSaysWhy()
+        {
+            var v = new WheelBogeyValues { WheelTransformRefName = "WheelRef", WheelTransformBaseName = "Wheel" };
+            var note = WheelMapping.ClearBogeyWheels(v, "wheelTransformBaseName not in the model");
+            Assert.AreEqual(("", ""), (v.WheelTransformRefName, v.WheelTransformBaseName));
+            Assert.AreEqual("ModuleWheelBogey: wheelTransformRefName 'WheelRef' and wheelTransformBaseName 'Wheel' cleared " +
+                            "(wheelTransformBaseName not in the model): KSP2's bogey would fail every frame", note);
+        }
+
         [Test] public void Bogey_BadVector_KeepsTheDefault()
         {
             var m = WheelMapping.Bogey(M("name = ModuleWheelBogey\nbogeyAxis = 1, 0"));

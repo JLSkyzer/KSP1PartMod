@@ -50,7 +50,7 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
 
         [Test] public void MemberNotFound_AndB9()
         {
-            Assert.AreEqual("[KSP1PartMod] native: wheels: Data_WheelBogey.bogeyAxis not found, bogey off (Redux drops it, as in 0.13.0)",
+            Assert.AreEqual("[KSP1PartMod] native: wheels: Data_WheelBogey.bogeyAxis not found, bogey off (Redux drops it, as in 0.13.1)",
                 WheelLines.MemberNotFound("Data_WheelBogey.bogeyAxis", "bogey"));
             Assert.AreEqual("[KSP1PartMod] native: wheels: B9: 1 subtype edit(s) of wheel modules, 1 on state fields not carried " +
                             "(bluedog_LRV_Wheel: frictionMultiplier)",

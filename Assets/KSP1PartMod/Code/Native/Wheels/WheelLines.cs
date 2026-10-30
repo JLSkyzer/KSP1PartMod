@@ -59,7 +59,7 @@ namespace KSP1PartMod.Native.Wheels
             $"unused by Redux's solver: {List(WheelTally.ByCount(t.UnusedBySolver))}";
 
         public static string MemberNotFound(string member, string kind) =>
-            Prefix + $"wheels: {member} not found, {kind} off (Redux drops it, as in 0.13.0)";
+            Prefix + $"wheels: {member} not found, {kind} off (Redux drops it, as in 0.13.1)";
 
         public static string B9(int edits, IReadOnlyCollection<(string Part, string Field)> stateEdits)
         {
