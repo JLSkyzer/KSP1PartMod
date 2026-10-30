@@ -7,6 +7,7 @@ using KSP.Sim.Definitions;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Native;
 using KSP1PartMod.Native.Science;
+using KSP1PartMod.Native.Wheels;
 using Redux.Ksp1Import.Modules;
 
 namespace KSP1PartMod.Game
@@ -48,6 +49,8 @@ namespace KSP1PartMod.Game
             public Func<AnimationSettings, bool> IsOn;
             /// <summary>The members this converter needs that the game lacks (empty when all are found).</summary>
             public Func<List<string>> MissingMembers;
+            /// <summary>Optional: the line of one missing member (null: <see cref="NativeLines.MemberNotFound"/>).</summary>
+            public Func<string, string> MissingLine;
             public Func<IKsp1PartModuleImporter> Create;
             /// <summary>The converter's summary line, once at the end of the import.</summary>
             public Func<string> Summary;
@@ -147,6 +150,29 @@ namespace KSP1PartMod.Game
                 Create = () => new ScienceImporter(_settings, container: true),
                 SummaryLines = ScienceImporter.SummaryLines, // one science line for the four (the first asks)
             },
+            Wheel(WheelKind.Base),
+            Wheel(WheelKind.Suspension),
+            Wheel(WheelKind.Steering),
+            Wheel(WheelKind.Motor),
+            Wheel(WheelKind.MotorSteering),
+            Wheel(WheelKind.Brakes),
+            Wheel(WheelKind.Damage),
+            Wheel(WheelKind.Lock),
+            Wheel(WheelKind.Bogey),
+        };
+
+        /// <summary>A KSP1 wheel module → the KSP2 wheel module of the same role (wheels plan, Task 3): <c>ksp1_wheels</c> and
+        /// the kind's own switch. The nine share the summary lines (the first asks).</summary>
+        private static Converter Wheel(WheelKind kind) => new Converter
+        {
+            Ksp1Module = WheelMapping.Ksp1Module(kind),
+            NativeModule = WheelMapping.NativeModule(kind),
+            SwitchKey = WheelImporter.SwitchKey(kind),
+            IsOn = s => WheelImporter.IsOn(s, kind),
+            MissingMembers = () => WheelImporter.MissingMembers(kind),
+            MissingLine = WheelImporter.MissingLine(kind),
+            Create = () => new WheelImporter(kind, _settings),
+            SummaryLines = WheelImporter.SummaryLines,
         };
 
         /// <summary>A KSP1 experiment module → <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>); the three share one importer type.</summary>
@@ -243,7 +269,7 @@ namespace KSP1PartMod.Game
                 }
                 if (missing.Count > 0)
                 {
-                    foreach (var m in missing) Warn(NativeLines.MemberNotFound(m, c.NativeModule));
+                    foreach (var m in missing) Warn(c.MissingLine != null ? c.MissingLine(m) : NativeLines.MemberNotFound(m, c.NativeModule));
                     continue;
                 }
                 wanted.Add(c);
@@ -310,6 +336,8 @@ namespace KSP1PartMod.Game
             RadiatorAccess.Reset();
             ScienceImporter.ResetSession();
             ScienceAccess.Reset();
+            WheelImporter.ResetSession();
+            WheelAccess.Reset();
             RejectedNames.Clear();
             Record.Clear();
             Isru.Clear();

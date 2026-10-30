@@ -201,7 +201,7 @@ MODULE
         [Test] public void Arm_AddsTheFourScienceImporters()
         {
             Assert.IsTrue(Arm());
-            Assert.That(_lines, Has.Some.EndsWith("ModuleActiveRadiator -> Module_Cooler" + ArmedPairs));
+            Assert.That(_lines, Has.Some.EndsWith("ModuleActiveRadiator -> Module_Cooler" + ArmedPairs + WheelImportTests.ArmedPairs));
             var importers = (IDictionary<string, IKsp1PartModuleImporter>)NativeModules.Resolve().Importers.GetValue(new Ksp1PartModuleImporterRegistry());
             foreach (var name in new[] { "modulescienceexperiment", "dmmodulescienceanimate", "dmmodulescienceanimategeneric", "modulesciencecontainer" })
                 Assert.IsInstanceOf<ScienceImporter>(importers[name], name);

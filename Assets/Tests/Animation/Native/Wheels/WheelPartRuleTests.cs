@@ -60,6 +60,22 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             Assert.AreEqual((WheelKind.Motor, WheelRefusal.Mapping), s.Refused[1]);
         }
 
+        /// <summary>Review of Tasks 1+2: KSP2's <c>GetComponent&lt;Module_WheelMotor&gt;</c> finds a <c>Module_WheelMotorSteering</c>
+        /// too, so the two KSP1 motors share one slot.</summary>
+        [Test] public void MotorAndMotorSteering_ShareOneSlot()
+        {
+            Assert.AreEqual(WheelKind.Motor, WheelPartRule.Slot(WheelKind.MotorSteering));
+            Assert.AreEqual(WheelKind.Motor, WheelPartRule.Slot(WheelKind.Motor));
+            Assert.AreEqual(WheelKind.Brakes, WheelPartRule.Slot(WheelKind.Brakes));
+            var s = new WheelPartSummary("roverWheel3");
+            s.Convert(WheelKind.Base);
+            s.Convert(WheelKind.MotorSteering);
+            Assert.IsTrue(s.HasSlot(WheelKind.Motor));
+            Assert.IsFalse(s.Has(WheelKind.Motor));
+            Assert.AreEqual(WheelRefusal.Second, WheelPartRule.RefuseSub(true, true, false, s.HasSlot(WheelKind.Motor)));
+            Assert.IsFalse(s.HasSlot(WheelKind.Steering), "the plain steering module is its own slot");
+        }
+
         [Test] public void Tally_CountsKindsTypesReasonsAndFields()
         {
             var t = new WheelTally();

@@ -27,6 +27,11 @@ namespace KSP1PartMod.Native.Wheels
 
         public static bool IsFirstBase(int baseIndex, int firstBaseIndex) => baseIndex == firstBaseIndex;
 
+        /// <summary>The slot a kind fills on a part: <c>ModuleWheelMotorSteering</c> fills the motor's, because KSP2's
+        /// <c>Module_WheelMotorSteering</c> is a <c>Module_WheelMotor</c> (a <c>GetComponent&lt;Module_WheelMotor&gt;</c> finds
+        /// either). One module per slot.</summary>
+        public static WheelKind Slot(WheelKind kind) => kind == WheelKind.MotorSteering ? WheelKind.Motor : kind;
+
         /// <summary>The refusal of a sub-module before mapping, or null when it may be converted.</summary>
         public static WheelRefusal? RefuseSub(bool switchOn, bool baseConvertedInContext, bool scratchContext, bool kindAlreadyOnPart)
         {
@@ -71,6 +76,9 @@ namespace KSP1PartMod.Native.Wheels
         public WheelPartSummary(string part) { Part = part; }
 
         public bool Has(WheelKind kind) => _converted.Contains(kind);
+
+        /// <summary>A kind of the same slot (<see cref="WheelPartRule.Slot"/>) is already converted.</summary>
+        public bool HasSlot(WheelKind kind) => _converted.Any(k => WheelPartRule.Slot(k) == WheelPartRule.Slot(kind));
 
         public void Convert(WheelKind kind)
         {

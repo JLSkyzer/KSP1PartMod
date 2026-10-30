@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using HarmonyLib;
 using KSP.IO;
 using KSP.Sim.Definitions;
@@ -239,7 +240,22 @@ namespace KSP1PartMod.Game
         /// <summary>A throwaway context: the real part node, a throwaway part data that shares (reads only) the real one's
         /// attach nodes (decoupler node ids), resource containers (heat shield capacity) and crossfeed flag (crossfeed
         /// importer), a scratch report. These are every part value Redux's and our importers read.</summary>
-        private static Ksp1PartImportContext Scratch(Ksp1PartImportContext real, Ksp1ConfigNode partNode) =>
+        private static Ksp1PartImportContext Scratch(Ksp1PartImportContext real, Ksp1ConfigNode partNode)
+        {
+            var scratch = NewScratch(real, partNode);
+            ScratchContexts.Add(scratch, ScratchMark);
+            return scratch;
+        }
+
+        /// <summary>The scratch contexts this step created (weak: they go with their context).</summary>
+        private static readonly ConditionalWeakTable<Ksp1PartImportContext, object> ScratchContexts = new ConditionalWeakTable<Ksp1PartImportContext, object>();
+        private static readonly object ScratchMark = new object();
+
+        /// <summary><paramref name="context"/> is one of this step's throwaway contexts (the wheel sub-modules accept those
+        /// without a base: wheels plan (g)).</summary>
+        internal static bool IsScratch(Ksp1PartImportContext context) => context != null && ScratchContexts.TryGetValue(context, out _);
+
+        private static Ksp1PartImportContext NewScratch(Ksp1PartImportContext real, Ksp1ConfigNode partNode) =>
             new Ksp1PartImportContext(real.PartName, new Ksp1ImportReport())
             {
                 PartNode = real.PartNode ?? partNode,

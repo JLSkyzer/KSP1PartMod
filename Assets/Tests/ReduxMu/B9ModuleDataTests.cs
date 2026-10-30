@@ -1172,5 +1172,106 @@ PART
             Assert.Greater(fxOnlyChecked, 0, "at least one DATA block with FX names");
             Assert.Greater(byField.TryGetValue("Module_Engine.engineModes", out var em) ? em : 0, 0);
         });
+
+        // ------------------------------------------------------------------ wheels (0.14.0, plan (g))
+
+        private const string WheelB9Part = @"
+PART
+{
+	name = testB9Wheel
+	mass = 0.1
+	MODULE
+	{
+		name = ModuleWheelBase
+		wheelColliderTransformName = WheelCollider
+		wheelType = MOTORIZED
+		radius = 0.3
+		center = 0,0,0
+	}
+	MODULE
+	{
+		name = ModuleWheelBrakes
+		maxBrakeTorque = 3
+		brakeResponse = 4
+	}
+	MODULE
+	{
+		name = ModuleB9PartSwitch
+		moduleID = tire
+		SUBTYPE
+		{
+			name = Soft
+			transform = softMesh
+		}
+		SUBTYPE
+		{
+			name = Hard
+			transform = hardMesh
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleWheelBrakes
+				}
+				DATA
+				{
+					maxBrakeTorque = 6
+				}
+			}
+		}
+		SUBTYPE
+		{
+			name = Grippy
+			transform = grippyMesh
+			MODULE
+			{
+				IDENTIFIER
+				{
+					name = ModuleWheelBase
+				}
+				DATA
+				{
+					frictionMultiplier = 6
+				}
+			}
+		}
+	}
+}
+";
+
+        /// <summary>The wheel importers (0.14.0) accept B9's scratch contexts without a base: a brakes edit becomes one
+        /// <c>MaxBrakeTorque</c> transformer; the base's <c>frictionMultiplier</c> is a KSP2 state field, so no transformer, and
+        /// the wheel census counts it.</summary>
+        [Test] public void TryBuild_WheelBrakesEdit_OneTransformer_StateFieldCounted() => WithGameSettings(() =>
+        {
+            var native = new Harmony(NativeModules.HarmonyId);
+            try
+            {
+                NativeModules.Reset();
+                Assert.IsTrue(NativeModules.TryApply(native, AnimationSettings.Parse("{}", out _)));
+                Assert.IsTrue(Arm());
+                var imported = Import(WheelB9Part);
+                TestContext.WriteLine(Log);
+                Assert.IsTrue(imported.Result, Log);
+                Assert.AreEqual(1, imported.Context.PartData.serializedPartModules.Count(m => m.BehaviourType?.Name == "Module_WheelBrakes"));
+                CollectionAssert.IsEmpty(Mdt(VariantOf(imported.Data, "Soft")));
+                var mdts = Mdt(VariantOf(imported.Data, "Hard"));
+                Assert.AreEqual(1, mdts.Count, Log);
+                Assert.AreEqual(("Module_WheelBrakes", "Data_WheelBrakes", "MaxBrakeTorque"), (mdts[0].BehaviourType, mdts[0].DataType, mdts[0].Key));
+                Assert.AreEqual(6f, mdts[0].Value.Value<float>());
+                Assert.DoesNotThrow(() => B9Overrides.Validate(mdts[0]));
+                var grippy = imported.Data.VariantSets.SelectMany(x => x.Variants).SingleOrDefault(v => v.VariantId == "Grippy");
+                if (grippy != null) CollectionAssert.IsEmpty(Mdt(grippy), "frictionMultiplier is a state field: not carried");
+                var brakes = imported.Context.ModuleData.Single(d => d.GetType().Name == "Data_WheelBrakes");
+                Assert.AreEqual(3f, (float)WheelAccess.Read(brakes, KSP1PartMod.Native.Wheels.WheelKind.Brakes, "MaxBrakeTorque"), "the definition stays the cfg's");
+                Assert.AreEqual("[KSP1PartMod] native: wheels: B9: 2 subtype edit(s) of wheel modules, 1 on state fields not carried " +
+                                "(testB9Wheel: frictionMultiplier)", WheelImporter.B9.Line());
+            }
+            finally
+            {
+                native.UnpatchAll(NativeModules.HarmonyId);
+                NativeModules.Reset();
+            }
+        });
     }
 }

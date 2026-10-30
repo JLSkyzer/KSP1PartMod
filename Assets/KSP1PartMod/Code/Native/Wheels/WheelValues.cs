@@ -74,8 +74,8 @@ namespace KSP1PartMod.Native.Wheels
         public bool AdjustForHighGee = true;
     }
 
-    /// <summary>The values of <c>Data_WheelSteering</c> that the mapping sets. Curves are flattened as time, value, in, out
-    /// (missing tangents 0).</summary>
+    /// <summary>The values of <c>Data_WheelSteering</c> that the mapping sets. Curves are flattened as time, value, in, out;
+    /// a key without both tangents keeps NaN for them: a smooth key, as KSP1 loads it (<see cref="WheelMapping.IsSmoothKey"/>).</summary>
     public sealed class WheelSteeringValues
     {
         public string CaliperTransformName = "";
@@ -97,6 +97,10 @@ namespace KSP1PartMod.Native.Wheels
         public string RequiredResourceName;
         public double RequiredResourceRate;
         public bool MotorEnabled = true;
+        /// <summary>The initial <c>autoTorque</c> (a state property in KSP2).</summary>
+        public bool AutoTorque = true;
+        /// <summary>The initial <c>tractionControlScale</c>, 0 to 5 (a state property in KSP2).</summary>
+        public float TractionControlScale = 1f;
     }
 
     /// <summary>The values of <c>Data_WheelMotor</c> and <c>Data_WheelMotorSteering</c> of a motor-steering module.</summary>

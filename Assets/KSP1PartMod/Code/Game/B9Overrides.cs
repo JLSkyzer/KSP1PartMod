@@ -662,6 +662,7 @@ namespace KSP1PartMod.Game
             List<B9ModuleEditPlan> engineGroup = null;
             foreach (var edit in st.ModuleEdits)
             {
+                WheelImporter.CountB9Edit(part, st.VariantId, edit.TargetModule, edit.DataKeys);
                 if (!states.TryGetValue(edit.TargetIndex, out var o))
                 {
                     o = new ModuleOutcome { Ksp1Module = edit.TargetModule ?? "?", TargetIndex = edit.TargetIndex };

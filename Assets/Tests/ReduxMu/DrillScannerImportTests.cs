@@ -132,7 +132,7 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: armed: ModuleToggleCrossfeed -> Module_ToggleCrossfeed, " +
                                               "ModuleAblator -> Module_Heatshield, ModuleResourceConverter -> Module_ResourceConverter, " +
                                               "ModuleResourceHarvester -> Module_Mine, ModuleOrbitalSurveyor -> Module_ResourceScanner, " +
-                                              "ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler" + ScienceArmed);
+                                              "ModuleResourceScanner -> Module_ResourceScanner, ModuleActiveRadiator -> Module_Cooler" + ScienceArmed + WheelImportTests.ArmedPairs);
             var importers = Importers(new Ksp1PartModuleImporterRegistry());
             Assert.IsInstanceOf<HarvesterImporter>(importers["moduleresourceharvester"]);
             Assert.IsInstanceOf<SurveyorImporter>(importers["moduleorbitalsurveyor"]);

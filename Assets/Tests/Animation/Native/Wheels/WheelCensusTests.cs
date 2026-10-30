@@ -100,7 +100,7 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
                 var kind = kinds[i].Value;
                 WheelRefusal? refusal = kind == WheelKind.Base
                     ? WheelPartRule.RefuseBase(true, i, firstBase)
-                    : WheelPartRule.RefuseSub(true, summary.BaseConverted, false, summary.Has(kind));
+                    : WheelPartRule.RefuseSub(true, summary.BaseConverted, false, summary.HasSlot(kind));
                 if (refusal == null)
                 {
                     var (converted, notRep, unused, type) = Map(kind, modules[i], deployment, r, values);

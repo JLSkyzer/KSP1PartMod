@@ -45,8 +45,8 @@ namespace KSP1PartMod.Native.Wheels
             {
                 [WheelKind.Base] = new[] { "autoFrictionAvailable", "frictionMultiplier" },
                 [WheelKind.Steering] = new[] { "autoSteeringAdjust" },
-                [WheelKind.Motor] = new[] { "motorEnabled" },
-                [WheelKind.MotorSteering] = new[] { "motorEnabled" },
+                [WheelKind.Motor] = new[] { "motorEnabled", "autoTorque", "tractionControlScale" },
+                [WheelKind.MotorSteering] = new[] { "motorEnabled", "autoTorque", "tractionControlScale" },
             };
 
         public static string Ksp1Module(WheelKind kind) => Ksp1Names[(int)kind];
@@ -236,6 +236,8 @@ namespace KSP1PartMod.Native.Wheels
             v.DriveResponse = r.F("driveResponse", v.DriveResponse);
             v.IdleDrain = r.D("idleDrain", v.IdleDrain);
             v.MotorEnabled = r.B("motorEnabled", v.MotorEnabled);
+            v.AutoTorque = r.B("autoTorque", v.AutoTorque);
+            v.TractionControlScale = r.Clamped("tractionControlScale", v.TractionControlScale, 0, 5);
             var curve = r.Curve("torqueCurve");
             var first = true;
             foreach (var res in r.Nodes("RESOURCE"))
@@ -360,16 +362,14 @@ namespace KSP1PartMod.Native.Wheels
             return false;
         }
 
-        /// <summary>KSP1 FloatCurve keys (<see cref="EntryParser.Keys"/>, four floats per key), with missing tangents 0; null
-        /// for no node.</summary>
-        public static float[] CurveKeys(IKsp1Node curve)
-        {
-            if (curve == null) return null;
-            var keys = EntryParser.Keys(curve);
-            for (var i = 0; i < keys.Length; i++)
-                if (float.IsNaN(keys[i])) keys[i] = 0f;
-            return keys;
-        }
+        /// <summary>KSP1 FloatCurve keys (<see cref="EntryParser.Keys"/>, four floats per key); null for no node. A key line
+        /// without both tangents keeps NaN for them (see <see cref="IsSmoothKey"/>).</summary>
+        public static float[] CurveKeys(IKsp1Node curve) => curve == null ? null : EntryParser.Keys(curve);
+
+        /// <summary>Key <paramref name="key"/> of flattened <paramref name="keys"/> has no tangents: KSP1 loads such a key with
+        /// Unity's <c>AddKey(time, value)</c>, which gives it smooth automatic tangents, so the importer adds it with
+        /// <c>FloatCurve.Add(time, value)</c>, not with tangents 0.</summary>
+        public static bool IsSmoothKey(float[] keys, int key) => float.IsNaN(keys[key * 4 + 2]) || float.IsNaN(keys[key * 4 + 3]);
 
         private static float Clamp<T>(float value, float min, float max, string what, WheelMapped<T> m) where T : class
         {
@@ -429,6 +429,13 @@ namespace KSP1PartMod.Native.Wheels
                 if (IsruCfg.TryNumber(t, out var d)) return (float)d;
                 Note(Bad(key, t, "a number"));
                 return current;
+            }
+
+            /// <summary>A number clamped to <paramref name="min"/>..<paramref name="max"/>, with a note when clamped.</summary>
+            public float Clamped(string key, float current, float min, float max)
+            {
+                var value = F(key, current);
+                return Clamp(value, min, max, _module + ": " + key, _m);
             }
 
             public double D(string key, double current)

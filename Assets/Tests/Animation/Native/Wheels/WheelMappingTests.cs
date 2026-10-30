@@ -194,8 +194,11 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             Assert.AreEqual("SteeringPivot", v.CaliperTransformName);
             Assert.AreEqual(2f, v.SteeringResponse);
             Assert.IsTrue(v.AutoSteeringAdjust);
-            CollectionAssert.AreEqual(new[] { 0f, 20f, 0f, 0f, 10f, 9f, 0f, 0f, 30f, 2f, 0f, 0f }, v.SteeringCurve, "missing tangents 0");
+            const float n = float.NaN;
+            CollectionAssert.AreEqual(new[] { 0f, 20f, n, n, 10f, 9f, n, n, 30f, 2f, n, n }, v.SteeringCurve, "missing tangents kept NaN");
+            for (var k = 0; k < 3; k++) Assert.IsTrue(WheelMapping.IsSmoothKey(v.SteeringCurve, k), "a 2-value key is smooth, as KSP1 loads it");
             CollectionAssert.AreEqual(new[] { 0f, 1f, 0f, 0f, 30f, 0.25f, 0f, 0f }, v.SteeringMaxAngleCurve);
+            Assert.IsFalse(WheelMapping.IsSmoothKey(v.SteeringMaxAngleCurve, 0), "4 values: the cfg's tangents");
             CollectionAssert.AreEqual(new[] { "steeringRange" }, m.NotReproduced);
             Assert.IsTrue(m.Notes.Any(n => n.Contains("KSP2 takes the curve maximum")));
         }
@@ -236,6 +239,28 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             var m = WheelMapping.Motor(node, Resources());
             Assert.IsTrue(m.Converted);
             CollectionAssert.AreEqual(new[] { 0f, 50f, 0f, 0f, 42f, 0f, 0f, 0f }, m.Values.TorqueCurve);
+        }
+
+        [Test] public void Motor_StateFields_TractionControlClamped_AutoTorque()
+        {
+            var m = WheelMapping.Motor(M(MotorBody + "\ntractionControlScale = 7\nautoTorque = false"), Resources());
+            Assert.IsTrue(m.Converted);
+            Assert.AreEqual(5f, m.Values.TractionControlScale, "clamped to KSP1's 0..5");
+            Assert.IsFalse(m.Values.AutoTorque);
+            CollectionAssert.IsEmpty(m.NotReproduced, "both have a KSP2 state counterpart");
+            Assert.IsTrue(m.Notes.Any(x => x.Contains("tractionControlScale 7 clamped to 5")), string.Join("\n", m.Notes));
+            var plain = WheelMapping.Motor(M(MotorBody), Resources()).Values;
+            Assert.AreEqual(1f, plain.TractionControlScale, "KSP2's default");
+            Assert.IsTrue(plain.AutoTorque);
+            Assert.IsTrue(WheelMapping.IsStateField(WheelKind.Motor, "tractionControlScale"));
+            Assert.IsTrue(WheelMapping.IsStateField(WheelKind.MotorSteering, "autoTorque"));
+        }
+
+        [Test] public void Motor_ThreeValueKey_IsSmooth()
+        {
+            var m = WheelMapping.Motor(M("name = ModuleWheelMotor\ntorqueCurve\n{\nkey = 0 1 0\nkey = 10 0.5 0 0\n}"), Resources());
+            Assert.IsTrue(WheelMapping.IsSmoothKey(m.Values.TorqueCurve, 0), "3 values: no out tangent, read as a 2-value key");
+            Assert.IsFalse(WheelMapping.IsSmoothKey(m.Values.TorqueCurve, 1));
         }
 
         [Test] public void Motor_WithoutTorqueCurve_GivesNoModule()
