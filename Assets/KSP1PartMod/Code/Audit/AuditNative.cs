@@ -21,6 +21,14 @@ namespace KSP1PartMod.Audit
         /// module.</summary>
         public const string Science = "Module_ScienceExperiment";
         public const string ReportStorage = "report storage";
+        /// <summary>Wheels (0.14.0): the nine KSP2 wheel modules, in <c>WheelKind</c> order. The audit's copy is an OAB part and
+        /// <c>Module_WheelBase</c> sets up its physics in flight only, so a wheel module that fails to initialize there is a
+        /// real fault.</summary>
+        public static readonly IReadOnlyList<string> Wheels = new[]
+        {
+            "Module_WheelBase", "Module_WheelSuspension", "Module_WheelSteering", "Module_WheelMotor", "Module_WheelMotorSteering",
+            "Module_WheelBrakes", "Module_WheelDamage", "Module_WheelLock", "Module_WheelBogey",
+        };
         public const string UninitializedTag = ":uninitialized";
         public const string MissingTag = ":missing";
 
