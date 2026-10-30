@@ -128,6 +128,15 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "science_skip_ids": ["evaReport", "evaScience", "surfaceSample", "ROCScience"],
   "science_deploy_animations": true,
   "science_wait_for_animation": true,
+  "ksp1_wheels": true,
+  "wheel_steering": true,
+  "wheel_motors": true,
+  "wheel_brakes": true,
+  "wheel_leg_locks": true,
+  "wheel_damage": true,
+  "wheel_bogeys": true,
+  "wheel_ksp1_friction": true,
+  "wheel_ksp1_deploy_timing": true,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissionColor", "_EmissiveColor"],
     "_TintColor": ["_TintColor"],
@@ -177,6 +186,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - Converters, drills and scanners (0.10.0, see that section): `ksp1_converters`, `ksp1_drills`, `ksp1_survey_scanners`, `ksp1_resource_scanners`, `ksp1_ore_resource`, `harvest_multiplier`, `isru_heat_scale`, `isru_active_animation`, `isru_ksp1_rates`.
 - Radiators (0.11.0, see that section): `ksp1_radiators`, `radiator_deploy_bridge`, `radiator_auto_on`, `radiator_flux_scale`, `radiator_ksp1_rates`.
 - Science (0.12.0, see that section): `ksp1_science`, `science_generate_definitions`, `science_definitions_via_patch_manager`, `science_report_storage`, `science_value_scale`, `science_transmit_split`, `science_native_ids`, `science_fallback_ids`, `science_skip_ids`, `science_deploy_animations`, `science_wait_for_animation`.
+- Wheels (0.14.0, see that section): `ksp1_wheels`, `wheel_steering`, `wheel_motors`, `wheel_brakes`, `wheel_leg_locks`, `wheel_damage`, `wheel_bogeys`, `wheel_ksp1_friction`, `wheel_ksp1_deploy_timing`.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
 ### Phase 2a: material, light and glow curves (0.4.0)
@@ -197,7 +207,7 @@ Not run in game yet: checklist in `docs/testing/2026-10-27-animations-phase2-in-
 - **Plugin modules** (`plugin_modules`): engine nozzle extensions (`ModuleDeployableEngine`, `ModuleBdbAnimatedEngine`) that follow the ignition, the multi-mode nozzle (`ModuleMultiStateEngine`), look-at pistons (`ModuleAdvancedLookAtConstraint`), animated decouplers (`ModuleBdbDecouplerAnimation`), RCS glow and emissive (`FXModuleAnimateRCS`, `ModuleBdbRCSEmissive`), mesh hiders (`ModuleBDBDeployableMeshHider`), DMagic science booms (`DMModuleScienceAnimateGeneric`, the clip; since 0.12.0 a running experiment opens it), the acceleration spring (`ModuleBdbAccelAnimation`) and the Mercury landing bag.
 - **B9 gates** (`b9_module_gates`): a B9PartSwitch subtype that switches a module off also switches off that module's animation entries, following the variant picked in the VAB. The gates apply to all our entries, phase 1 kinds included.
 - **Settings.** `plugin_modules` and `b9_module_gates` (default true); `skip_modules` also names plugin modules; `editor_animation_speed` governs the new previews.
-- **Not done yet:** links by module index (cargo bay shielding, docking port gating, animation groups with converters; science experiments: see Science (0.12.0)), deploy limit and `restrictedNode`, one-shot inflatables, crew capacity when open, radiator and antenna tracking, wheel physics, robotics, Waterfall effects.
+- **Not done yet:** links by module index (cargo bay shielding, docking port gating, animation groups with converters; science experiments: see Science (0.12.0)), deploy limit and `restrictedNode`, one-shot inflatables, crew capacity when open, radiator and antenna tracking, robotics, Waterfall effects.
 
 ## B9PartSwitch overrides (0.9.0)
 
@@ -313,6 +323,31 @@ Redux drops every KSP1 science module. Since 0.12.0 the mod imports `ModuleScien
 - **Honest numbers.** Nested phases are labelled "of which", what our timings do not cover is labelled "other" or "outside our timings", a frame p95 is the upper bound of its histogram bucket (within about 13 %), and the cost of the timestamps themselves is printed (`timer overhead`, `timing overhead`).
 - **Safety.** A timing patch that throws stops the whole load timeline for the session (`perf: load: stopped`), and Redux's code runs as it is. A failure of the frame cost turns it off with one line.
 
+## Wheels (0.14.0)
+
+Redux drops KSP1's nine wheel modules, so a KSP1 wheel, gear or landing leg was a rigid part. Since 0.14.0 the mod imports each of them as KSP2's own wheel module of the same role, at Redux's import (whatever `enabled` is): KSP2's modules do all the physics, with no solver, friction or spring code of ours. Built, not verified in game. Checklist (French): `docs/testing/2026-10-30-wheels-in-game-checklist.md`. Lines `[KSP1PartMod] native:` and `[KSP1PartMod] wheel:`.
+
+| Key | Default | Effect | `false` |
+|---|---|---|---|
+| `ksp1_wheels` | `true` | `ModuleWheelBase` and `ModuleWheelSuspension` become `Module_WheelBase` and `Module_WheelSuspension`, one wheel per part: KSP1 wheels, gear and legs roll and spring. A folding gear is switched on and off by Redux's own deployable. | Redux drops every wheel module, as in 0.13.1; the keys below do nothing. |
+| `wheel_steering` | `true` | `ModuleWheelSteering` becomes `Module_WheelSteering`, with KSP1's steering curves. | No steering. |
+| `wheel_motors` | `true` | `ModuleWheelMotor` and `ModuleWheelMotorSteering` become `Module_WheelMotor` and `Module_WheelMotorSteering`, with KSP1's torque curve and electric charge rate. | No motor. |
+| `wheel_brakes` | `true` | `ModuleWheelBrakes` becomes `Module_WheelBrakes`, with KSP1's brake torque (KSP2 clamps it to the tyre's grip). | No brakes. |
+| `wheel_leg_locks` | `true` | `ModuleWheelLock` becomes `Module_WheelLock`, the resting grip that keeps landing legs from sliding. | No lock. |
+| `wheel_damage` | `true` | `ModuleWheelDamage` becomes `Module_WheelDamage`: a wheel can break and a kerbal can repair it. | KSP1 wheels never break. |
+| `wheel_bogeys` | `true` | `ModuleWheelBogey` becomes `Module_WheelBogey`: feet and bogies pitch with the ground. | No bogey. |
+| `wheel_ksp1_friction` | `true` | KSP1's `frictionPeak` and `frictionLimit`, and manual friction where KSP1 had no auto friction (landing legs). | KSP2's 1.45 and 1.1, auto friction. |
+| `wheel_ksp1_deploy_timing` | `true` | KSP1's `TsubSys` (the point of the deploy clip where the wheel switches on; `1 − TsubSys` on retraction) and `useStandInCollider` (the sphere a folded gear rests on). | KSP2's 0.98 and 0.02, no stand-in collider. |
+
+- **One wheel per part.** KSP2 allows one; the first `ModuleWheelBase` builds it. A sub-module without a converted base, and a second module of a kind, get nothing (counted on the `native: wheels:` line). On the author's set: 36 parts (23 legs, 7 free, 6 motorized), none refused.
+- **Gear action.** In flight KSP2's wheel base adds its own Gear toggle to a part with a native deployable, so the mod's 0.2.x gear button stands down there: G toggles the gear once per press. In the VAB such a gear lists no Gear action, as KSP2's own gear. A wheel whose deployable Redux kept as `Ksp1Module_Deployable` keeps the mod's button, but has no native gating: it rolls while folded (the `wheel:` line names it).
+- **Units.** KSP1's brake, lock and motor torques are read as kN·m, KSP2's unit (inferred; KSP1 does not document it). The `native: wheel reference:` line gives KSP2's own wheels for comparison.
+- **Electricity.** A motor keeps KSP1's electric charge rate: KSP2's formula is KSP1's.
+- **Skipped.** KSPWheel (KerbalFoundries) modules, the legacy `ModuleLandingLeg`, the KSP1 tuning that Redux's coupled solver ignores (`springRatio`, `damperRatio`, `boostRatio` and the like, copied but unused), `steeringRange` (KSP2 takes it from the curve), the brake status light (Redux drops `ModuleStatusLight`), and any stand-in deployable. Each is counted in the log.
+- **Safety.** Each importer failure leaves the part as 0.13.1 imports it, with no orphan sub-module. A missing game member turns its module off with one line. The setup line's patch stops for the session if it throws (`wheel: patch failed`).
+- **Saves.** A vessel saved before 0.14.0 gains the wheel modules at load; one saved in 0.14.0 and loaded with `ksp1_wheels: false` loses them.
+- **Audit.** The `native_modules` column and the `audit: native modules:` line count wheel parts.
+
 ## Audit mode (0.6.0)
 
 Off by default. With `"audit_on_vab_entry": true` in `animations.json`, the first time you enter the VAB in a game session (mod enabled in the campaign), the mod loads every KSP1 part once, off screen and one at a time, and writes a report of the parts that fail, throw, stay unfinished or log errors. It changes nothing in your craft, the part list or the undo history, and the shared KSP1 textures are not destroyed. Do not build while it runs; leaving the VAB cancels it, and the next entry resumes. Not run in game yet: checklist in `docs/testing/2026-10-28-audit-in-game-checklist.md`.
@@ -347,6 +382,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
 - Converters, drills and scanners (0.10.0): built, not verified in game. The +Z probe direction and the drill yield are to calibrate in game; a full output tank stops a converter (no `DumpExcess`); a B9 subtype that turns a converter off has no native off form; KSP1 parts with core heat get no core heat (radiators: see 0.11.0).
 - Radiators (0.11.0): built, not verified in game. The /50 power unit and the balance against the 0.10.0 heat of converters and drills are only checked in game; the cooling is vessel-wide (no conduction, no core heat, no parent-only cooling); panel tracking and wind break are not reproduced; the Heat glow of radiator parts stays dark.
 - Science (0.12.0): built, not verified in game. Only checked in game: the values against KSP2's own experiments (`science_value_scale`), the Patch Manager route of the generated definitions, their names through Redux's localizer, the clips of Redux followers, and what the R&D archive shows of stored KSP1 reports once the definitions are missing. The definition scan reads the raw part cfgs, so ModuleManager part patches that edit a science module (`experimentID`, `sitMask`, `bioMask`, `xmitDataScalar`, `usageReqMask…`, `FxModules`) do not reach the generated definitions (a DMagic mask variant, the data/sample split); they are counted on the `definitions: read` line (17 raw patches on the author's set, most for absent mods). The import itself reads Redux's patched parts.
+- Wheels (0.14.0): built, not verified in game. The kN·m unit, the `1 − TsubSys` retraction point, KSP1 geometry on Redux's solver (leg radii of 0.1 m, friction 4 on KRE legs) and whether the held deploy clip and the suspension show together are only checked in game; a wheel whose deployable Redux kept as `Ksp1Module_Deployable` rolls while folded.
 - Engine shrouds (0.7.0): built, not verified in game. `ignoreNodes` shrouds keep their reentry geometry after a jettison.
 - Animations: phases 1, 2a and 2b (all built; none verified in game yet beyond what the checklists record). The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
