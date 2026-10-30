@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using KSP.Sim.Definitions;
+using KSP1PartMod.Native;
 using KSP1PartMod.Native.Wheels;
 using UnityEngine;
 
@@ -307,8 +308,12 @@ namespace KSP1PartMod.Game
             Set(d, k, "idleDrain", v.IdleDrain);
             Set(d, k, "torqueCurve", NewCurve(v.TorqueCurve));
             Set(d, k, "useResources", v.UseResources);
-            if (v.UseResources)
-                Set(d, k, "requiredResource", new PartModuleResourceSetting { ResourceName = v.RequiredResourceName, Rate = (float)v.RequiredResourceRate });
+            // Always named (Task 3 review, F1): KSP2 sets up the request in the VAB whatever useResources says.
+            Set(d, k, "requiredResource", new PartModuleResourceSetting
+            {
+                ResourceName = string.IsNullOrEmpty(v.RequiredResourceName) ? IsruResources.ElectricCharge : v.RequiredResourceName,
+                Rate = v.UseResources ? (float)v.RequiredResourceRate : 0f,
+            });
             SetProperty(d, k, "motorEnabled", v.MotorEnabled);
             SetProperty(d, k, "autoTorque", v.AutoTorque);
             SetProperty(d, k, "tractionControlScale", v.TractionControlScale);

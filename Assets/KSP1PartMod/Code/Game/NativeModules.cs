@@ -173,6 +173,8 @@ namespace KSP1PartMod.Game
             MissingLine = WheelImporter.MissingLine(kind),
             Create = () => new WheelImporter(kind, _settings),
             SummaryLines = WheelImporter.SummaryLines,
+            // The suspension's collider check needs each part's cfg file (Task 3 review, F6).
+            AfterArm = kind == WheelKind.Suspension ? WheelImporter.ArmTranslatorHook : (Action<Harmony>)null,
         };
 
         /// <summary>A KSP1 experiment module → <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>); the three share one importer type.</summary>

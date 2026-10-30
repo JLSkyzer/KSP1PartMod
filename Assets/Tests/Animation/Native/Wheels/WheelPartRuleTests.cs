@@ -39,8 +39,8 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
 
         [Test] public void Labels()
         {
-            CollectionAssert.AreEqual(new[] { "no base", "second", "switch off", "mapping" },
-                new[] { WheelRefusal.NoBase, WheelRefusal.Second, WheelRefusal.SwitchOff, WheelRefusal.Mapping }.Select(WheelPartRule.Label));
+            CollectionAssert.AreEqual(new[] { "no base", "second", "switch off", "mapping", "failed" },
+                new[] { WheelRefusal.NoBase, WheelRefusal.Second, WheelRefusal.SwitchOff, WheelRefusal.Mapping, WheelRefusal.Failed }.Select(WheelPartRule.Label));
         }
 
         [Test] public void PartSummary_ConvertedAndRefused()

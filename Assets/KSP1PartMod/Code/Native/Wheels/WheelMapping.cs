@@ -267,6 +267,14 @@ namespace KSP1PartMod.Native.Wheels
                 v.RequiredResourceName = mapped;
                 v.RequiredResourceRate = rate;
             }
+            if (!v.UseResources)
+            {
+                // KSP2's motor sets up its resource request in the VAB whatever useResources says, and a null resource name
+                // throws there on every fixed update (Task 3 review, F1): name electric charge at rate 0, no drain.
+                v.RequiredResourceName = IsruResources.ElectricCharge;
+                v.RequiredResourceRate = 0;
+                r.Note($"{module}: no usable RESOURCE, requiredResource set to ElectricCharge at 0 with useResources false (no drain)");
+            }
             if (curve == null || curve.Length == 0)
             {
                 r.Note($"{module}: no torqueCurve key, no motor");

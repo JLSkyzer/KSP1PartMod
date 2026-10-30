@@ -11,10 +11,14 @@ namespace KSP1PartMod.Native.Wheels
         NoBase,
         /// <summary>A second base, or a second sub-module of a kind, on one part (KSP2 allows one wheel per part).</summary>
         Second,
-        /// <summary>Its <c>animations.json</c> switch is off.</summary>
+        /// <summary>Its <c>animations.json</c> switch is off. Pure rules and census only: in game a switched-off kind has no
+        /// importer (Redux drops it, and the arming logs the off line), so the summary, which lists non-zero reasons only, never
+        /// shows it.</summary>
         SwitchOff,
-        /// <summary>The mapping found nothing to convert (no radius, no curve…) or the import failed.</summary>
+        /// <summary>The mapping found nothing to convert (no radius, no curve…).</summary>
         Mapping,
+        /// <summary>The conversion threw; what it added was removed.</summary>
+        Failed,
     }
 
     /// <summary>One wheel per part (wheels plan (f)): the first <c>ModuleWheelBase</c> builds the base; a sub-module is converted
@@ -57,6 +61,7 @@ namespace KSP1PartMod.Native.Wheels
                 case WheelRefusal.NoBase: return "no base";
                 case WheelRefusal.Second: return "second";
                 case WheelRefusal.SwitchOff: return "switch off";
+                case WheelRefusal.Failed: return "failed";
                 default: return "mapping";
             }
         }

@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using HarmonyLib;
 using KSP.Sim.Definitions;
 using KSP.Sim.ResourceSystem;
+using KSP1PartMod.Animation.Mu;
 using KSP1PartMod.Animation.Settings;
+using KSP1PartMod.Animation.Tracks;
+using KSP1PartMod.Game.Animation;
+using KSP1PartMod.Tests.Animation;
 using KSP1PartMod.Game;
 using KSP1PartMod.Native;
 using KSP1PartMod.Native.Wheels;
@@ -412,6 +417,8 @@ namespace KSP1PartMod.Tests.ReduxMu
             CollectionAssert.IsEmpty(NativeModules.Record.ConvertedModules("testWheel"));
             Assert.That(_lines, Has.Some.Contains("testWheel: ModuleWheelBase not converted"), Log);
             CollectionAssert.Contains(_lines, "[KSP1PartMod] native: testWheel: ModuleWheelSteering not converted (no base)");
+            NativeModules.LogImportSummaryOnce();
+            Assert.That(_lines, Has.Some.Contains("refused: no base 5, failed 1;"), "review F2: an exception is not a mapping refusal");
         }
 
         [Test] public void SubException_OnlyThatModuleRolledBack()
@@ -423,6 +430,70 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreEqual(new[] { true, false, true }, ImportAll(part, context).Select(r => r.Ok).ToArray());
             Assert.AreEqual(2, context.ModuleData.Count, "both motor data objects of the failed call removed");
             Assert.IsFalse(context.ModuleData.Any(d => d.GetType() == WheelAccess.Get().DataOf(WheelKind.Motor)));
+        }
+
+        /// <summary>Review F1: KSP2's motor sets up its resource request in the VAB whatever <c>useResources</c> says, and a null
+        /// name throws there on every fixed update. A motor without a usable resource names electric charge at rate 0.</summary>
+        [Test] public void MotorWithoutResource_NamesElectricChargeAtZero()
+        {
+            Assert.IsTrue(Arm());
+            var noResource = Motor.Substring(0, Motor.IndexOf("RESOURCE", StringComparison.Ordinal));
+            foreach (var body in new[] { noResource, Motor.Replace("ElectricCharge", "Kethane"), Motor.Replace("rate = 2.5", "rate = -1") })
+            {
+                var part = Part(M(RoverBase) + M(body));
+                var context = Context(part);
+                Assert.IsTrue(ImportAll(part, context).All(r => r.Ok), Log);
+                Assert.AreEqual(false, Read(context, WheelKind.Motor, "useResources"));
+                var res = (PartModuleResourceSetting)Read(context, WheelKind.Motor, "requiredResource");
+                Assert.AreEqual(("ElectricCharge", 0f), (res.ResourceName, res.Rate), body);
+            }
+            Assert.That(_lines, Has.Some.Contains("ModuleWheelMotor: no usable RESOURCE, requiredResource set to ElectricCharge at 0"));
+        }
+
+        /// <summary>Review F6 on a real installed model (KSP1 files optional): a collider name with a collider below it is kept,
+        /// one whose object has none is cleared, an absent one is kept (KSP2 skips it), and without the cfg file it is kept and
+        /// noted.</summary>
+        [Test] public void SuspensionCollider_RealModel_FoundKept_NoColliderCleared_AbsentKept()
+        {
+            var cfg = InstalledKsp1.AllCfg().FirstOrDefault(p => File.ReadAllText(p).Contains("suspensionColliderName = DamperCollider"));
+            if (cfg == null) Assert.Ignore("no installed cfg with suspensionColliderName = DamperCollider");
+            var root = InstalledKsp1.Root;
+            var text = File.ReadAllText(cfg);
+            var original = Ksp1ConfigNode.Parse(text).GetNodes("PART").First();
+            var snapshot = PartSnapshot.From(original.GetValue("name"), cfg, root, new Ksp1NodeAdapter(original), null);
+            var resolver = new ModelPathResolver(root, () => DirectoryIndex.Build(root));
+            var models = Enumerable.Range(0, snapshot.ModelRefs.Length)
+                .Select(i => resolver.Resolve(cfg, snapshot.ModelRefs[i], snapshot.RefIsMesh[i], out _)).Where(x => x != null)
+                .Select(x => MuReader.Read(x).Root).ToList();
+            IEnumerable<MuNode> All(MuNode n) => new[] { n }.Concat(n.Children.SelectMany(All));
+            var names = models.SelectMany(All).GroupBy(n => n.Name).Where(g => g.Count() == 1).Select(g => g.Single()).ToList();
+            var bare = names.First(n => !SuspensionColliderRule.HasCollider(n)).Name;
+            Assert.IsTrue(Arm());
+
+            string Run(string colliderName, bool withFile)
+            {
+                var fileNode = Ksp1ConfigNode.Parse(text.Replace("suspensionColliderName = DamperCollider", "suspensionColliderName = " + colliderName));
+                var part = fileNode.GetNodes("PART").First();
+                if (withFile) WheelImporter.RememberFileForTests(part, new Ksp1ConfigFile(new Ksp1ModRoot(root, root), cfg, "Squad", fileNode));
+                var context = Context(part);
+                ImportAll(part, context);
+                return (string)Read(context, WheelKind.Suspension, "suspensionColliderName");
+            }
+
+            Assert.AreEqual("DamperCollider", Run("DamperCollider", true), "a collider below it: kept");
+            Assert.AreEqual("", Run(bare, true), "'" + bare + "' has no collider: cleared");
+            Assert.That(_lines, Has.Some.Contains(SuspensionColliderRule.ClearedNote(bare)));
+            Assert.AreEqual("notInTheModel", Run("notInTheModel", true), "absent: kept, KSP2 skips it");
+            Assert.AreEqual("DamperCollider", Run("DamperCollider", false));
+            Assert.That(_lines, Has.Some.Contains(WheelImporter.NotCheckedNote("DamperCollider")));
+        }
+
+        [Test] public void Arm_HooksTheTranslatorForTheColliderCheck()
+        {
+            Assert.IsTrue(Arm());
+            var method = AccessTools.Method(AccessTools.TypeByName(WheelImporter.TranslatorTypeName), "TryTranslatePart");
+            Assert.IsTrue(Harmony.GetPatchInfo(method)?.Prefixes.Any(p => p.owner == NativeModules.HarmonyId) == true);
+            Assert.That(_lines, Has.None.Contains("suspension collider check"));
         }
 
         [Test] public void ListFormHidden_MotorSteeringDropped_AndTheLine()

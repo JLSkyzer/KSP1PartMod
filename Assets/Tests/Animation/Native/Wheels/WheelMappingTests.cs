@@ -275,7 +275,9 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             var m = WheelMapping.Motor(M("name = ModuleWheelMotor\ntorqueCurve\n{\nkey = 0 1\n}"), Resources());
             Assert.IsTrue(m.Converted);
             Assert.IsFalse(m.Values.UseResources);
-            Assert.IsNull(m.Values.RequiredResourceName);
+            Assert.AreEqual(("ElectricCharge", 0.0), (m.Values.RequiredResourceName, m.Values.RequiredResourceRate),
+                "review F1: never a null name, KSP2 sets up the request in the VAB whatever useResources says");
+            Assert.IsTrue(m.Notes.Any(n => n.Contains("no usable RESOURCE, requiredResource set to ElectricCharge at 0")));
         }
 
         [Test] public void Motor_UnknownResource_DropsTheDrain_KeepsTheMotor()
@@ -284,6 +286,9 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             Assert.IsTrue(m.Converted);
             Assert.IsFalse(m.Values.UseResources);
             Assert.IsTrue(m.Notes.Any(n => n.Contains("Kethane -> Kethane is not a game resource, no drain")), string.Join("; ", m.Notes));
+            Assert.AreEqual(("ElectricCharge", 0.0), (m.Values.RequiredResourceName, m.Values.RequiredResourceRate), "review F1");
+            var badRate = WheelMapping.Motor(M(MotorBody.Replace("rate = 2.5", "rate = fast")), Resources()).Values;
+            Assert.AreEqual((false, "ElectricCharge", 0.0), (badRate.UseResources, badRate.RequiredResourceName, badRate.RequiredResourceRate));
         }
 
         [Test] public void Motor_ResourceNameMapped_SecondResourceNoted()

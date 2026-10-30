@@ -1,3 +1,4 @@
+using KSP1PartMod.Animation.Mu;
 using KSP1PartMod.Native.Wheels;
 using NUnit.Framework;
 
@@ -20,6 +21,29 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
                             "(bluedog_LRV_Wheel: frictionMultiplier, rover: autoTorque)", c.Line());
             c.Clear();
             Assert.AreEqual("[KSP1PartMod] native: wheels: B9: 0 subtype edit(s) of wheel modules, 0 on state fields not carried (none)", c.Line());
+        }
+
+        /// <summary>Review F6: KSP2's suspension needs a collider on or below the named object; an absent name is skipped.</summary>
+        [Test] public void SuspensionCollider_AbsentFoundNoCollider()
+        {
+            var root = new MuNode("model", null);
+            var piston = new MuNode("piston_collider", root);
+            var mesh = new MuNode("piston_mesh", piston);
+            mesh.AddEntryType(MuEntryType.MeshCollider2);
+            var bare = new MuNode("damper", root);
+            new MuNode("damper_mesh", bare).AddEntryType(MuEntryType.MeshFilter);
+            var wheel = new MuNode("wheelCollider", root);
+            wheel.AddEntryType(MuEntryType.WheelCollider);
+            Assert.AreEqual(SuspensionColliderState.Found, SuspensionColliderRule.Check(new[] { root }, "piston_collider"), "a collider below counts");
+            Assert.AreEqual(SuspensionColliderState.NoCollider, SuspensionColliderRule.Check(new[] { root }, "damper"));
+            Assert.AreEqual(SuspensionColliderState.NoCollider, SuspensionColliderRule.Check(new[] { root }, "wheelCollider"),
+                "Redux skips the .mu WheelCollider entry");
+            Assert.AreEqual(SuspensionColliderState.Absent, SuspensionColliderRule.Check(new[] { root }, "Piston_Collider"), "exact name, as KSP2 searches");
+            Assert.AreEqual(SuspensionColliderState.Absent, SuspensionColliderRule.Check(new MuNode[0], "damper"));
+            var other = new MuNode("model2", null);
+            new MuNode("piston_collider", other);
+            Assert.AreEqual(SuspensionColliderState.NoCollider, SuspensionColliderRule.Check(new[] { root, other }, "piston_collider"),
+                "two objects of that name: every one must have a collider");
         }
 
         [Test] public void Median_SkipsNaN()

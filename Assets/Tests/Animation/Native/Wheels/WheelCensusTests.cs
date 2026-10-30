@@ -345,6 +345,60 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             CollectionAssert.AreEquivalent(KnownFindings, missing, string.Join("\n", missing));
         }
 
+        /// <summary>Task 3 review, F6: KSP2's suspension switches off the first collider under <c>suspensionColliderName</c>
+        /// without checking that one exists. The installed parts that name such an object, by state on the <c>.mu</c> records.
+        /// Found on 2026-10-30 (23 installed parts): 16 found, 7 absent (KSP2 skips those), 0 without a collider, so no installed
+        /// part would throw; the importer clears the name on a part without a collider (other collections).</summary>
+        private static readonly string[] KnownSuspensionColliders =
+        {
+            "KerbalReusabilityExpansion/KRE-AeroLeg-L: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/KRE-AeroLeg-M: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/ITSLeg-L-KRE: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/ITSLeg-M-KRE: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/KRE-HexLegsL: 'piston_collider' Absent",
+            "KerbalReusabilityExpansion/KRE-HexLegsM: 'piston_collider' Absent",
+            "KerbalReusabilityExpansion/HexLegsL: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/HexLegsM: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/ShepardLeg-M: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/ShepardLeg-S: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/KRE-ShepardLeg-M: 'piston_collider' Absent",
+            "KerbalReusabilityExpansion/KRE-ShepardLeg-S: 'piston_collider' Absent",
+            "KerbalReusabilityExpansion/KRE-FalconLeg-L: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/KRE-FalconLeg-M: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/KRE-FalconLeg-S: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/SpaceXLegs-XL: 'suspensionCollider' Absent",
+            "KerbalReusabilityExpansion/SpaceXLegs-L: 'suspensionCollider' Absent",
+            "KerbalReusabilityExpansion/SpaceXLegs-S: 'suspensionCollider' Absent",
+            "KerbalReusabilityExpansion/KRE-FalconLegMk2-L: 'piston_collider' Found",
+            "KerbalReusabilityExpansion/KRE-FalconLegMk2-M: 'piston_collider' Found",
+            "Squad/landingLeg1: 'piston_collider' Found",
+            "Squad/landingLeg1-2: 'piston_collider' Found",
+            "Squad/GearLarge: 'DamperCollider' Found",
+        };
+
+        [Test] public void Installed_SuspensionColliders_StateInTheModel()
+        {
+            var c = Installed();
+            var root = InstalledKsp1.Root;
+            _resolver = _resolver ?? new ModelPathResolver(root, () => DirectoryIndex.Build(root));
+            var found = new List<string>();
+            foreach (var (mod, cfg, name, part, v) in c.WheelParts)
+            {
+                var colliderName = v.Suspension?.SuspensionColliderName;
+                if (string.IsNullOrEmpty(colliderName)) continue;
+                var snapshot = PartSnapshot.From(name, cfg, root, part, null);
+                var roots = new List<MuNode>();
+                for (var i = 0; i < snapshot.ModelRefs.Length; i++)
+                {
+                    var path = _resolver.Resolve(cfg, snapshot.ModelRefs[i], snapshot.RefIsMesh[i], out _);
+                    if (path != null) roots.Add(MuReader.Read(path).Root);
+                }
+                found.Add($"{mod}/{name}: '{colliderName}' {SuspensionColliderRule.Check(roots, colliderName)}");
+            }
+            TestContext.WriteLine(string.Join("\n", found));
+            CollectionAssert.AreEquivalent(KnownSuspensionColliders, found, string.Join("\n", found));
+        }
+
         [Test] public void GameData_EveryWheelModuleMaps()
         {
             var root = InstalledKsp1.GameDataRoot;

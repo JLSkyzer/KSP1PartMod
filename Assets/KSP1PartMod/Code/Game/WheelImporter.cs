@@ -4,11 +4,14 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using KSP.Game;
 using KSP.Sim.Definitions;
+using HarmonyLib;
 using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Settings;
+using KSP1PartMod.Animation.Tracks;
 using KSP1PartMod.Game.Animation;
 using KSP1PartMod.Native;
 using KSP1PartMod.Native.Wheels;
+using Redux.Ksp1Import;
 using Redux.Ksp1Import.Config;
 using Redux.Ksp1Import.Modules;
 
@@ -234,7 +237,7 @@ namespace KSP1PartMod.Game
                     while (context.ModuleData.Count > added) context.ModuleData.RemoveAt(context.ModuleData.Count - 1);
                 serializedModule = default;
                 if (state != null)
-                    lock (Lock) state.Part.Summary.Refuse(_kind, WheelRefusal.Mapping);
+                    lock (Lock) state.Part.Summary.Refuse(_kind, WheelRefusal.Failed);
                 if (!scratch) NativeModules.ImporterFailed(part, WheelMapping.Ksp1Module(_kind), e);
                 return false;
             }
@@ -277,7 +280,13 @@ namespace KSP1PartMod.Game
                         _settings?.WheelKsp1Friction ?? true, _settings?.WheelKsp1DeployTiming ?? true);
                     return (m.Converted, m.Values, m.NotReproduced, m.UnusedBySolver, m.Notes);
                 }
-                case WheelKind.Suspension: return Of(WheelMapping.Suspension(node));
+                case WheelKind.Suspension:
+                {
+                    var m = WheelMapping.Suspension(node);
+                    var notes = m.Notes.ToList();
+                    if (m.Converted) GuardSuspensionCollider(m.Values, context, notes);
+                    return (m.Converted, m.Values, m.NotReproduced, m.UnusedBySolver, notes);
+                }
                 case WheelKind.Steering: return Of(WheelMapping.Steering(node));
                 case WheelKind.Motor: return Of(WheelMapping.Motor(node, Resources()));
                 case WheelKind.MotorSteering: return Of(WheelMapping.MotorSteering(node, Resources()));
@@ -290,6 +299,108 @@ namespace KSP1PartMod.Game
 
         private static (bool, object, IReadOnlyList<string>, IReadOnlyList<string>, IReadOnlyList<string>) Of<T>(WheelMapped<T> m) where T : class =>
             (m.Converted, m.Values, m.NotReproduced, m.UnusedBySolver, m.Notes);
+
+        // ------------------------------------------------------------------ the suspension collider (Task 3 review, F6)
+
+        public const string TranslatorTypeName = "Redux.Ksp1Import.Ksp1PartTranslator";
+
+        /// <summary>The cfg file of each part node Redux translates (for its <c>.mu</c>), set by a prefix on
+        /// <c>Ksp1PartTranslator.TryTranslatePart</c>; weak, it goes with the node.</summary>
+        private static readonly ConditionalWeakTable<Ksp1ConfigNode, Ksp1ConfigFile> Files = new ConditionalWeakTable<Ksp1ConfigNode, Ksp1ConfigFile>();
+        /// <summary>By cfg path and collider name: the state read once (null: the model could not be read).</summary>
+        private static readonly Dictionary<string, SuspensionColliderState?> ColliderStates = new Dictionary<string, SuspensionColliderState?>(StringComparer.Ordinal);
+        private static readonly Dictionary<string, ModelPathResolver> Resolvers = new Dictionary<string, ModelPathResolver>(StringComparer.OrdinalIgnoreCase);
+
+        internal static string NotCheckedNote(string name) =>
+            $"ModuleWheelSuspension: suspensionColliderName '{name}' not checked against the model (no model path), kept";
+
+        /// <summary>Armed with the suspension converter: remembers each translated part's cfg file. A missing member logs one
+        /// line, and the suspension collider names are then kept unchecked.</summary>
+        internal static void ArmTranslatorHook(Harmony harmony)
+        {
+            var translator = AccessTools.TypeByName(TranslatorTypeName);
+            var method = translator == null ? null : AccessTools.Method(translator, "TryTranslatePart", new[]
+            {
+                typeof(Ksp1ConfigFile), typeof(Ksp1ConfigNode), typeof(Ksp1ImportReport), typeof(PartCore).MakeByRefType(), typeof(string).MakeByRefType(),
+            });
+            if (method == null)
+            {
+                NativeModules.Warn(WheelLines.MemberNotFound("Ksp1PartTranslator.TryTranslatePart(Ksp1ConfigFile, Ksp1ConfigNode, …)",
+                    "suspension collider check"));
+                return;
+            }
+            harmony.Patch(method, prefix: new HarmonyMethod(typeof(WheelImporter), nameof(BeforeTranslate)) { priority = Priority.First });
+        }
+
+        private static void BeforeTranslate(Ksp1ConfigFile __0, Ksp1ConfigNode __1)
+        {
+            try
+            {
+                if (__0 == null || __1 == null) return;
+                lock (Lock)
+                {
+                    Files.Remove(__1);
+                    Files.Add(__1, __0);
+                }
+            }
+            catch
+            {
+                // Never into Redux's translation: the part's collider name is then kept unchecked.
+            }
+        }
+
+        /// <summary>Tests: the cfg file of a part node, as the translator prefix records it.</summary>
+        internal static void RememberFileForTests(Ksp1ConfigNode partNode, Ksp1ConfigFile file) => BeforeTranslate(file, partNode);
+
+        /// <summary>KSP2's suspension switches off the first collider under <c>suspensionColliderName</c> without checking that
+        /// one exists (it skips a missing transform, and an empty name). A name whose objects carry no collider in the part's
+        /// models is cleared, with a note; an absent one is kept (KSP2 skips it).</summary>
+        private static void GuardSuspensionCollider(WheelSuspensionValues v, Ksp1PartImportContext context, List<string> notes)
+        {
+            var name = v.SuspensionColliderName;
+            if (string.IsNullOrEmpty(name)) return;
+            var state = ColliderState(context.PartNode, name);
+            if (state == null) notes.Add(NotCheckedNote(name));
+            else if (state == SuspensionColliderState.NoCollider)
+            {
+                v.SuspensionColliderName = "";
+                notes.Add(SuspensionColliderRule.ClearedNote(name));
+            }
+        }
+
+        private static SuspensionColliderState? ColliderState(Ksp1ConfigNode partNode, string name)
+        {
+            Ksp1ConfigFile file;
+            lock (Lock)
+                if (partNode == null || !Files.TryGetValue(partNode, out file)) return null;
+            if (string.IsNullOrEmpty(file?.Path)) return null;
+            var key = file.Path + "\n" + name;
+            lock (Lock)
+                if (ColliderStates.TryGetValue(key, out var cached)) return cached;
+            SuspensionColliderState? state;
+            try
+            {
+                var root = file.Root?.GameDataRoot ?? "";
+                ModelPathResolver resolver;
+                lock (Lock)
+                    if (!Resolvers.TryGetValue(root, out resolver))
+                        Resolvers[root] = resolver = new ModelPathResolver(root, () => DirectoryIndex.Build(root));
+                var snapshot = PartSnapshot.From(partNode.GetValue("name"), file.Path, root, new Ksp1NodeAdapter(partNode), null);
+                var roots = new List<KSP1PartMod.Animation.Mu.MuNode>();
+                for (var i = 0; i < snapshot.ModelRefs.Length; i++)
+                {
+                    var path = resolver.Resolve(file.Path, snapshot.ModelRefs[i], snapshot.RefIsMesh[i], out _);
+                    if (path != null) roots.Add(KSP1PartMod.Animation.Mu.MuReader.Read(path).Root);
+                }
+                state = roots.Count == 0 ? (SuspensionColliderState?)null : SuspensionColliderRule.Check(roots, name);
+            }
+            catch (Exception)
+            {
+                state = null;
+            }
+            lock (Lock) ColliderStates[key] = state;
+            return state;
+        }
 
         private static IsruResources Resources() => ConverterImporter.Resources(ConverterImporter.CurrentDatabase(), null);
 
@@ -445,6 +556,8 @@ namespace KSP1PartMod.Game
             lock (Lock)
             {
                 Parts.Clear();
+                ColliderStates.Clear();
+                Resolvers.Clear();
                 _referenceRead = _summaryLogged = false;
             }
             B9.Clear();

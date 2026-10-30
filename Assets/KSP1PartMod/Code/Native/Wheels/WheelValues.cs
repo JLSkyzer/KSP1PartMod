@@ -85,8 +85,9 @@ namespace KSP1PartMod.Native.Wheels
         public float[] SteeringMaxAngleCurve = Array.Empty<float>();
     }
 
-    /// <summary>The values of <c>Data_WheelMotor</c> that the mapping sets. <see cref="RequiredResourceName"/> is null when
-    /// <see cref="UseResources"/> is false.</summary>
+    /// <summary>The values of <c>Data_WheelMotor</c> that the mapping sets. When <see cref="UseResources"/> is false,
+    /// <see cref="RequiredResourceName"/> is electric charge at rate 0: KSP2 sets up the motor's resource request in the VAB
+    /// whatever <c>useResources</c> says, and a null name throws there.</summary>
     public sealed class WheelMotorValues
     {
         public float WheelSpeedMax = 120f;
