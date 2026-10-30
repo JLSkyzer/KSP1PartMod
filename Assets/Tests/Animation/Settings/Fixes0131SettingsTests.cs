@@ -11,9 +11,9 @@ namespace KSP1PartMod.Tests.Animation.Settings
         private static readonly string ShippedPath =
             Path.Combine(Application.dataPath, "KSP1PartMod", "Copied", "animations.json");
 
-        private static readonly string[] Keys = { "chute_canopy_reset", "plume_diagnostics", "fix_engine_emissive_curve" };
+        private static readonly string[] Keys = { "chute_canopy_reset", "plume_diagnostics", "fix_engine_emissive_curve", "fix_intake_mach_curve" };
 
-        private static bool[] Values(AnimationSettings s) => new[] { s.ChuteCanopyReset, s.PlumeDiagnostics, s.FixEngineEmissiveCurve };
+        private static bool[] Values(AnimationSettings s) => new[] { s.ChuteCanopyReset, s.PlumeDiagnostics, s.FixEngineEmissiveCurve, s.FixIntakeMachCurve };
 
         private static void AssertDefaults(AnimationSettings s)
         {
@@ -44,7 +44,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
 
         [Test] public void WrongTypes_KeepTheDefault()
         {
-            var s = AnimationSettings.Parse("{\"chute_canopy_reset\": 0, \"plume_diagnostics\": \"no\", \"fix_engine_emissive_curve\": null}", out var e);
+            var s = AnimationSettings.Parse("{\"chute_canopy_reset\": 0, \"plume_diagnostics\": \"no\", \"fix_engine_emissive_curve\": null, \"fix_intake_mach_curve\": []}", out var e);
             AssertDefaults(s);
             foreach (var key in Keys) StringAssert.Contains(key, e);
         }

@@ -231,6 +231,10 @@ namespace KSP1PartMod.Animation.Settings
         /// vessel with a KSP1 engine is no longer skipped as corrupted at load (<c>fix_engine_emissive_curve</c>, default true;
         /// false: 0.13.0).</summary>
         public bool FixEngineEmissiveCurve => _fixes0131.EngineEmissiveCurve;
+        /// <summary>0.15.1: fills <c>Data_ResourceIntake.machCurve</c>, which Redux's KSP1 intake importer leaves null, from
+        /// the cfg's <c>machCurve</c> or KSP2's flight default (0, 1), so the intake tooltip of the VAB and R&amp;D no longer
+        /// throws (<c>fix_intake_mach_curve</c>, default true; false: 0.15.0).</summary>
+        public bool FixIntakeMachCurve => _fixes0131.IntakeMachCurve;
 
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
@@ -304,7 +308,7 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>The keys of the 0.13.1 in-game fixes, read together.</summary>
         private sealed class SwitchesFixes0131
         {
-            public bool ChuteCanopyReset = true, PlumeDiagnostics = true, EngineEmissiveCurve = true;
+            public bool ChuteCanopyReset = true, PlumeDiagnostics = true, EngineEmissiveCurve = true, IntakeMachCurve = true;
         }
 
         private readonly SwitchesFixes0131 _fixes0131;
@@ -545,6 +549,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "chute_canopy_reset": ReadBool(p, ref fixes0131.ChuteCanopyReset, problems); break;
                         case "plume_diagnostics": ReadBool(p, ref fixes0131.PlumeDiagnostics, problems); break;
                         case "fix_engine_emissive_curve": ReadBool(p, ref fixes0131.EngineEmissiveCurve, problems); break;
+                        case "fix_intake_mach_curve": ReadBool(p, ref fixes0131.IntakeMachCurve, problems); break;
                         case "ksp1_procedural_fairings": ReadBool(p, ref fairings.Procedural, problems); break;
                         case "ksp1_saf_fairings": ReadBool(p, ref fairings.Saf, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;

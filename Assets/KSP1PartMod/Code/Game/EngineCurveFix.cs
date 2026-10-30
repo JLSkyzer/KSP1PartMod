@@ -5,9 +5,12 @@ using System.Reflection;
 using HarmonyLib;
 using KSP.Modules;
 using KSP.Sim.Definitions;
+using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Settings;
+using KSP1PartMod.Game.Animation;
 using KSP1PartMod.Native;
 using Redux.Ksp1Import.Assets;
+using Redux.Ksp1Import.Config;
 using UnityEngine;
 
 namespace KSP1PartMod.Game
@@ -20,7 +23,10 @@ namespace KSP1PartMod.Game
     /// rebuild (<c>RebuildRegisteredPrefab</c>) runs it again on the registered core, harmlessly. It composes with the shroud
     /// postfix on the same method (another Harmony id, independent bodies). Other null curves a config builder reads are
     /// counted, never filled. The summary is written when Redux marks the import complete. Never throws into the game: one
-    /// failure stops it for the session.</summary>
+    /// failure stops it for the session.
+    /// 0.15.1 (<c>fix_intake_mach_curve</c>): the same postfix fills <c>Data_ResourceIntake.machCurve</c>, which Redux's KSP1
+    /// intake importer leaves null (the VAB and R&amp;D tooltip evaluates it), from the cfg's own <c>machCurve</c> of the
+    /// matching <c>ModuleResourceIntake</c>, else with KSP2's flight default (one key (0, 1)).</summary>
     internal static class EngineCurveFix
     {
         public const string HarmonyId = "KSP1PartMod.EngineCurveFix";
@@ -30,6 +36,7 @@ namespace KSP1PartMod.Game
         private static readonly object Gate = new object();
         private static Dictionary<Type, FieldInfo[]> _checked;
         private static bool _broken;
+        private static bool _engines = true, _intakes = true;
 
         /// <summary>Tests: the lines, instead of the log.</summary>
         internal static Action<string> Sink;
@@ -38,6 +45,7 @@ namespace KSP1PartMod.Game
         {
             lock (Gate) Tally.Clear();
             _broken = false;
+            _engines = _intakes = true;
         }
 
         internal static MethodInfo FindBuildConfiguredPrefab()
@@ -48,29 +56,33 @@ namespace KSP1PartMod.Game
             {
                 if (m.Name != "BuildConfiguredPrefab" || m.IsStatic || m.ReturnType != typeof(GameObject)) return false;
                 var ps = m.GetParameters();
-                return ps.Length == 7 && ps[2].ParameterType == typeof(PartCore);
+                return ps.Length == 7 && ps[1].ParameterType == typeof(Ksp1ConfigNode) && ps[2].ParameterType == typeof(PartCore);
             }).ToList();
             return candidates.Count == 1 ? candidates[0] : null;
         }
 
         public static bool TryApply(Harmony harmony, AnimationSettings settings)
         {
-            if (settings == null || !settings.FixEngineEmissiveCurve)
+            var engines = settings != null && settings.FixEngineEmissiveCurve;
+            var intakes = settings != null && settings.FixIntakeMachCurve;
+            if (!engines && !intakes)
             {
-                Info(EngineCurveLines.Armed(false));
+                Info(EngineCurveLines.Armed(false, false));
                 return false;
             }
             var build = FindBuildConfiguredPrefab();
             var complete = AccessTools.Method(typeof(Ksp1ImportedPartRegistry), nameof(Ksp1ImportedPartRegistry.MarkImportComplete));
             if (build == null)
             {
-                Warn(EngineCurveLines.Prefix + "Ksp1PartTranslator.BuildConfiguredPrefab not found, emissive curve not fixed");
+                Warn(EngineCurveLines.Prefix + "Ksp1PartTranslator.BuildConfiguredPrefab not found, emissive and intake mach curves not fixed");
                 return false;
             }
+            _engines = engines;
+            _intakes = intakes;
             harmony.Patch(build, postfix: new HarmonyMethod(typeof(EngineCurveFix), nameof(AfterBuildConfiguredPrefab)));
             if (complete != null) harmony.Patch(complete, postfix: new HarmonyMethod(typeof(EngineCurveFix), nameof(AfterImportComplete)));
             else Warn(EngineCurveLines.Prefix + "Ksp1ImportedPartRegistry.MarkImportComplete not found, no summary line");
-            Info(EngineCurveLines.Armed(true));
+            Info(EngineCurveLines.Armed(engines, intakes));
             return true;
         }
 
@@ -85,17 +97,27 @@ namespace KSP1PartMod.Game
 
         /// <summary>Fills the null emissive curves of <paramref name="core"/>'s engine data; counts the other null curves.
         /// Returns how many engine modules were filled.</summary>
-        internal static int Fix(PartCore core, EngineCurveLines.Tally tally)
+        internal static int Fix(PartCore core, EngineCurveLines.Tally tally) => Fix(core, tally, null, true, true);
+
+        /// <summary><see cref="Fix(PartCore, EngineCurveLines.Tally)"/> with the cfg part node (for the intakes' own mach curves)
+        /// and each half's switch. Returns how many engine modules were filled.</summary>
+        internal static int Fix(PartCore core, EngineCurveLines.Tally tally, IKsp1Node partNode, bool engines, bool intakes)
         {
             if (core == null) return 0;
             var seen = new HashSet<ModuleData>();
             var filled = 0;
+            var intakeData = new List<Data_ResourceIntake>();
             foreach (var data in Modules(core))
             {
                 if (data == null || !seen.Add(data)) continue;
+                if (data is Data_ResourceIntake intake)
+                {
+                    intakeData.Add(intake);
+                    continue;
+                }
                 if (data is Data_Engine engine)
                 {
-                    if (engine.EmissiveTemperatureCurve == null)
+                    if (engines && engine.EmissiveTemperatureCurve == null)
                     {
                         engine.EmissiveTemperatureCurve = ZeroCurve();
                         filled++;
@@ -107,6 +129,7 @@ namespace KSP1PartMod.Game
                 }
                 CountNulls(data, data.GetType().Name, tally);
             }
+            if (intakes && intakeData.Count > 0) FixIntakes(intakeData, partNode, tally);
             if (tally != null)
             {
                 tally.Parts++;
@@ -114,6 +137,39 @@ namespace KSP1PartMod.Game
                 if (filled > 0) tally.FilledParts++;
             }
             return filled;
+        }
+
+        /// <summary>Fills each null <c>machCurve</c>: the i-th intake data takes the i-th cfg <c>ModuleResourceIntake</c>'s curve
+        /// when both counts agree, else KSP2's default.</summary>
+        private static void FixIntakes(List<Data_ResourceIntake> intakes, IKsp1Node partNode, EngineCurveLines.Tally tally)
+        {
+            var cfg = EngineCurveLines.IntakeModules(partNode);
+            var filled = 0;
+            for (var i = 0; i < intakes.Count; i++)
+            {
+                if (intakes[i].machCurve != null) continue;
+                intakes[i].machCurve = NewCurve(EngineCurveLines.IntakeKeysFor(cfg, intakes.Count, i, out var fromCfg));
+                filled++;
+                if (tally == null) continue;
+                if (fromCfg) tally.IntakesFromCfg++;
+                else tally.IntakesDefault++;
+            }
+            if (tally == null || filled == 0) return;
+            tally.IntakesFilled += filled;
+            tally.IntakeParts++;
+        }
+
+        /// <summary>A curve from flattened keys: a key with both tangents through <c>Add(t, v, in, out)</c>, one without through
+        /// <c>Add(t, v)</c>, as KSP1 loads it.</summary>
+        internal static FloatCurve NewCurve(float[] keys)
+        {
+            var curve = new FloatCurve();
+            for (var k = 0; k + 3 < keys.Length; k += 4)
+            {
+                if (float.IsNaN(keys[k + 2]) || float.IsNaN(keys[k + 3])) curve.Add(keys[k], keys[k + 1]);
+                else curve.Add(keys[k], keys[k + 1], keys[k + 2], keys[k + 3]);
+            }
+            return curve;
         }
 
         private static IEnumerable<ModuleData> Modules(PartCore core)
@@ -143,13 +199,14 @@ namespace KSP1PartMod.Game
                 if (f.GetValue(owner) == null) tally.NoteNull(ownerName, f.Name);
         }
 
-        internal static void AfterBuildConfiguredPrefab(PartCore core)
+        internal static void AfterBuildConfiguredPrefab(Ksp1ConfigNode __1, PartCore __2)
         {
             if (_broken) return;
             try
             {
+                var node = _intakes && __1 != null ? new Ksp1NodeAdapter(__1) : null;
                 // Counted during the import only; a later prefab rebuild is fixed but not counted again.
-                lock (Gate) Fix(core, Ksp1ImportedPartRegistry.IsComplete ? null : Tally);
+                lock (Gate) Fix(__2, Ksp1ImportedPartRegistry.IsComplete ? null : Tally, node, _engines, _intakes);
             }
             catch (Exception e)
             {
