@@ -53,6 +53,11 @@ namespace KSP1PartMod.Audit
         public int ShroudsMissing { get; private set; }
         public int ShroudsNoNode { get; private set; }
         public int ReduxFairings { get; private set; }
+        /// <summary>Converted fairing bases (0.15.0): procedural, SAF, initialised, and those that took the model fallback.</summary>
+        public int FairingsProcedural { get; private set; }
+        public int FairingsSaf { get; private set; }
+        public int FairingsInitialized { get; private set; }
+        public int FairingsModelFallback { get; private set; }
         /// <summary>Native modules (0.8.0): parts whose converted module runs, and parts where one did not.</summary>
         public int NativeHeatshields { get; private set; }
         public int NativeCrossfeeds { get; private set; }
@@ -139,6 +144,10 @@ namespace KSP1PartMod.Audit
             s.ShroudsMissing = parts.Count(r => HasFix(r, "shroud_missing"));
             s.ShroudsNoNode = parts.Count(r => HasFix(r, "shroud_no_node"));
             s.ReduxFairings = parts.Count(r => r.ReduxFairing);
+            s.FairingsProcedural = parts.Count(r => r.FairingBase == "procedural");
+            s.FairingsSaf = parts.Count(r => r.FairingBase == "saf");
+            s.FairingsInitialized = parts.Count(r => !string.IsNullOrEmpty(r.FairingBase) && r.FairingInitialized);
+            s.FairingsModelFallback = parts.Count(r => !string.IsNullOrEmpty(r.FairingBase) && HasFix(r, "fairing_model_fallback"));
             s.NativeHeatshields = parts.Count(r => HasNative(r, AuditNative.Heatshield));
             s.NativeCrossfeeds = parts.Count(r => HasNative(r, AuditNative.Crossfeed));
             s.NativeConverters = parts.Count(r => HasNative(r, AuditNative.Converter));
@@ -194,6 +203,11 @@ namespace KSP1PartMod.Audit
             $", {PodsCommandInitialized} of those with Module_Command initialized";
 
         public string ShroudsLine() => ShroudLines.AuditSummary(ShroudsKept, ShroudsMissing, ShroudsNoNode, ReduxFairings);
+
+        /// <summary>0.15.0: the converted fairing bases.</summary>
+        public string FairingsLine() =>
+            $"audit: fairings: {FairingsProcedural} procedural, {FairingsSaf} SAF, {FairingsInitialized} initialised, " +
+            $"{FairingsModelFallback} with a model fallback";
 
         public string NativeLine() =>
             $"audit: native modules: {NativeHeatshields} heat shield(s), {NativeCrossfeeds} crossfeed toggle(s), " +
@@ -284,6 +298,7 @@ namespace KSP1PartMod.Audit
             sb.Append($"\n- of those with Module_Command initialized: {PodsCommandInitialized}\n");
 
             sb.Append("\n## Shrouds\n\n").Append(ShroudsLine()).Append('\n');
+            sb.Append("\n## Fairings\n\n").Append(FairingsLine()).Append('\n');
 
             sb.Append("\n## Native modules\n\n").Append(NativeLine()).Append('\n');
 

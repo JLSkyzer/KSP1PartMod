@@ -345,6 +345,7 @@ namespace KSP1PartMod.Game.Audit
             log.LogInfo(summary.SlowestLine());
             log.LogInfo(summary.PodsLine());
             log.LogInfo(summary.ShroudsLine());
+            log.LogInfo(summary.FairingsLine());
             log.LogInfo(summary.NativeLine());
             log.LogInfo(summary.B9Line());
             log.LogInfo(summary.PerfLine());

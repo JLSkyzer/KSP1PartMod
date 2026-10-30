@@ -492,6 +492,18 @@ namespace KSP1PartMod.Tests.Audit
             Assert.AreEqual(cols.IndexOf("redux_fairing") + 1, cols.IndexOf("native_modules"), "appended after the 0.7.0 columns");
         }
 
+        [Test] public void Summary_FairingsLine_CountsConvertedBases()
+        {
+            var a = Rec("a"); a.FairingBase = "procedural"; a.FairingInitialized = true; a.ModFixes = new[] { "fairing_model_fallback" };
+            var b = Rec("b"); b.FairingBase = "procedural";
+            var c = Rec("c"); c.FairingBase = "saf"; c.FairingInitialized = true;
+            var stray = Rec("stray"); stray.ModFixes = new[] { "fairing_model_fallback" };
+            var s = AuditSummary.From(new[] { a, b, c, stray }, 1);
+            Assert.AreEqual("audit: fairings: 2 procedural, 1 SAF, 2 initialised, 1 with a model fallback", s.FairingsLine());
+            StringAssert.Contains("## Fairings\n\n" + s.FairingsLine() + "\n", s.Markdown("x"));
+            Assert.AreEqual(0, s.ReduxFairings, "converted bases never count as Redux's Module_Fairing");
+        }
+
         [Test] public void Summary_ShroudsLine_CountsNotesAndFairings()
         {
             var kept = Rec("kept"); kept.ModFixes = new[] { "shroud_kept" };

@@ -328,7 +328,12 @@ namespace KSP1PartMod.Game.Audit
             rec.HasCommand = command != null;
             rec.CommandInitialized = command != null && command.IsInitialized;
             rec.Engines = root.GetComponentsInChildren<Module_Engine>(true).Length;
-            rec.ReduxFairing = root.GetComponentInChildren<Module_Fairing>(true) != null;
+            var fairing = root.GetComponentInChildren<Module_Fairing>(true);
+            // 0.15.0: a base our importer converted carries Module_Fairing on purpose; only the others count as Redux's.
+            var fairingKind = FairingImporter.Record.KindOf(rec.Part);
+            rec.ReduxFairing = fairing != null && fairingKind == null;
+            rec.FairingBase = fairingKind == null ? "" : fairingKind == KSP1PartMod.Native.Fairings.FairingKind.Saf ? "saf" : "procedural";
+            rec.FairingInitialized = fairing != null && fairingKind != null && fairing.IsInitialized;
 
             var present = new List<string>();
             try
@@ -419,7 +424,7 @@ namespace KSP1PartMod.Game.Audit
                 if (type == null) continue;
                 if (typeof(Module_Command).IsAssignableFrom(type)) rec.HasCommand = true;
                 if (typeof(Module_Engine).IsAssignableFrom(type)) rec.Engines++;
-                if (typeof(Module_Fairing).IsAssignableFrom(type)) rec.ReduxFairing = true;
+                if (typeof(Module_Fairing).IsAssignableFrom(type) && !FairingImporter.Record.Contains(rec.Part)) rec.ReduxFairing = true;
             }
         }
 

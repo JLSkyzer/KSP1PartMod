@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.15.0 - 2026-10-30
+
+Fairings (roadmap 3.10): KSP1 fairing bases build and jettison KSP2's own procedural fairing. Built, not run in game yet; checklist (French): `docs/testing/2026-10-30-fairings-in-game-checklist.md`. No fairing code of ours: KSP2's `Module_Fairing` does the geometry, the editor, the jettison and the shielding.
+
+- **Switches** (`animations.json`, applied by Redux's import whatever `enabled` is): `ksp1_procedural_fairings` and `ksp1_saf_fairings` (default true). Both need `fix_fairing_init`; SAF also needs the 0.7.0 prefab patch (`ksp1_engine_shrouds`). Both false gives 0.14.0.
+- **Two conversions.** `ModuleProceduralFairing` (stock and BDB bases) and `ModuleSimpleAdjustableFairing` (BDB SAF) become `Module_Fairing`, filled from the cfg (radii, heights, pivot, axis, side count, mass per area, clamshell count, ejection force). Installed set, raw cfgs: 49 procedural and 46 SAF bases, all mapped. A second fairing module on one part, and a base that also has a `ModuleJettison`, are refused. Lines `native: <part>: <module> -> Module_Fairing: …` and the summary `native: <module> -> Module_Fairing: <n> part(s)`.
+- **SAF meshes hidden.** The KSP1 wall, base and cone meshes of every B9 subtype are hidden in the prefab: renderers and colliders, no `Destroy`, no material or texture write (`fairing: <part>: SAF mesh hidden …`). Their drag stays, because Redux computes the drag cube before. A SAF `DATA` edit of a B9 subtype now re-imports as a `Data_Fairing` diff (the max radius), counted on the `b9: module data:` line.
+- **Runtime guards** (`fix_fairing_init`), on converted bases only. When Redux finds no `model` transform, `Module_Fairing` hangs its panels on the part's own transform: the OAB part in the VAB, the part itself in flight, where `PartBehavior.ModelTransform` is not set yet when modules initialise (`fairing: <part>: model fallback to …`). Without `Module_Color`, the material is marked loaded, so the panels spawn (`fairing: <part>: material without Module_Color, panels allowed`). Shroud parts keep the 0.4.1 behaviour. A guard failure stops the guards for the session (`fairing: patch failed`).
+- **Audit.** New line `audit: fairings: <p> procedural, <s> SAF, <i> initialised, <m> with a model fallback`. Converted bases no longer count in `shrouds: … still carrying Redux's Module_Fairing`. The `native_modules` column carries `Module_Fairing`.
+- **Saves.** A craft saved before 0.15.0 gains the fairing at load. One saved with 0.15.0 and loaded with a switch off loses it.
+- No animation entry key moves (checked on the 95 fairing parts). 2640 EditMode tests (2638 passing, 2 explicit and skipped).
+
 ## 0.14.0 - 2026-10-30
 
 Wheels (roadmap 3.9): KSP1 wheels, landing gear and landing legs roll, steer, drive, brake, spring and break through KSP2's own wheel modules. Built, not run in game yet, and not installed; checklist (French): `docs/testing/2026-10-30-wheels-in-game-checklist.md`. No wheel system of ours: no solver, no friction or spring formula, no new module type, no per-frame code.
