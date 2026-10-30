@@ -178,6 +178,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // The setup line of converted wheels (with ksp1_wheels, whatever enabled is).
+                WheelRuntime.TryApply(new Harmony(WheelRuntime.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.Wheels.WheelLines.PatchFailed(e.ToString()));
+            }
+            try
+            {
                 // Diagnostic only (0.13.1): the plume objects of KSP1 engines in flight (whatever enabled is).
                 PlumeDiagnostics.TryApply(new Harmony(PlumeDiagnostics.HarmonyId), Animations);
             }

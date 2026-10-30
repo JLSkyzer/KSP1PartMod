@@ -12,6 +12,7 @@ using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.State;
 using KSP1PartMod.Animation.Tracks;
+using KSP1PartMod.Native.Wheels;
 using KSP1PartMod.Perf;
 using Redux.Ksp1Import.Modules;
 using UnityEngine;
@@ -382,6 +383,13 @@ namespace KSP1PartMod.Game.Animation
                     if (!GearBridgeRule.NeedsOwnAction(GameInputs.ReduxDefaultActionGroup(this)))
                     {
                         note = "gear bridge: Redux already on Gear";
+                        return null;
+                    }
+                    // Our Module_WheelBase toggles the native deployable on Gear (flight; in the VAB it stands for it):
+                    // a second toggle would cancel the first on one key press.
+                    if (!GearBridgeRule.NeedsOwnAction(null, WheelRuntime.NativeWheelGear(this, _name)))
+                    {
+                        note = WheelLines.GearBridgeStandsDown;
                         return null;
                     }
                     Log($"{_name} gear bridge drives {bridge}");

@@ -135,6 +135,12 @@ namespace KSP1PartMod.Game
             lock (Lock) return Parts.TryGetValue(part, out var p) ? p : null;
         }
 
+        /// <summary>Tests: sets the wheel record of <paramref name="record"/>'s part, as an import would.</summary>
+        internal static void RecordForTests(WheelPart record)
+        {
+            lock (Lock) Parts[record.Part] = record;
+        }
+
         /// <summary>Counts one B9 subtype edit (never throws into the B9 route).</summary>
         internal static void CountB9Edit(string part, string subtype, string ksp1Module, IEnumerable<string> dataKeys)
         {
