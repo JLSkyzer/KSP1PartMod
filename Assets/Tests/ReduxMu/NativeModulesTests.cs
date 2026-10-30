@@ -145,7 +145,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         [Test] public void SwitchOff_NothingAdded_ReduxAsIn070()
         {
             Assert.IsFalse(Arm("{\"ksp1_crossfeed_toggle\": false, \"ksp1_heatshields\": false, \"ksp1_converters\": false, " +
-                               "\"ksp1_drills\": false, \"ksp1_survey_scanners\": false, \"ksp1_resource_scanners\": false, \"ksp1_radiators\": false, \"ksp1_science\": false, \"ksp1_wheels\": false}"));
+                               "\"ksp1_drills\": false, \"ksp1_survey_scanners\": false, \"ksp1_resource_scanners\": false, \"ksp1_radiators\": false, \"ksp1_science\": false, \"ksp1_wheels\": false, \"ksp1_procedural_fairings\": false, \"ksp1_saf_fairings\": false}"));
             CollectionAssert.AreEqual(new[]
             {
                 "[KSP1PartMod] native: ModuleToggleCrossfeed -> Module_ToggleCrossfeed off (ksp1_crossfeed_toggle false)",
@@ -168,6 +168,8 @@ namespace KSP1PartMod.Tests.ReduxMu
                 "[KSP1PartMod] native: ModuleWheelDamage -> Module_WheelDamage off (ksp1_wheels or wheel_damage false)",
                 "[KSP1PartMod] native: ModuleWheelLock -> Module_WheelLock off (ksp1_wheels or wheel_leg_locks false)",
                 "[KSP1PartMod] native: ModuleWheelBogey -> Module_WheelBogey off (ksp1_wheels or wheel_bogeys false)",
+                "[KSP1PartMod] native: ModuleProceduralFairing -> Module_Fairing off (ksp1_procedural_fairings false)",
+                "[KSP1PartMod] native: ModuleSimpleAdjustableFairing -> Module_Fairing off (ksp1_saf_fairings false)",
                 NativeLines.NoneArmed,
             }, _lines);
             Assert.IsFalse(NativeModules.IsConverterArmed(AblatorMapping.Ksp1Module));

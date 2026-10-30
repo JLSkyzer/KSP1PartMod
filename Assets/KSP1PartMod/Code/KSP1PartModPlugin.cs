@@ -86,6 +86,7 @@ namespace KSP1PartMod
             }
             try
             {
+                // Before ShroudImport and NativeModules: the fairing importers (0.15.0) arm only when its guards did.
                 FairingFixes.TryApply(new Harmony(FairingFixes.HarmonyId), Animations.FixFairingInit);
             }
             catch (Exception e)

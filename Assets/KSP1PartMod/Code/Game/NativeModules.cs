@@ -6,6 +6,7 @@ using HarmonyLib;
 using KSP.Sim.Definitions;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Native;
+using KSP1PartMod.Native.Fairings;
 using KSP1PartMod.Native.Science;
 using KSP1PartMod.Native.Wheels;
 using Redux.Ksp1Import.Modules;
@@ -159,6 +160,8 @@ namespace KSP1PartMod.Game
             Wheel(WheelKind.Damage),
             Wheel(WheelKind.Lock),
             Wheel(WheelKind.Bogey),
+            Fairing(FairingKind.Procedural),
+            Fairing(FairingKind.Saf),
         };
 
         /// <summary>A KSP1 wheel module → the KSP2 wheel module of the same role (wheels plan, Task 3): <c>ksp1_wheels</c> and
@@ -175,6 +178,21 @@ namespace KSP1PartMod.Game
             SummaryLines = WheelImporter.SummaryLines,
             // The suspension's collider check needs each part's cfg file (Task 3 review, F6).
             AfterArm = kind == WheelKind.Suspension ? WheelImporter.ArmTranslatorHook : (Action<Harmony>)null,
+        };
+
+        /// <summary>A KSP1 fairing base → KSP2's <c>Module_Fairing</c> (fairings plan, Task 2), with its own switch. Armed only when
+        /// <see cref="FairingFixes"/> armed its runtime guards (pre-initialization arms it before this hook) and, for SAF, when the
+        /// 0.7.0 prefab patch is armed (<see cref="ShroudImport"/>, also armed before this hook).</summary>
+        private static Converter Fairing(FairingKind kind) => new Converter
+        {
+            Ksp1Module = FairingLines.ModuleOf(kind),
+            NativeModule = FairingMapping.NativeModule,
+            SwitchKey = FairingImporter.SwitchKey(kind),
+            IsOn = s => kind == FairingKind.Saf ? s.Ksp1SafFairings : s.Ksp1ProceduralFairings,
+            MissingMembers = () => FairingImporter.MissingMembers(kind),
+            MissingLine = FairingImporter.MissingLine(kind),
+            Create = () => new FairingImporter(kind),
+            Summary = () => FairingImporter.Summary(kind),
         };
 
         /// <summary>A KSP1 experiment module → <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>); the three share one importer type.</summary>
@@ -340,6 +358,7 @@ namespace KSP1PartMod.Game
             ScienceAccess.Reset();
             WheelImporter.ResetSession();
             WheelAccess.Reset();
+            FairingImporter.ResetSession();
             RejectedNames.Clear();
             Record.Clear();
             Isru.Clear();

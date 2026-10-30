@@ -213,6 +213,13 @@ namespace KSP1PartMod.Animation.Settings
         /// default true; false: KSP2's 0.98/0.02, no stand-in collider).</summary>
         public bool WheelKsp1DeployTiming => _wheels.Ksp1DeployTiming;
 
+        /// <summary>KSP1 <c>ModuleProceduralFairing</c> becomes KSP2's native <c>Module_Fairing</c> (<c>ksp1_procedural_fairings</c>,
+        /// default true; needs <c>fix_fairing_init</c>; false: a bare base, as 0.14.0).</summary>
+        public bool Ksp1ProceduralFairings => _fairings.Procedural;
+        /// <summary>KSP1 <c>ModuleSimpleAdjustableFairing</c> becomes KSP2's native <c>Module_Fairing</c>, its KSP1 meshes hidden
+        /// (<c>ksp1_saf_fairings</c>, default true; needs <c>fix_fairing_init</c> and the 0.7.0 prefab patch; false: as 0.14.0).</summary>
+        public bool Ksp1SafFairings => _fairings.Saf;
+
         /// <summary>The canopy bone of a followed KSP1 parachute is put back to its parent's rotation each frame before Redux
         /// orients it, when Redux's Animator is not on that bone (<c>chute_canopy_reset</c>, default true; false: 0.13.0, radial
         /// canopies spread out and turn).</summary>
@@ -285,6 +292,14 @@ namespace KSP1PartMod.Animation.Settings
         }
 
         private readonly SwitchesWheels _wheels;
+
+        /// <summary>The fairing keys of 0.15.0, read together.</summary>
+        private sealed class SwitchesFairings
+        {
+            public bool Procedural = true, Saf = true;
+        }
+
+        private readonly SwitchesFairings _fairings;
 
         /// <summary>The keys of the 0.13.1 in-game fixes, read together.</summary>
         private sealed class SwitchesFixes0131
@@ -387,15 +402,16 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf(), new SwitchesWheels(), new SwitchesFixes0131());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf(), new SwitchesWheels(), new SwitchesFixes0131(), new SwitchesFairings());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
             Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators, SwitchesScience science, SwitchesPerf perf,
-            SwitchesWheels wheels, SwitchesFixes0131 fixes0131)
+            SwitchesWheels wheels, SwitchesFixes0131 fixes0131, SwitchesFairings fairings)
         {
             _fixes0131 = fixes0131;
+            _fairings = fairings;
             _wheels = wheels;
             _perf = perf;
             _science = science;
@@ -450,6 +466,7 @@ namespace KSP1PartMod.Animation.Settings
                 var perf = new SwitchesPerf();
                 var wheels = new SwitchesWheels();
                 var fixes0131 = new SwitchesFixes0131();
+                var fairings = new SwitchesFairings();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -528,6 +545,8 @@ namespace KSP1PartMod.Animation.Settings
                         case "chute_canopy_reset": ReadBool(p, ref fixes0131.ChuteCanopyReset, problems); break;
                         case "plume_diagnostics": ReadBool(p, ref fixes0131.PlumeDiagnostics, problems); break;
                         case "fix_engine_emissive_curve": ReadBool(p, ref fixes0131.EngineEmissiveCurve, problems); break;
+                        case "ksp1_procedural_fairings": ReadBool(p, ref fairings.Procedural, problems); break;
+                        case "ksp1_saf_fairings": ReadBool(p, ref fairings.Saf, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;
@@ -549,7 +568,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf, wheels, fixes0131);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf, wheels, fixes0131, fairings);
             }
             catch (Exception e)
             {

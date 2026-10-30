@@ -10,6 +10,7 @@ using KSP1PartMod.Animation.Cfg;
 using KSP1PartMod.Animation.Runtime;
 using KSP1PartMod.Animation.Settings;
 using KSP1PartMod.Game.Animation;
+using KSP1PartMod.Native.Fairings;
 using Redux.Ksp1Import.Assets;
 using Redux.Ksp1Import.Config;
 using UnityEngine;
@@ -212,6 +213,7 @@ namespace KSP1PartMod.Game
             try
             {
                 HideShroudsInPrefab(__1, __4, __result);
+                HideSafMeshes(__1, __4, __result);
             }
             finally
             {
@@ -238,6 +240,55 @@ namespace KSP1PartMod.Game
             {
                 Break(e);
             }
+        }
+
+        private static readonly HashSet<string> SafLogged = new HashSet<string>(StringComparer.Ordinal);
+        private static bool _safBroken;
+
+        /// <summary>A SAF base converted to KSP2's <c>Module_Fairing</c> (<see cref="FairingImporter.Record"/>, filled by the module
+        /// import, which runs before the prefab is built): the renderers and colliders under its KSP1 SAF meshes
+        /// (<see cref="SafMeshNames"/>) are disabled in the prefab. Nothing for any other part; never a material, a texture or a
+        /// <c>Destroy</c>. A failure stops this pass alone for the session.</summary>
+        private static void HideSafMeshes(Ksp1ConfigNode node, string partName, GameObject prefab)
+        {
+            if (_safBroken || prefab == null || node == null) return;
+            try
+            {
+                var part = partName ?? node.GetValue("name") ?? "?";
+                if (FairingImporter.Record.KindOf(part) != FairingKind.Saf) return;
+                var names = SafMeshNames.Collect(new Ksp1NodeAdapter(node));
+                var hidden = HideSafTransforms(prefab, names, out var missing);
+                if (!SafLogged.Add(part)) return; // a rebuild: hidden again, silent
+                var line = FairingLines.SafHidden(part, hidden, missing);
+                if (missing.Count > 0) KSP1PartModPlugin.Log?.LogWarning(line);
+                else KSP1PartModPlugin.Log?.LogInfo(line);
+            }
+            catch (Exception e)
+            {
+                _safBroken = true;
+                KSP1PartModPlugin.Log?.LogError(FairingLines.SafHideFailed(e.ToString()));
+            }
+        }
+
+        /// <summary>Disables every renderer and collider under each transform of <paramref name="prefab"/> (never the prefab
+        /// itself) whose name is one of <paramref name="names"/>, ignoring case.</summary>
+        /// <returns>The number of transforms matched.</returns>
+        /// <param name="missing">The names matched by no transform, in their order.</param>
+        internal static int HideSafTransforms(GameObject prefab, ICollection<string> names, out List<string> missing)
+        {
+            var set = new HashSet<string>(names, StringComparer.OrdinalIgnoreCase);
+            var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var count = 0;
+            foreach (var t in prefab.GetComponentsInChildren<Transform>(true))
+            {
+                if (t == prefab.transform || !set.Contains(t.name)) continue;
+                found.Add(t.name);
+                count++;
+                foreach (var r in t.GetComponentsInChildren<Renderer>(true)) r.enabled = false;
+                foreach (var c in t.GetComponentsInChildren<Collider>(true)) c.enabled = false;
+            }
+            missing = names.Where(n => !found.Contains(n)).ToList();
+            return count;
         }
 
         /// <summary>The paths of the shroud renderers the prefab of <paramref name="part"/> disabled, or null when no prefab of

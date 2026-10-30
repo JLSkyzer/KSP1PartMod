@@ -1109,11 +1109,16 @@ namespace KSP1PartMod.Game
             foreach (var kv in m.ByField)
                 byField[kv.Key] = byField.TryGetValue(kv.Key, out var n) ? n + kv.Value : kv.Value;
             var noEffect = ms.SelectMany(m => m.Modules).Where(o => o.NoEffect).ToList();
+            // 0.15.0: a SAF DATA edit now re-imports as Module_Fairing; its definition diffs are kept and counted.
+            var fairingDiffs = NativeModules.IsConverterArmed(Native.Fairings.FairingMapping.SafModule) ||
+                               NativeModules.IsConverterArmed(Native.Fairings.FairingMapping.ProceduralModule)
+                ? Native.Fairings.FairingLines.B9Diffs(byField.Where(kv => kv.Key.StartsWith(Native.Fairings.FairingMapping.NativeModule + ".", StringComparison.Ordinal)).Sum(kv => kv.Value))
+                : "";
             return B9Lines.ModuleDataSummary(ms.Sum(m => m.Transformers), ms.Count(m => m.Transformers > 0),
                 byField.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => (kv.Key, kv.Value)),
                 ms.Sum(m => m.OffForms), ms.Sum(m => m.NoOffForm), ms.SelectMany(m => m.NoOffFormModules).Distinct().OrderBy(n => n, StringComparer.Ordinal),
                 noEffect.Count, noEffect.Select(o => o.Ksp1Module).Distinct().OrderBy(n => n, StringComparer.Ordinal),
-                ms.Sum(m => m.OffNoChange));
+                ms.Sum(m => m.OffNoChange)) + fairingDiffs;
         }
 
         internal static void Info(string line)
