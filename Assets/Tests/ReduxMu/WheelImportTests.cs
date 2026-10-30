@@ -488,6 +488,47 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.That(_lines, Has.Some.Contains(WheelImporter.NotCheckedNote("DamperCollider")));
         }
 
+        /// <summary>Carried from the Task 3 review: the collider state is cached by cfg file, part and name. A second part of
+        /// the same cfg file whose model cannot be read is not handed the first part's answer.</summary>
+        [Test] public void SuspensionCollider_TwoPartsInOneFile_EachChecksItsOwnModel()
+        {
+            var cfg = InstalledKsp1.AllCfg().FirstOrDefault(p => File.ReadAllText(p).Contains("suspensionColliderName = DamperCollider"));
+            if (cfg == null) Assert.Ignore("no installed cfg with suspensionColliderName = DamperCollider");
+            var root = InstalledKsp1.Root;
+            var text = File.ReadAllText(cfg);
+            var original = Ksp1ConfigNode.Parse(text).GetNodes("PART").First();
+            var partName = original.GetValue("name");
+            var model = original.GetNodes("MODEL").Select(m => m.GetValue("model")).FirstOrDefault(m => !string.IsNullOrEmpty(m));
+            if (model == null) Assert.Ignore("the cfg names no MODEL");
+            var snapshot = PartSnapshot.From(partName, cfg, root, new Ksp1NodeAdapter(original), null);
+            var resolver = new ModelPathResolver(root, () => DirectoryIndex.Build(root));
+            var models = Enumerable.Range(0, snapshot.ModelRefs.Length)
+                .Select(i => resolver.Resolve(cfg, snapshot.ModelRefs[i], snapshot.RefIsMesh[i], out _)).Where(x => x != null)
+                .Select(x => MuReader.Read(x).Root).ToList();
+            IEnumerable<MuNode> All(MuNode n) => new[] { n }.Concat(n.Children.SelectMany(All));
+            var bare = models.SelectMany(All).GroupBy(n => n.Name).Where(g => g.Count() == 1).Select(g => g.Single())
+                .First(n => !SuspensionColliderRule.HasCollider(n)).Name;
+            Assert.IsTrue(Arm());
+
+            var partText = text.Replace("suspensionColliderName = DamperCollider", "suspensionColliderName = " + bare);
+            var second = partText.Replace("name = " + partName, "name = " + partName + "_noModel").Replace("model = " + model, "model = " + model + "_absent");
+            var fileNode = Ksp1ConfigNode.Parse(partText + Environment.NewLine + second);
+            var parts = fileNode.GetNodes("PART").ToList();
+            Assert.AreEqual(2, parts.Count);
+            var file = new Ksp1ConfigFile(new Ksp1ModRoot(root, root), cfg, "Squad", fileNode);
+            string Run(Ksp1ConfigNode part)
+            {
+                WheelImporter.RememberFileForTests(part, file);
+                var context = Context(part);
+                ImportAll(part, context);
+                return (string)Read(context, WheelKind.Suspension, "suspensionColliderName");
+            }
+
+            Assert.AreEqual("", Run(parts[0]), "the first part's model: '" + bare + "' has no collider, cleared");
+            Assert.AreEqual(bare, Run(parts[1]), "the second part's model cannot be read: kept, not the first part's answer");
+            Assert.That(_lines, Has.Some.Contains(WheelImporter.NotCheckedNote(bare)));
+        }
+
         [Test] public void Arm_HooksTheTranslatorForTheColliderCheck()
         {
             Assert.IsTrue(Arm());

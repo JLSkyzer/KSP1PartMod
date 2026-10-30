@@ -313,7 +313,8 @@ namespace KSP1PartMod.Game
         /// <summary>The cfg file of each part node Redux translates (for its <c>.mu</c>), set by a prefix on
         /// <c>Ksp1PartTranslator.TryTranslatePart</c>; weak, it goes with the node.</summary>
         private static readonly ConditionalWeakTable<Ksp1ConfigNode, Ksp1ConfigFile> Files = new ConditionalWeakTable<Ksp1ConfigNode, Ksp1ConfigFile>();
-        /// <summary>By cfg path and collider name: the state read once (null: the model could not be read).</summary>
+        /// <summary>By cfg path, part name and collider name: the state read once (null: the model could not be read). One cfg
+        /// file can hold several parts with different models, so the part is in the key.</summary>
         private static readonly Dictionary<string, SuspensionColliderState?> ColliderStates = new Dictionary<string, SuspensionColliderState?>(StringComparer.Ordinal);
         private static readonly Dictionary<string, ModelPathResolver> Resolvers = new Dictionary<string, ModelPathResolver>(StringComparer.OrdinalIgnoreCase);
 
@@ -374,13 +375,16 @@ namespace KSP1PartMod.Game
             }
         }
 
+        private static string ColliderKey(string cfgPath, string partName, string colliderName) =>
+            cfgPath + "\n" + (partName ?? "") + "\n" + colliderName;
+
         private static SuspensionColliderState? ColliderState(Ksp1ConfigNode partNode, string name)
         {
             Ksp1ConfigFile file;
             lock (Lock)
                 if (partNode == null || !Files.TryGetValue(partNode, out file)) return null;
             if (string.IsNullOrEmpty(file?.Path)) return null;
-            var key = file.Path + "\n" + name;
+            var key = ColliderKey(file.Path, partNode.GetValue("name"), name);
             lock (Lock)
                 if (ColliderStates.TryGetValue(key, out var cached)) return cached;
             SuspensionColliderState? state;
