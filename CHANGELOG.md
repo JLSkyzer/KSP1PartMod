@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.1 - 2026-10-30
+
+- The tooltip of KSP1 air intakes no longer errors in the VAB and R&D. Redux's KSP1 intake import left the intake's mach curve empty, and the tooltip reads it. The mod now fills it before the part is stored: with the cfg's own `machCurve` when the part has one, else with KSP2's own flight default (full intake at every speed, which is what flight already used). New switch `fix_intake_mach_curve` (default true; false gives 0.15.0). The `[KSP1PartMod] engines:` summary line ends with `intake mach curve filled on <n> intake(s) of <p> part(s) (<c> from the cfg, <d> default)`.
+- The mod's own version string, logged at load, read 0.14.0 in 0.15.0; it now reads 0.15.1.
+
 ## 0.15.0 - 2026-10-30
 
 Fairings (roadmap 3.10): KSP1 fairing bases build and jettison KSP2's own procedural fairing. Built, not run in game yet; checklist (French): `docs/testing/2026-10-30-fairings-in-game-checklist.md`. No fairing code of ours: KSP2's `Module_Fairing` does the geometry, the editor, the jettison and the shielding.
