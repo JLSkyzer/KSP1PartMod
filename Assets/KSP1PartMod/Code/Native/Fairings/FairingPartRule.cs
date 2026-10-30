@@ -4,6 +4,9 @@ using System.Linq;
 
 namespace KSP1PartMod.Native.Fairings
 {
+    /// <summary>The transform a converted base hangs its fairing on (<see cref="FairingPartRule.FallbackOf"/>).</summary>
+    public enum FairingFallback { None, OabPartTransform, FlightPartTransform }
+
     /// <summary>Why a KSP1 fairing module got no <c>Module_Fairing</c>.</summary>
     public enum FairingRefusal
     {
@@ -11,6 +14,9 @@ namespace KSP1PartMod.Native.Fairings
         Second,
         /// <summary>The mapping found no usable size.</summary>
         Mapping,
+        /// <summary>The part also has a <c>ModuleJettison</c>: Redux's shroud builder would rewrite our <c>Data_Fairing</c> and destroy
+        /// the shroud transforms.</summary>
+        Jettison,
         /// <summary>The conversion threw; what it added was removed.</summary>
         Failed,
     }
@@ -21,12 +27,18 @@ namespace KSP1PartMod.Native.Fairings
     {
         public static bool TakeOver(bool ksp1, bool converted) => ksp1 && converted;
 
+        /// <summary>Where a converted base hangs its fairing when Redux finds no <c>model</c>: the OAB part's transform in the VAB,
+        /// the part's own transform in flight (<c>PartBehavior.ModelTransform</c> is set only after the modules initialise).</summary>
+        public static FairingFallback FallbackOf(bool inOab, bool hasFlightPart) =>
+            inOab ? FairingFallback.OabPartTransform : hasFlightPart ? FairingFallback.FlightPartTransform : FairingFallback.None;
+
         public static string Label(FairingRefusal r)
         {
             switch (r)
             {
                 case FairingRefusal.Second: return "second";
                 case FairingRefusal.Mapping: return "mapping";
+                case FairingRefusal.Jettison: return "ModuleJettison";
                 default: return "failed";
             }
         }

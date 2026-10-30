@@ -27,7 +27,7 @@ namespace KSP1PartMod.Game
     /// (<see cref="FairingPartRule.TakeOver"/>, <see cref="FairingImporter.Record"/>); the shroud parts keep the 0.4.1 behaviour:
     /// <list type="bullet">
     /// <item>the <c>OnInitialize</c> postfix gives a null <c>_modelTransform</c> (KSP1 imports have no <c>model</c>) the part's own
-    /// root: <c>OABPart.PartTransform</c> in the VAB, <c>PartBehavior.ModelTransform</c> in flight, and the base colliders under
+    /// root: <c>OABPart.PartTransform</c> in the VAB, the part's own transform in flight, and the base colliders under
     /// it when Redux found none (what Redux does with <c>model</c>);</item>
     /// <item>the <c>OnMaterialLoaded</c> prefix also sets <c>_materialLoaded</c>, so the panels spawn. When the material arrives
     /// inside <c>OnInitialize</c> (before <c>_modelTransform</c> is set), the flag waits for the postfix: a coroutine that
@@ -50,7 +50,7 @@ namespace KSP1PartMod.Game
         private static readonly object PendingMark = new object();
         private static FieldInfo _baseColliders, _moduleColor, _fairingMaterial, _fairingConeMaterial;
         private static FieldInfo _modelTransform, _materialLoaded;
-        private static PropertyInfo _oabPartTransform, _flightModelTransform;
+        private static PropertyInfo _oabPartTransform;
         private static bool _broken, _guardsArmed, _guardsBroken;
 
         /// <summary>The two runtime guards are armed and have not failed: the fairing importers may convert.</summary>
@@ -127,8 +127,6 @@ namespace KSP1PartMod.Game
                 _materialLoaded = Field(type, "_materialLoaded", typeof(bool), missing);
                 _oabPartTransform = OabPartTransform();
                 if (_oabPartTransform == null) missing.Add("IObjectAssemblyPart.PartTransform");
-                _flightModelTransform = FlightModelTransform();
-                if (_flightModelTransform == null) missing.Add("PartBehavior.ModelTransform");
                 if (missing.Count > 0)
                 {
                     foreach (var m in missing) log?.LogWarning(FairingLines.GuardMemberMissing(m));
@@ -158,11 +156,6 @@ namespace KSP1PartMod.Game
             return p != null && p.PropertyType == typeof(Transform) && p.GetGetMethod() != null ? p : null;
         }
 
-        private static PropertyInfo FlightModelTransform()
-        {
-            var p = AccessTools.Property(typeof(PartBehavior), "ModelTransform");
-            return p != null && p.PropertyType == typeof(Transform) && p.GetGetMethod() != null ? p : null;
-        }
 
         /// <summary>The members the guards and the 0.4.1 fix need that the loaded game lacks (empty when all resolve). Tests.</summary>
         internal static List<string> MissingGuardMembers()
@@ -183,7 +176,6 @@ namespace KSP1PartMod.Game
             if (AccessTools.Method(type, "OnInitialize", Type.EmptyTypes) == null) missing.Add("OnInitialize()");
             if (AccessTools.Method(type, "OnMaterialLoaded", new[] { typeof(Material) }) == null) missing.Add("OnMaterialLoaded(Material)");
             if (OabPartTransform() == null) missing.Add("IObjectAssemblyPart.PartTransform");
-            if (FlightModelTransform() == null) missing.Add("PartBehavior.ModelTransform");
             return missing;
         }
 
@@ -193,7 +185,7 @@ namespace KSP1PartMod.Game
             new Harmony(HarmonyId).UnpatchAll(HarmonyId);
             _broken = _guardsArmed = _guardsBroken = false;
             _baseColliders = _moduleColor = _fairingMaterial = _fairingConeMaterial = _modelTransform = _materialLoaded = null;
-            _oabPartTransform = _flightModelTransform = null;
+            _oabPartTransform = null;
             _pendingMaterial = new ConditionalWeakTable<object, object>();
             LoggedColliders.Clear();
             LoggedMaterials.Clear();
@@ -246,6 +238,8 @@ namespace KSP1PartMod.Game
                     if (root != null)
                     {
                         _modelTransform.SetValue(instance, root);
+                        // Also collects the SAF colliders the prefab pass disabled: harmless, Module_Fairing 26w42c reads
+                        // _baseColliders nowhere after OnInitialize (see FairingRule), and disabled colliders collide with nothing.
                         if (ReferenceEquals(_baseColliders.GetValue(instance), Empty))
                         {
                             var colliders = root.GetComponentsInChildren<Collider>();
@@ -267,15 +261,21 @@ namespace KSP1PartMod.Game
             }
         }
 
-        /// <summary>The part's own root: <c>OABPart.PartTransform</c> in the VAB, <c>part.ModelTransform</c> in flight (which
-        /// already falls back to the view object).</summary>
+        /// <summary>The part's own root (<see cref="FairingPartRule.FallbackOf"/>): <c>OABPart.PartTransform</c> in the VAB, the
+        /// part's own transform in flight. Not <c>PartBehavior.ModelTransform</c>: <c>PartBehavior.Start</c> sets it only after every
+        /// module's <c>Init</c> (so after this postfix); it is <c>FindModelTransform("model")</c> on that same transform, else the
+        /// view object, which sits on it too.</summary>
         private static Transform FallbackRoot(PartBehaviourModule module)
         {
             if (module == null) return null;
             var oab = module.OABPart;
-            if (oab != null) return _oabPartTransform.GetValue(oab) as Transform;
-            var part = module.part;
-            return part != null ? _flightModelTransform.GetValue(part) as Transform : null;
+            var part = oab == null ? module.part : null;
+            switch (FairingPartRule.FallbackOf(oab != null, part != null))
+            {
+                case FairingFallback.OabPartTransform: return _oabPartTransform.GetValue(oab) as Transform;
+                case FairingFallback.FlightPartTransform: return part.transform;
+                default: return null;
+            }
         }
 
         /// <summary>False skips Redux's method.</summary>

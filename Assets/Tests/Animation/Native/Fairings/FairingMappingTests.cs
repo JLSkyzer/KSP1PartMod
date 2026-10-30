@@ -366,6 +366,15 @@ PART
             Assert.AreEqual(expected, FairingPartRule.TakeOver(ksp1, converted));
         }
 
+        [TestCase(true, true, FairingFallback.OabPartTransform)]
+        [TestCase(true, false, FairingFallback.OabPartTransform)]
+        [TestCase(false, true, FairingFallback.FlightPartTransform)]
+        [TestCase(false, false, FairingFallback.None)]
+        public void FallbackOf_VabPartTransform_FlightPartTransform(bool inOab, bool hasFlightPart, FairingFallback expected)
+        {
+            Assert.AreEqual(expected, FairingPartRule.FallbackOf(inOab, hasFlightPart));
+        }
+
         [Test] public void Record_KindAndCounts_AndSummaryLine()
         {
             var r = new FairingRecord();

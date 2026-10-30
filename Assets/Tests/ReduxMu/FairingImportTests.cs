@@ -219,6 +219,17 @@ MODULE
             CollectionAssert.AreEqual(new[] { ("second", 1) }, FairingImporter.Record.Refusals(FairingKind.Saf));
         }
 
+        [Test] public void WithModuleJettison_Refused_NothingAdded()
+        {
+            Assert.IsTrue(Arm());
+            var part = Part(StockModule + "MODULE\n{\nname = ModuleJettison\njettisonName = shroud\nbottomNodeName = bottom\n}\n");
+            var context = Context(part);
+            Assert.IsFalse(new Ksp1PartModuleImporterRegistry().TryImport(ModuleNode(part, FairingMapping.ProceduralModule), context, out _));
+            Assert.AreEqual(0, context.ModuleData.OfType<Data_Fairing>().Count());
+            Assert.IsFalse(FairingImporter.Record.Contains("testFairingPart"));
+            CollectionAssert.AreEqual(new[] { ("ModuleJettison", 1) }, FairingImporter.Record.Refusals(FairingKind.Procedural));
+        }
+
         [Test] public void NoBaseRadius_Refused_NothingAdded()
         {
             Assert.IsTrue(Arm());

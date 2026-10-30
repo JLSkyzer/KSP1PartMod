@@ -31,6 +31,7 @@ namespace KSP1PartMod.Game
     {
         public const string ProceduralSwitch = "ksp1_procedural_fairings";
         public const string SafSwitch = "ksp1_saf_fairings";
+        public const string JettisonModule = "ModuleJettison";
 
         /// <summary>The bases converted this session, by part name.</summary>
         internal static readonly FairingRecord Record = new FairingRecord();
@@ -85,6 +86,15 @@ namespace KSP1PartMod.Game
                 if (second || context.ModuleData.Any(d => d is Data_Fairing))
                 {
                     Refuse(part, scratch, FairingRefusal.Second, null);
+                    return false;
+                }
+
+                // Redux's shroud builder (Ksp1EngineShroudBuilder.ConfigurePrefab) would rewrite our Data_Fairing and destroy the
+                // shroud transforms of a part that also has a ModuleJettison.
+                if (context.PartNode?.GetNodes("MODULE")?.Any(m => m != null &&
+                        string.Equals(m.GetValue("name")?.Trim(), JettisonModule, StringComparison.OrdinalIgnoreCase)) == true)
+                {
+                    Refuse(part, scratch, FairingRefusal.Jettison, null);
                     return false;
                 }
 
