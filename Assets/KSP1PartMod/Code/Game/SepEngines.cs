@@ -25,7 +25,15 @@ namespace KSP1PartMod.Game
 
         private static volatile bool _broken;
 
-        internal static void Reset() => _broken = false;
+        /// <summary>Each SEP part's outcome at its first import (<see cref="EngineSizeLines.SepOutcome"/>), to tell when a prefab
+        /// rebuild computes other counts or another mass (one line per part).</summary>
+        private static readonly Dictionary<string, string> FirstOutcome = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        internal static void Reset()
+        {
+            _broken = false;
+            lock (FirstOutcome) FirstOutcome.Clear();
+        }
 
         public static bool TryApply(Harmony harmony)
         {
@@ -97,6 +105,7 @@ namespace KSP1PartMod.Game
                     c.Converted = false;
                     c.Reason = "Redux's engine modes are not in the SEP order";
                 }
+                NoteOutcome(name, counting, EngineSizeLines.SepOutcome(c));
                 if (!c.Converted)
                 {
                     if (counting) EngineModes.NoteRefused(name, EngineSizeLines.SepRefused(name, c.Reason));
@@ -122,6 +131,23 @@ namespace KSP1PartMod.Game
                     if (counting) EngineModes.LogOnce(name + "\nid " + k, EngineSizeLines.DuplicateId(name, ids[k], unique[k]));
                 }
             }
+        }
+
+        /// <summary>During the import, keeps the part's first outcome; afterwards (a prefab rebuild), says once when it differs.</summary>
+        private static void NoteOutcome(string name, bool counting, string outcome)
+        {
+            string first;
+            lock (FirstOutcome)
+            {
+                if (counting)
+                {
+                    FirstOutcome[name] = outcome; // a later full import (new cache key) starts again
+                    return;
+                }
+                if (!FirstOutcome.TryGetValue(name, out first)) return;
+            }
+            if (string.Equals(first, outcome, StringComparison.Ordinal)) return;
+            EngineModes.LogOnce(name + "\nsep rebuild differs",EngineSizeLines.SepRebuildDiffers(name, first, outcome));
         }
 
         private static bool SameIds(string[] ids, Data_Engine.EngineMode[] modes)

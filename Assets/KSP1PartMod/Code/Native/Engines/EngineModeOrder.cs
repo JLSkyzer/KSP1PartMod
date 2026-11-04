@@ -17,10 +17,11 @@ namespace KSP1PartMod.Native.Engines
         /// <summary>The engine switches Redux already reads (<c>primaryEngineID</c> … <c>quaternaryEngineID</c>).</summary>
         public static readonly IReadOnlyList<string> ReduxSwitchModules = new[] { "ModuleTundraEngineSwitch", "MultiModeEngine", "ModuleMultiModeEngine" };
 
-        /// <summary>The KSP1 engine modules Redux imports (<c>Ksp1PartModuleImporterRegistry.IsEngineModuleName</c>).</summary>
+        /// <summary>The KSP1 engine modules Redux imports, matched exactly as <c>Ksp1PartModuleImporterRegistry.IsEngineModuleName</c>
+        /// (any case, no trimming).</summary>
         public static bool IsEngineModule(string name) =>
-            name != null && (name.Trim().Equals("ModuleEngines", StringComparison.OrdinalIgnoreCase) ||
-                             name.Trim().Equals("ModuleEnginesFX", StringComparison.OrdinalIgnoreCase));
+            name != null && (name.Equals("ModuleEngines", StringComparison.OrdinalIgnoreCase) ||
+                             name.Equals("ModuleEnginesFX", StringComparison.OrdinalIgnoreCase));
 
         /// <summary>Redux's own default <c>engineID</c> (<c>EngineImporter.BuildMode</c>).</summary>
         public const string DefaultEngineId = "Engine";

@@ -124,6 +124,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // Own Harmony id: a 0.15.x craft's saved mode id made to agree with the mode that runs (parts EngineModes ordered).
+                EngineModeSync.TryApply(new Harmony(EngineModeSync.HarmonyId));
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.EngineSizeLines.EnginesStopped("saved engine mode repair (arming)", e.ToString()));
+            }
+            try
+            {
                 // Before Redux's import (the curve must be in the part JSON); independent of enabled.
                 EngineCurveFix.TryApply(new Harmony(EngineCurveFix.HarmonyId), Animations);
             }

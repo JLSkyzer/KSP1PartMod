@@ -58,12 +58,28 @@ namespace KSP1PartMod.Native
         public static string SepRefused(string part, string reason) =>
             EnginePrefix + part + ": SEP values not set (" + reason + "), Redux's thrust and mass kept";
 
+        /// <summary>The SEP outcome of one build, compared between the first import and a prefab rebuild.</summary>
+        public static string SepOutcome(SepComputation c) =>
+            c.Converted
+                ? string.Join(", ", c.Sets.Select(s => $"{s.Name} {s.Count}")) + "; mass +" + Inv(c.EngineMass) + " t"
+                : "refused (" + c.Reason + ")";
+
+        public static string SepRebuildDiffers(string part, string first, string now) =>
+            EnginePrefix + part + ": the prefab rebuild gives " + now + ", the first import gave " + first +
+            "; the rebuild's values are written";
+
         public static string FallbackModes(string part, int modules, IEnumerable<string> ids, double mode0Thrust, double ksp1Sum) =>
             EnginePrefix + part + $": {modules} engine modules, no switch: modes " + string.Join(", ", ids) +
             $" (mode 0 {Inv(mode0Thrust)} kN, KSP1 sum {Inv(ksp1Sum)} kN)";
 
         public static string DuplicateId(string part, string from, string to) =>
             EnginePrefix + part + ": duplicate engineID '" + from + "' -> '" + to + "'";
+
+        public static string ModeSyncMemberMissing(string member) =>
+            EnginePrefix + member + " not found: a 0.15.x craft may show another mode in the dropdown than the one that runs";
+
+        public static string ModeSynced(string part, string from, string to) =>
+            EnginePrefix + part + ": saved mode '" + from + "' (a 0.15.x craft) shown as '" + to + "', the mode that runs";
 
         public static string EngineSummary(EngineTally t) =>
             EnginePrefix + $"summary: {t.Sep.Count} SEP part(s), {t.Fallback.Count} fallback part(s), {t.Refused.Count} refused" +
@@ -74,7 +90,7 @@ namespace KSP1PartMod.Native
             $"; {nowCompared} engine edit(s) now on a multi-mode engine, {droppedOnSep} dropped on SEP clusters";
 
         public static string B9EngineEditDropped(string part, string variant) =>
-            "[KSP1PartMod] b9: " + part + ": " + variant + ": engine edit dropped on an SEP cluster (its thrust comes from the ENGINESETs)";
+            "[KSP1PartMod] b9: " + part + ": " + variant + ": engine edit dropped on an SEP cluster (its thrust comes from the ENGINESETs; dropped even when the SEP values are later refused, Redux's thrust then stays)";
 
         // ---------------------------------------------------------------- sizes
 

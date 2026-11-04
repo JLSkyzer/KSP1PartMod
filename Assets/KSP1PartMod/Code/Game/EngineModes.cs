@@ -37,6 +37,8 @@ namespace KSP1PartMod.Game
         private static readonly object Gate = new object();
         private static readonly EngineSizeLines.EngineTally Tally = new EngineSizeLines.EngineTally();
         private static readonly HashSet<string> Logged = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>Every part whose order this patch made, for the session (read by <see cref="EngineModeSync"/>).</summary>
+        private static readonly HashSet<string> Ordered = new HashSet<string>(StringComparer.Ordinal);
         private static volatile bool _armed, _broken;
         private static bool _sep, _fallback;
 
@@ -53,6 +55,7 @@ namespace KSP1PartMod.Game
             {
                 Tally.Clear();
                 Logged.Clear();
+                Ordered.Clear();
             }
             _armed = _broken = false;
             _sep = _fallback = false;
@@ -127,7 +130,9 @@ namespace KSP1PartMod.Game
                 var modules = partNode.GetNodes("MODULE").ToList();
                 var list = new List<Ksp1ConfigNode>(order.Length);
                 foreach (var i in order) list.Add(modules[i]);
-                if (!Ksp1ImportedPartRegistry.IsComplete) Note(kind, partNode.GetValue("name") ?? "?", part, order);
+                var name = partNode.GetValue("name") ?? "?";
+                lock (Gate) Ordered.Add(name);
+                if (!Ksp1ImportedPartRegistry.IsComplete) Note(kind, name, part, order);
                 __result = list;
             }
             catch (Exception e)
@@ -158,6 +163,13 @@ namespace KSP1PartMod.Game
                 }
             }
             Info(line);
+        }
+
+        /// <summary>True when this patch ordered the engine modes of the part named <paramref name="part"/> in this session.</summary>
+        internal static bool WasOrdered(string part)
+        {
+            if (part == null) return false;
+            lock (Gate) return Ordered.Contains(part);
         }
 
         /// <summary>A refused SEP part (counted once by name, during the import only).</summary>
