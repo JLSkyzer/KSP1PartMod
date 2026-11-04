@@ -639,6 +639,48 @@ namespace KSP1PartMod.Tests.ReduxMu
 
         // ------------------------------------------------------------------ a real translation
 
+        /// <summary>0.16.0: the wheel importer reads the <c>rescaleFactor</c> that the default-rescale prefix adds to a part
+        /// without one, and scales the radius, the suspension travel and its offset (review of Task 4).</summary>
+        [Test] public void TryTranslatePart_DefaultRescale_ScalesRadiusAndSuspension()
+        {
+            LogAssert.ignoreFailingMessages = true; // Redux's report lines (fallback geometry) are not ours to judge here
+            Assert.IsTrue(Arm());
+            Assert.IsTrue(RescalePatches.TryApplyDefault(new Harmony(RescalePatches.DefaultId), AnimationSettings.Parse("{}", out _)));
+            var root = new Ksp1ModRoot("C:/import", "C:/import/GameData");
+            var suspension = M(Suspension.Replace("targetPosition = 0.5", "targetPosition = 0.5\nsuspensionOffset = -0.04"));
+            var node = Ksp1ConfigNode.Parse("PART\n{\nname = wheelRescaled\nmodule = Part\nmass = 0.1\ncategory = Ground\n" + M(RoverBase) + suspension + "}\n");
+            var file = new Ksp1ConfigFile(root, "C:/import/GameData/Test/Parts/wheel.cfg", "Test", node);
+            var part = node.GetNodes("PART").First();
+            Assert.IsNull(part.GetValue("rescaleFactor"), "no factor in the cfg");
+            var previousJson = Newtonsoft.Json.JsonConvert.DefaultSettings;
+            try
+            {
+                try { KSP.IO.IOProvider.Init(); }
+                catch (Exception e) { Assert.Ignore("IOProvider cannot initialise in EditMode: " + e.Message); }
+                Ksp1ImportedPartRegistry.BeginImport("wheel-rescale-test");
+                Assert.IsTrue(new Ksp1PartTranslator(null, null).TryTranslatePart(file, part, new Ksp1ImportReport(), out var core, out _), Log);
+                Assert.AreEqual("1.25", part.GetValue("rescaleFactor"), "added by the prefix");
+                ModuleData Data(string module) => core.data.serializedPartModules.Single(m => m.BehaviourType.Name == module).ModuleData.Single().DataObject;
+                Assert.AreEqual(0.375f, (float)WheelAccess.Read(Data("Module_WheelBase"), WheelKind.Base, "Radius"), 1e-6f);
+                Assert.AreEqual(0.15f, (float)WheelAccess.Read(Data("Module_WheelSuspension"), WheelKind.Suspension, "suspensionDistance"), 1e-6f);
+                Assert.AreEqual(-0.05f, (float)WheelAccess.Read(Data("Module_WheelSuspension"), WheelKind.Suspension, "suspensionOffset"), 1e-6f);
+            }
+            finally
+            {
+                new Harmony(RescalePatches.DefaultId).UnpatchAll(RescalePatches.DefaultId);
+                new Harmony(RescalePatches.LinesId).UnpatchAll(RescalePatches.LinesId);
+                RescalePatches.Reset();
+                foreach (var e in Ksp1ImportedPartRegistry.ImportedParts.ToList())
+                {
+                    if (e.Prefab != null) UnityEngine.Object.DestroyImmediate(e.Prefab);
+                    e.Prefab = null;
+                }
+                Ksp1ImportedPartRegistry.Clear();
+                LogAssert.ignoreFailingMessages = false;
+                Newtonsoft.Json.JsonConvert.DefaultSettings = previousJson;
+            }
+        }
+
         [Test] public void TryTranslatePart_Leg_WheelModulesBesideReduxDeployable()
         {
             LogAssert.ignoreFailingMessages = true; // Redux's report lines (fallback geometry, no clip) are not ours to judge here

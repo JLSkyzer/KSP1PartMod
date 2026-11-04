@@ -77,6 +77,16 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsFalse(EngineModeSync.Sync(d, out _, out _), "agreement: nothing to do");
         }
 
+        [Test] public void Sync_DuplicateIdBeforeTheRunningMode_Nothing()
+        {
+            // Redux's handler would map 'Engine' to mode 0 and really switch away from mode 1.
+            var d = Engine(1, "vernier", "Engine", "Engine");
+            Assert.IsFalse(EngineModeSync.Sync(d, out _, out _));
+            Assert.AreEqual("vernier", d.activeEngineMode.GetValue());
+            var later = Engine(0, "vernier", "Engine", "Engine");
+            Assert.IsTrue(EngineModeSync.Sync(later, out _, out _), "the first mode with that id is the one that runs");
+        }
+
         [Test] public void Sync_IndexOutOfRange_Nothing()
         {
             var d = Engine(5, "vernier", "basicEngine", "vernier");

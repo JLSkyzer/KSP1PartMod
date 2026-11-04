@@ -303,6 +303,19 @@ namespace KSP1PartMod.Game
                     var m = WheelMapping.Suspension(node);
                     var notes = m.Notes.ToList();
                     if (m.Converted) GuardSuspensionCollider(m.Values, context, notes);
+                    if (m.Converted && (_settings?.WheelRadiusRescale ?? true) && context.PartNode != null)
+                    {
+                        // 0.16.0: KSP1 scales the travel and offset with the part; KSP2 reads them as metres. Fitted or not.
+                        context.PartNode.TryGetFloat("rescaleFactor", out var factor, 1f); // Redux's own default
+                        var distance = Native.Rescale.RescaleRule.SuspensionLength(m.Values.SuspensionDistance, factor);
+                        var offset = Native.Rescale.RescaleRule.SuspensionLength(m.Values.SuspensionOffset, factor);
+                        if (distance != m.Values.SuspensionDistance || offset != m.Values.SuspensionOffset)
+                        {
+                            notes.Add(Native.EngineSizeLines.SuspensionRescaleNote(m.Values.SuspensionDistance, m.Values.SuspensionOffset, factor, distance, offset));
+                            m.Values.SuspensionDistance = distance;
+                            m.Values.SuspensionOffset = offset;
+                        }
+                    }
                     return (m.Converted, m.Values, m.NotReproduced, m.UnusedBySolver, notes);
                 }
                 case WheelKind.Steering: return Of(WheelMapping.Steering(node));

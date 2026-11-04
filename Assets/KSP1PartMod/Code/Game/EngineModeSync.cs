@@ -83,6 +83,9 @@ namespace KSP1PartMod.Game
             from = data.activeEngineMode.GetValue();
             to = data.engineModes[k].engineID;
             if (string.Equals(from, to, StringComparison.Ordinal)) return false;
+            // Redux's handler maps an id to its first mode: with a duplicate id that is not k, setting it would switch modes.
+            for (var i = 0; i < k; i++)
+                if (data.engineModes[i] != null && data.engineModes[i].engineID == to) return false;
             data.activeEngineMode.SetValue(to);
             return true;
         }

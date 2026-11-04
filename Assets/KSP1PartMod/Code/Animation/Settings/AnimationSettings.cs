@@ -257,7 +257,7 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>0.16.0: a <c>MODEL</c>'s <c>position</c> is multiplied by the part's <c>rescaleFactor</c>, as KSP1 does
         /// (<c>ksp1_model_position_rescale</c>, default true; false: unscaled, as 0.15.1).</summary>
         public bool Ksp1ModelPositionRescale => _engines0160.ModelPositionRescale;
-        /// <summary>0.16.0: a KSP1 wheel's radius is multiplied by its part's <c>rescaleFactor</c>, since KSP2 sizes the wheel
+        /// <summary>0.16.0: a KSP1 wheel's radius, suspension travel and offset are multiplied by its part's <c>rescaleFactor</c>, as KSP1 does; KSP2 sizes the wheel
         /// collider in metres whatever the part's scale (<c>wheel_radius_rescale</c>, default true; false: the cfg radius, as
         /// 0.15.1).</summary>
         public bool WheelRadiusRescale => _engines0160.WheelRadiusRescale;

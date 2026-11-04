@@ -169,6 +169,11 @@ namespace KSP1PartMod.Native
         public static string WheelRadiusNote(float radius, float factor, float result) =>
             $"ModuleWheelBase: radius {Inv(radius)} x rescaleFactor {Inv(factor)} = {Inv(result)} m (KSP2 sizes the wheel in metres, not with the part)";
 
+        /// <summary>A wheel note (0.16.0, <c>wheel_radius_rescale</c>), printed with the part's other wheel notes.</summary>
+        public static string SuspensionRescaleNote(float distance, float offset, float factor, float newDistance, float newOffset) =>
+            $"ModuleWheelSuspension: suspensionDistance {Inv(distance)} and suspensionOffset {Inv(offset)} x rescaleFactor {Inv(factor)} = " +
+            $"{Inv(newDistance)} and {Inv(newOffset)} m (as KSP1; KSP2 reads them as metres)";
+
         public static string NodeCountMismatch(string part, int values, int nodes) =>
             RescalePrefix + $"{part}: {values} node value(s) in the cfg, {nodes} node(s) parsed: node scale skipped";
     }

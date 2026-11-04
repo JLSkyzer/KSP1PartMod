@@ -89,6 +89,12 @@ namespace KSP1PartMod.Native.Rescale
         public static float WheelRadius(float radius, float rescaleFactor, bool fitToMesh) =>
             fitToMesh || rescaleFactor == 1f ? radius : radius * ModelPositionFactor(rescaleFactor);
 
+        /// <summary>A wheel suspension length (<c>suspensionDistance</c>, <c>suspensionOffset</c>) on a part scaled by
+        /// <paramref name="rescaleFactor"/>: KSP1 multiplies both by the factor, KSP2 reads them as metres; fitted to the mesh or
+        /// not. Unchanged when the factor is 1 or not a positive finite number.</summary>
+        public static float SuspensionLength(float value, float rescaleFactor) =>
+            rescaleFactor == 1f ? value : value * ModelPositionFactor(rescaleFactor);
+
         /// <summary>The factor of a <c>MODEL</c>'s <c>position</c>: the part's <c>rescaleFactor</c> (1 when not a positive
         /// finite number).</summary>
         public static float ModelPositionFactor(float rescaleFactor) =>

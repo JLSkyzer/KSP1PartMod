@@ -65,6 +65,17 @@ namespace KSP1PartMod.Tests.Animation.Native.Rescale
             Assert.AreEqual(1f, RescaleRule.ModelPositionFactor(float.NaN));
         }
 
+        [Test] public void SuspensionLength_FollowsTheFactor()
+        {
+            Assert.AreEqual(0.554f, RescaleRule.SuspensionLength(0.2f, 2.77f), 1e-6f);
+            Assert.AreEqual(0.2f, RescaleRule.SuspensionLength(0.2f, 1f));
+            Assert.AreEqual(0.2f, RescaleRule.SuspensionLength(0.2f, float.NaN));
+            Assert.AreEqual(0.2f, RescaleRule.SuspensionLength(0.2f, 0f));
+            Assert.AreEqual(-0.0875f, RescaleRule.SuspensionLength(-0.07f, 1.25f), 1e-6f);
+            Assert.AreEqual("ModuleWheelSuspension: suspensionDistance 0.12 and suspensionOffset 0 x rescaleFactor 1.25 = 0.15 and 0 m (as KSP1; KSP2 reads them as metres)",
+                EngineSizeLines.SuspensionRescaleNote(0.12f, 0f, 1.25f, 0.15f, 0f));
+        }
+
         [Test] public void WheelRadius_FollowsTheFactor_UnlessFittedToTheMesh()
         {
             Assert.AreEqual(0.4725f, RescaleRule.WheelRadius(0.378f, 1.25f, false), 1e-6f);

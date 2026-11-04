@@ -196,12 +196,15 @@ namespace KSP1PartMod.Tests.ReduxMu
                 go.transform.localPosition = new Vector3(5, 5, 5);
                 var noPosition = Ksp1ConfigNode.Parse("MODEL\n{\nmodel = x\n}\n").GetNodes("MODEL").First();
                 apply.Invoke(null, new object[] { go.transform, noPosition, 0.625f });
-                Assert.AreEqual(new Vector3(5, 5, 5), go.transform.localPosition, "no position: Redux's");
+                Assert.AreEqual(new Vector3(3.125f, 3.125f, 3.125f), go.transform.localPosition, "no position: the .mu root's, scaled as KSP1");
+                go.transform.localPosition = Vector3.zero;
+                apply.Invoke(null, new object[] { go.transform, noPosition, 0.625f });
+                Assert.AreEqual(Vector3.zero, go.transform.localPosition, "zero stays zero, not counted");
 
                 apply.Invoke(null, new object[] { go.transform, model, 1f });
                 Assert.AreEqual(new Vector3(0, 1, 2), go.transform.localPosition, "factor 1: Redux's");
                 RescalePatches.AfterImportComplete();
-                CollectionAssert.Contains(_lines, "[KSP1PartMod] rescale: MODEL position x rescaleFactor on 2 model(s)");
+                CollectionAssert.Contains(_lines, "[KSP1PartMod] rescale: MODEL position x rescaleFactor on 3 model(s)");
             }
             finally { UnityEngine.Object.DestroyImmediate(go); }
         }

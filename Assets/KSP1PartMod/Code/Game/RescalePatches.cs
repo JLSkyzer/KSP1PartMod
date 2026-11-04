@@ -253,10 +253,13 @@ namespace KSP1PartMod.Game
             if (_modelPositionBroken || __0 == null || __1 == null) return;
             try
             {
-                if (__1.GetValue("position") == null) return;
                 var factor = RescaleRule.ModelPositionFactor(__2);
                 if (factor == 1f) return;
-                __0.localPosition = __1.GetVector3("position", __0.localPosition) * factor;
+                // With a position: the cfg's, scaled. Without: Redux kept the freshly loaded .mu root's position (a new
+                // instance per call), which KSP1 scales too; zero stays zero and is not counted.
+                if (__1.GetValue("position") != null) __0.localPosition = __1.GetVector3("position", __0.localPosition) * factor;
+                else if (__0.localPosition != Vector3.zero) __0.localPosition *= factor;
+                else return;
                 if (!Ksp1ImportedPartRegistry.IsComplete)
                     lock (Gate) Tally.ModelPositions++;
             }
