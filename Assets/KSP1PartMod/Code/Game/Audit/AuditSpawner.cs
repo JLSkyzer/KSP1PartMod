@@ -249,6 +249,14 @@ namespace KSP1PartMod.Game.Audit
                 }
                 try
                 {
+                    EnginesAndSizes(core, entry, rec);
+                }
+                catch (Exception)
+                {
+                    // read-only bookkeeping: never fails the audit of a part
+                }
+                try
+                {
                     rec.B9Overrides = B9Items(core, rec, present);
                 }
                 catch (Exception e)
@@ -411,6 +419,39 @@ namespace KSP1PartMod.Game.Audit
                 if (!string.IsNullOrEmpty(m.BehaviourType) && !edited.Contains(m.BehaviourType)) edited.Add(m.BehaviourType);
             }
             return kinds;
+        }
+
+        /// <summary>0.16.0: the size label and its source, where the rescale factor comes from, and the engine modes (count,
+        /// mode 0 id and thrust of the first <c>Data_Engine</c> of the definition).</summary>
+        private static void EnginesAndSizes(PartCore core, Ksp1ImportedPartRegistry.Entry entry, AuditRecord rec)
+        {
+            rec.SizeKey = core?.data?.sizeKey ?? "";
+            rec.SizeSource = SizeFromNodes.SourceOf(rec.Part);
+            var partNode = entry?.PartNode;
+            rec.Rescale = RescalePatches.RescaleOf(rec.Part, partNode);
+            var kind = EngineModes.KindOf(partNode);
+            rec.EngineKind = kind == EngineModes.Kind.Sep ? "sep" : kind == EngineModes.Kind.Fallback ? "fallback" : "";
+            var engine = FirstEngine(core);
+            var modes = engine?.engineModes;
+            if (modes != null && modes.Length > 0)
+                rec.EngineModes = modes.Length.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + modes[0].engineID + ":" +
+                                  modes[0].maxThrust.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static Data_Engine FirstEngine(PartCore core)
+        {
+            if (core?.modules != null)
+                foreach (var m in core.modules)
+                    if (m is Data_Engine e) return e;
+            var serialized = core?.data?.serializedPartModules;
+            if (serialized == null) return null;
+            foreach (var module in serialized)
+            {
+                if (module.ModuleData == null) continue;
+                foreach (var d in module.ModuleData)
+                    if (d.DataObject is Data_Engine e) return e;
+            }
+            return null;
         }
 
         /// <summary>Command and engines from the part's definition, when no model could be spawned.</summary>

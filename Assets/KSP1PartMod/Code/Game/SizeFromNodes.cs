@@ -32,6 +32,8 @@ namespace KSP1PartMod.Game
         private static readonly object Gate = new object();
         private static readonly EngineSizeLines.SizeTally Tally = new EngineSizeLines.SizeTally();
         private static readonly HashSet<string> Counted = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>The last decision's source per part name, for the session (read by the audit).</summary>
+        private static readonly Dictionary<string, SizeSource> Sources = new Dictionary<string, SizeSource>(StringComparer.Ordinal);
         private static volatile bool _broken;
         private static Func<string, MetaAssemblySizeFilterType> _mapSize;
 
@@ -44,6 +46,7 @@ namespace KSP1PartMod.Game
             {
                 Tally.Clear();
                 Counted.Clear();
+                Sources.Clear();
             }
             _broken = false;
             _mapSize = null;
@@ -122,13 +125,24 @@ namespace KSP1PartMod.Game
                 data.sizeCategory = category;
             }
             else d = new SizeDecision { Key = before, Source = SizeSource.Redux };
-            if (Ksp1ImportedPartRegistry.IsComplete) return; // a rebuild: counted at the import
             var name = partNode.GetValue("name") ?? "?";
+            lock (Gate) Sources[name] = d.Source;
+            if (Ksp1ImportedPartRegistry.IsComplete) return; // a rebuild: counted at the import
             lock (Gate)
             {
                 if (!Counted.Add(name)) return;
                 Tally.Note(mod ?? "?", name, before, data.sizeKey, d.Source, d.Steps, IsDocking(data));
             }
+        }
+
+        /// <summary>The audit's <c>size_source</c>: <c>nodes</c>, <c>tokens</c>, or <c>redux</c> (also when the patch did not
+        /// run on the part: key off, patch stopped).</summary>
+        internal static string SourceOf(string part)
+        {
+            SizeSource source;
+            lock (Gate)
+                if (part == null || !Sources.TryGetValue(part, out source)) return "redux";
+            return source == SizeSource.Nodes ? "nodes" : source == SizeSource.Token ? "tokens" : "redux";
         }
 
         internal static void AfterImportComplete()

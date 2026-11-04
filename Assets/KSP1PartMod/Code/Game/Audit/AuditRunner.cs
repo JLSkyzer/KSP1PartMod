@@ -348,6 +348,8 @@ namespace KSP1PartMod.Game.Audit
             log.LogInfo(summary.FairingsLine());
             log.LogInfo(summary.NativeLine());
             log.LogInfo(summary.B9Line());
+            log.LogInfo(summary.EnginesLine());
+            log.LogInfo(summary.SizesLine());
             log.LogInfo(summary.PerfLine());
             WriteMarkdown(summary);
             run.Close();

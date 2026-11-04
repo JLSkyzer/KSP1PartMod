@@ -64,5 +64,17 @@ namespace KSP1PartMod.Audit
         /// per override set with its active variant's transformer kinds, the part's counts, and a failure when the default
         /// variant did not apply (<see cref="AuditB9"/>).</summary>
         public IReadOnlyList<string> B9Overrides = None;
+        /// <summary>0.16.0: the part definition's size key (<c>PartData.sizeKey</c>).</summary>
+        public string SizeKey = "";
+        /// <summary>0.16.0: who set that size, <c>nodes</c>, <c>tokens</c> or <c>redux</c> (<c>ksp1_size_from_nodes</c>).</summary>
+        public string SizeSource = "";
+        /// <summary>0.16.0: where the part's <c>rescaleFactor</c> comes from, <c>cfg</c>, <c>default</c> (our 1.25) or <c>none</c>
+        /// (Redux's 1).</summary>
+        public string Rescale = "";
+        /// <summary>0.16.0: the rule that built the engine modes, <c>sep</c> or <c>fallback</c> (empty: Redux's own).</summary>
+        public string EngineKind = "";
+        /// <summary>0.16.0: the modes of the first <c>Data_Engine</c>: count, mode 0 id and thrust (kN), as
+        /// <c>3:AllEngines:19140</c> (empty without an engine).</summary>
+        public string EngineModes = "";
     }
 }

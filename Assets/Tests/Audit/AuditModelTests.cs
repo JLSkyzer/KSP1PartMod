@@ -483,7 +483,7 @@ namespace KSP1PartMod.Tests.Audit
         [Test] public void Csv_ReduxFairing_IsTheLastColumn()
         {
             var cols = AuditCsv.Columns.ToList();
-            Assert.AreEqual("native_modules", cols[cols.Count - 2], "then b9_overrides (0.9.0)");
+            Assert.AreEqual("native_modules", cols[cols.IndexOf("b9_overrides") - 1], "then b9_overrides (0.9.0)");
             var r = Rec("a"); r.ReduxFairing = true;
             var rows = ReadCsv(AuditCsv.Document(new[] { r, Rec("b") }));
             Assert.AreEqual("true", rows[1][cols.IndexOf("redux_fairing")]);
@@ -651,12 +651,42 @@ namespace KSP1PartMod.Tests.Audit
             StringAssert.Contains("## ModuleManager (this session)\n\n- [KSP1PartMod] mm: arithmetic: 475 applied\n- [KSP1PartMod] mm: index: 350 applied\n\n## By kind", md);
         }
 
-        // ---- B9 overrides (0.9.0) ----
+        // ---- engines and sizes (0.16.0) ----
 
-        [Test] public void Csv_B9Overrides_IsTheLastColumn_JoinedWithSemicolons()
+        [Test] public void Csv_EnginesAndSizes_AreTheLastFourColumns()
         {
             var cols = AuditCsv.Columns.ToList();
-            Assert.AreEqual("b9_overrides", cols[cols.Count - 1]);
+            CollectionAssert.AreEqual(new[] { "b9_overrides", "size_key", "size_source", "rescale", "engine_modes" },
+                cols.Skip(cols.Count - 5).ToList(), "appended after every older column");
+            var r = Rec("a"); r.SizeKey = "xl"; r.SizeSource = "nodes"; r.Rescale = "default"; r.EngineModes = "3:AllEngines:19140";
+            var rows = ReadCsv(AuditCsv.Document(new[] { r, Rec("b") }));
+            Assert.AreEqual(cols.Count, rows[1].Count);
+            Assert.AreEqual("xl", rows[1][cols.IndexOf("size_key")]);
+            Assert.AreEqual("nodes", rows[1][cols.IndexOf("size_source")]);
+            Assert.AreEqual("default", rows[1][cols.IndexOf("rescale")]);
+            Assert.AreEqual("3:AllEngines:19140", rows[1][cols.IndexOf("engine_modes")]);
+            Assert.AreEqual("", rows[2][cols.IndexOf("engine_modes")], "empty by default");
+        }
+
+        [Test] public void Summary_EnginesAndSizesLines_CountTheRulesAndSources()
+        {
+            var sep = Rec("sep"); sep.EngineKind = "sep"; sep.Engines = 1; sep.SizeSource = "nodes";
+            var lr91 = Rec("lr91"); lr91.EngineKind = "fallback"; lr91.Engines = 1; lr91.SizeSource = "nodes";
+            var two = Rec("two"); two.Engines = 2; two.SizeSource = "redux";
+            var tok = Rec("tok"); tok.SizeSource = "tokens";
+            var control = Rec("ctrl"); control.Control = true; control.Engines = 3; control.EngineKind = "sep"; control.SizeSource = "nodes";
+            var s = AuditSummary.From(new[] { sep, lr91, two, tok, control }, 1);
+            Assert.AreEqual("audit: engines: 1 SEP, 1 fallback, 1 parts with more than one Module_Engine", s.EnginesLine());
+            Assert.AreEqual("audit: sizes: 2 from nodes, 1 from tokens, 1 Redux's", s.SizesLine());
+            StringAssert.Contains("## Engines and sizes\n\n" + s.EnginesLine() + "\n" + s.SizesLine() + "\n", s.Markdown("x"));
+        }
+
+        // ---- B9 overrides (0.9.0) ----
+
+        [Test] public void Csv_B9Overrides_IsTheLastColumnBefore0160_JoinedWithSemicolons()
+        {
+            var cols = AuditCsv.Columns.ToList();
+            Assert.AreEqual("b9_overrides", cols[cols.IndexOf("size_key") - 1], "the 0.16.0 columns come after it");
             Assert.AreEqual(cols.IndexOf("native_modules") + 1, cols.IndexOf("b9_overrides"), "no older column moves");
             var r = Rec("a");
             r.B9Overrides = AuditB9.Items(new[] { AuditB9.Set("tank", "LFO", new[] { AuditB9.Mass(0.125), AuditB9.Resources(new[] { "Methalox" }) }) },

@@ -47,6 +47,8 @@ namespace KSP1PartMod.Game
         private static readonly object Gate = new object();
         private static readonly EngineSizeLines.RescaleTally Tally = new EngineSizeLines.RescaleTally();
         private static readonly HashSet<string> Counted = new HashSet<string>(StringComparer.Ordinal);
+        /// <summary>The parts this patch gave KSP1's default factor, for the session (read by the audit).</summary>
+        private static readonly HashSet<string> Defaulted = new HashSet<string>(StringComparer.Ordinal);
         private static volatile bool _defaultBroken, _nodeScaleBroken, _modelPositionBroken, _linesArmed;
         private static Action<Ksp1ConfigNode, string, string> _addValue;
 
@@ -59,6 +61,7 @@ namespace KSP1PartMod.Game
             {
                 Tally.Clear();
                 Counted.Clear();
+                Defaulted.Clear();
             }
             _defaultBroken = _nodeScaleBroken = _modelPositionBroken = _linesArmed = false;
             _addValue = null;
@@ -195,7 +198,11 @@ namespace KSP1PartMod.Game
             {
                 var part = new Ksp1NodeAdapter(partNode);
                 var factor = RescaleRule.MissingDefault(part);
-                if (factor.HasValue) _addValue(partNode, "rescaleFactor", IsruCfg.Inv(factor.Value));
+                if (factor.HasValue)
+                {
+                    _addValue(partNode, "rescaleFactor", IsruCfg.Inv(factor.Value));
+                    lock (Gate) Defaulted.Add(partNode.GetValue("name") ?? "?");
+                }
                 if (!counting) return;
                 var excluded = !factor.HasValue && partNode.GetValue("rescaleFactor") == null && RescaleRule.IsExcluded(part);
                 if (!factor.HasValue && !excluded) return;
@@ -280,6 +287,15 @@ namespace KSP1PartMod.Game
                 add(Tally);
                 return true;
             }
+        }
+
+        /// <summary>The audit's <c>rescale</c>: <c>default</c> when this patch added KSP1's factor, <c>cfg</c> when the part node
+        /// has its own, <c>none</c> otherwise (Redux's 1).</summary>
+        internal static string RescaleOf(string part, Ksp1ConfigNode partNode)
+        {
+            lock (Gate)
+                if (part != null && Defaulted.Contains(part)) return "default";
+            return partNode?.GetValue("rescaleFactor") != null ? "cfg" : "none";
         }
 
         internal static void AfterImportComplete()

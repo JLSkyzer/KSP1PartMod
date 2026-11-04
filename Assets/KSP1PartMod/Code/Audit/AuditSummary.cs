@@ -75,6 +75,14 @@ namespace KSP1PartMod.Audit
         /// <summary>B9 overrides (0.9.0): parts with an override set, and parts where the default variant did not apply.</summary>
         public int B9Parts { get; private set; }
         public int B9FailedParts { get; private set; }
+        /// <summary>0.16.0: engine modes built by the SEP and fallback rules, and parts with more than one <c>Module_Engine</c>.</summary>
+        public int EnginesSep { get; private set; }
+        public int EnginesFallback { get; private set; }
+        public int EnginesSeveral { get; private set; }
+        /// <summary>0.16.0: where each part's size label came from.</summary>
+        public int SizesFromNodes { get; private set; }
+        public int SizesFromTokens { get; private set; }
+        public int SizesRedux { get; private set; }
 
         /// <summary>The parts timed (every audited part but the controls), and the nearest-rank percentiles of their
         /// <c>prefab_ms</c> and <c>finalize_ms</c> (all 0 for an empty run).</summary>
@@ -159,6 +167,12 @@ namespace KSP1PartMod.Audit
             s.NativeFailedParts = parts.Count(r => r.NativeModules != null && r.NativeModules.Any(AuditNative.IsFailed));
             s.B9Parts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides));
             s.B9FailedParts = parts.Count(r => AuditB9.HasOverrides(r.B9Overrides) && AuditB9.IsFailed(r.B9Overrides));
+            s.EnginesSep = parts.Count(r => r.EngineKind == "sep");
+            s.EnginesFallback = parts.Count(r => r.EngineKind == "fallback");
+            s.EnginesSeveral = parts.Count(r => r.Engines > 1);
+            s.SizesFromNodes = parts.Count(r => r.SizeSource == "nodes");
+            s.SizesFromTokens = parts.Count(r => r.SizeSource == "tokens");
+            s.SizesRedux = parts.Count(r => r.SizeSource == "redux");
 
             s.TimedParts = parts.Count;
             s.PrefabMs = Percentiles.Of(parts.Select(r => r.PrefabMs));
@@ -214,6 +228,14 @@ namespace KSP1PartMod.Audit
             $"{NativeConverters} converter(s), {NativeDrills} drill(s), {NativeScanners} scanner(s), " +
             $"{NativeRadiators} radiator(s), {NativeScienceParts} science part(s), {NativeWheelParts} wheel part(s), " +
             $"{NativeFailedParts} part(s) where one failed to initialize";
+
+        /// <summary>0.16.0: the engine mode rules; the last count is expected to be 0 (one engine per part).</summary>
+        public string EnginesLine() =>
+            $"audit: engines: {EnginesSep} SEP, {EnginesFallback} fallback, {EnginesSeveral} parts with more than one Module_Engine";
+
+        /// <summary>0.16.0: the size labels by source.</summary>
+        public string SizesLine() =>
+            $"audit: sizes: {SizesFromNodes} from nodes, {SizesFromTokens} from tokens, {SizesRedux} Redux's";
 
         public string B9Line() => B9.B9Lines.AuditSummary(B9Parts, B9FailedParts);
 
@@ -303,6 +325,8 @@ namespace KSP1PartMod.Audit
             sb.Append("\n## Native modules\n\n").Append(NativeLine()).Append('\n');
 
             sb.Append("\n## B9 overrides\n\n").Append(B9Line()).Append('\n');
+
+            sb.Append("\n## Engines and sizes\n\n").Append(EnginesLine()).Append('\n').Append(SizesLine()).Append('\n');
 
             sb.Append("\n## Controls\n\n");
             if (Controls.Count == 0) sb.Append("No control part was audited.\n");
