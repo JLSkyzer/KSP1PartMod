@@ -236,6 +236,15 @@ namespace KSP1PartMod.Animation.Settings
         /// throws (<c>fix_intake_mach_curve</c>, default true; false: 0.15.0).</summary>
         public bool FixIntakeMachCurve => _fixes0131.IntakeMachCurve;
 
+        /// <summary>0.16.0: SEP booster clusters become one engine with the modes of <c>ModuleSEPEngineSwitch</c>, their thrust
+        /// and mass from the cfg's <c>ENGINESET</c>s and the engines in the model (<c>sep_procedural_engines</c>, default true;
+        /// false: 0.15.1).</summary>
+        public bool SepProceduralEngines => _engines0160.SepProceduralEngines;
+        /// <summary>0.16.0: a part with two or more KSP1 engine modules and no switch becomes one engine with one mode per module,
+        /// in cfg order (<c>ksp1_engine_modes_fallback</c>, default true; false: one <c>Module_Engine</c> per module, the last
+        /// one wins, as 0.15.1).</summary>
+        public bool Ksp1EngineModesFallback => _engines0160.EngineModesFallback;
+
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
         /// <summary>A KSP1 <c>EXPERIMENT_DEFINITION</c> becomes a KSP2 definition <c>KSP1_&lt;id&gt;</c>
@@ -312,6 +321,14 @@ namespace KSP1PartMod.Animation.Settings
         }
 
         private readonly SwitchesFixes0131 _fixes0131;
+
+        /// <summary>The engine and size keys of 0.16.0, read together.</summary>
+        private sealed class Switches0160
+        {
+            public bool SepProceduralEngines = true, EngineModesFallback = true;
+        }
+
+        private readonly Switches0160 _engines0160;
 
         /// <summary>The science keys of 0.12.0, read together. Each object has its own tables.</summary>
         private sealed class SwitchesScience
@@ -406,14 +423,15 @@ namespace KSP1PartMod.Animation.Settings
 
         public static readonly AnimationSettings Defaults =
             new AnimationSettings(true, true, false, DefaultShaderPropertyMap(), true, true, true, true, true, Behaviours.EditorSpeed.RealTime,
-                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf(), new SwitchesWheels(), new SwitchesFixes0131(), new SwitchesFairings());
+                new Switches2a(), new Switches041(), new SwitchesAudit(), new SwitchesMm(), new SwitchesB9(), new SwitchesIsru(), new SwitchesRadiators(), new SwitchesScience(), new SwitchesPerf(), new SwitchesWheels(), new SwitchesFixes0131(), new SwitchesFairings(), new Switches0160());
 
         private AnimationSettings(bool enabled, bool fixMuReader, bool ownFirstDeployable,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap, bool diagnostics, bool followRedux,
             bool hideMaterialLess, bool fixIcons, bool subcategoryBar, float editorAnimationSpeed, Switches2a switches2a,
             Switches041 switches041, SwitchesAudit audit, SwitchesMm mm, SwitchesB9 b9, SwitchesIsru isru, SwitchesRadiators radiators, SwitchesScience science, SwitchesPerf perf,
-            SwitchesWheels wheels, SwitchesFixes0131 fixes0131, SwitchesFairings fairings)
+            SwitchesWheels wheels, SwitchesFixes0131 fixes0131, SwitchesFairings fairings, Switches0160 engines0160)
         {
+            _engines0160 = engines0160;
             _fixes0131 = fixes0131;
             _fairings = fairings;
             _wheels = wheels;
@@ -471,6 +489,7 @@ namespace KSP1PartMod.Animation.Settings
                 var wheels = new SwitchesWheels();
                 var fixes0131 = new SwitchesFixes0131();
                 var fairings = new SwitchesFairings();
+                var engines0160 = new Switches0160();
                 foreach (var p in root.Properties())
                 {
                     switch (p.Name)
@@ -552,6 +571,8 @@ namespace KSP1PartMod.Animation.Settings
                         case "fix_intake_mach_curve": ReadBool(p, ref fixes0131.IntakeMachCurve, problems); break;
                         case "ksp1_procedural_fairings": ReadBool(p, ref fairings.Procedural, problems); break;
                         case "ksp1_saf_fairings": ReadBool(p, ref fairings.Saf, problems); break;
+                        case "sep_procedural_engines": ReadBool(p, ref engines0160.SepProceduralEngines, problems); break;
+                        case "ksp1_engine_modes_fallback": ReadBool(p, ref engines0160.EngineModesFallback, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;
@@ -573,7 +594,7 @@ namespace KSP1PartMod.Animation.Settings
                     }
                 }
                 if (problems.Count > 0) error = string.Join("; ", problems);
-                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf, wheels, fixes0131, fairings);
+                return new AnimationSettings(enabled, fix, own, map ?? DefaultShaderPropertyMap(), diagnostics, follow, hide, icons, subcategories, editorSpeed, s2a, s041, audit, mm, b9, isru, radiators, science, perf, wheels, fixes0131, fairings, engines0160);
             }
             catch (Exception e)
             {

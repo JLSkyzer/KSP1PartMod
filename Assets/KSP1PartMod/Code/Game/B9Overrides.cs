@@ -101,6 +101,9 @@ namespace KSP1PartMod.Game
         internal sealed class ModuleTally
         {
             public int Transformers, OffForms, NoOffForm, OffNoChange;
+            /// <summary>0.16.0: engine edits diffed on the multi-mode engine <see cref="EngineModes"/> ordered (0.15.1 skipped
+            /// them as <c>Repeated</c>), and engine edits dropped on SEP clusters.</summary>
+            public int EnginesNowCompared, EnginesDroppedOnSep;
             public readonly Dictionary<string, int> ByField = new Dictionary<string, int>(StringComparer.Ordinal);
             public readonly List<string> NoOffFormModules = new List<string>();
             public readonly List<ModuleOutcome> Modules = new List<ModuleOutcome>();
@@ -733,6 +736,23 @@ namespace KSP1PartMod.Game
                 }
 
                 var candidates = r.Transformers;
+                var engineKind = group.All(e => switched.Contains(e.TargetIndex)) ? EngineModes.KindOf(partNode) : EngineModes.Kind.None;
+                if (engineKind == EngineModes.Kind.Fallback || engineKind == EngineModes.Kind.Sep)
+                {
+                    tally.EnginesNowCompared += group.Count;
+                    if (engineKind == EngineModes.Kind.Sep)
+                    {
+                        // The SEP thrust comes from the ENGINESETs: a whole-array engine edit would undo it.
+                        var dropped = candidates.Count(t => t.DataType == nameof(KSP.Modules.Data_Engine));
+                        if (dropped > 0)
+                        {
+                            tally.EnginesDroppedOnSep += group.Count;
+                            candidates = candidates.Where(t => t.DataType != nameof(KSP.Modules.Data_Engine)).ToList();
+                            LogOnce(part + "\nsep-engine\n" + st.VariantId, Native.EngineSizeLines.B9EngineEditDropped(part, st.VariantId));
+                        }
+                    }
+                    else foreach (var t in candidates) UniqueEngineIds(t);
+                }
                 if (offEdit != null && Ksp1PartModuleImporterRegistry.IsDecouplerModuleName(offEdit.TargetModule))
                 {
                     // Staging is per part: a decoupler made non-stageable takes the part's other stageable module out of
@@ -791,6 +811,18 @@ namespace KSP1PartMod.Game
                     }
                 }
             }
+        }
+
+        /// <summary>0.16.0: an <c>engineModes</c> edit of a multi-mode engine <see cref="EngineModes"/> ordered carries Redux's
+        /// raw ids (two <c>"Engine"</c> for modules without an id): made unique as <see cref="SepEngines"/> does on the part.</summary>
+        internal static void UniqueEngineIds(ModuleDefinitionTransformer t)
+        {
+            if (t == null || t.Key != "engineModes" || !(t.Value is JArray modes)) return;
+            var ids = modes.Select(m => (m as JObject)?["engineID"]?.Type == JTokenType.String ? (string)m["engineID"] : null).ToArray();
+            var unique = Native.Engines.EngineModeOrder.UniqueIds(ids);
+            for (var k = 0; k < ids.Length; k++)
+                if (modes[k] is JObject o && o["engineID"] != null && !string.Equals(ids[k], unique[k], StringComparison.Ordinal))
+                    o["engineID"] = unique[k];
         }
 
         /// <summary>The <c>Data_Decouple</c> field the decoupler off form (<c>staged = false</c>) sets.</summary>
@@ -1118,7 +1150,8 @@ namespace KSP1PartMod.Game
                 byField.OrderByDescending(kv => kv.Value).ThenBy(kv => kv.Key, StringComparer.Ordinal).Select(kv => (kv.Key, kv.Value)),
                 ms.Sum(m => m.OffForms), ms.Sum(m => m.NoOffForm), ms.SelectMany(m => m.NoOffFormModules).Distinct().OrderBy(n => n, StringComparer.Ordinal),
                 noEffect.Count, noEffect.Select(o => o.Ksp1Module).Distinct().OrderBy(n => n, StringComparer.Ordinal),
-                ms.Sum(m => m.OffNoChange)) + fairingDiffs;
+                ms.Sum(m => m.OffNoChange)) + fairingDiffs +
+                (EngineModes.IsArmed ? Native.EngineSizeLines.B9Engines(ms.Sum(m => m.EnginesNowCompared), ms.Sum(m => m.EnginesDroppedOnSep)) : "");
         }
 
         internal static void Info(string line)

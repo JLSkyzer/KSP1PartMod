@@ -104,6 +104,26 @@ namespace KSP1PartMod
             }
             try
             {
+                // 0.16.0, before Redux's import; independent of enabled. Armed before EngineCurveFix (whose postfix on
+                // BuildConfiguredPrefab then counts the one multi-mode engine) and before NativeModules and B9Overrides, whose
+                // B9 module diff calls GetOrderedSwitchedEngineModules too and must get the order the translator gets.
+                EngineModes.TryApply(new Harmony(EngineModes.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.EngineSizeLines.EnginesStopped("mode order (arming)", e.ToString()));
+            }
+            try
+            {
+                // Own Harmony id: SEP thrust and mass, unique engine ids; acts only on the parts EngineModes ordered.
+                SepEngines.TryApply(new Harmony(SepEngines.HarmonyId));
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.EngineSizeLines.EnginesStopped("SEP values and engine ids (arming)", e.ToString()));
+            }
+            try
+            {
                 // Before Redux's import (the curve must be in the part JSON); independent of enabled.
                 EngineCurveFix.TryApply(new Harmony(EngineCurveFix.HarmonyId), Animations);
             }
