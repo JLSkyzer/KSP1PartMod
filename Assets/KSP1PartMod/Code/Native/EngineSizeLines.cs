@@ -128,7 +128,7 @@ namespace KSP1PartMod.Native
         public static IEnumerable<string> SizeSummary(SizeTally t, int top)
         {
             foreach (var kv in t.ByMod.OrderBy(k => k.Key, StringComparer.Ordinal))
-                yield return SizePrefix + $"{kv.Key}: {kv.Value.FromNodes} from nodes ({kv.Value.Moved2} by 2+ steps), {kv.Value.FromTokens} from tokens, {kv.Value.Unchanged} unchanged";
+                yield return SizePrefix + $"{kv.Key}: {kv.Value.FromNodes} from nodes, {kv.Value.FromTokens} from tokens, {kv.Value.Unchanged} unchanged; {kv.Value.Moved2} moved by 2+ steps";
             var moves = t.Moves.OrderByDescending(m => m.steps).ThenBy(m => m.part, StringComparer.Ordinal).Take(Math.Max(1, top)).ToList();
             if (moves.Count > 0)
                 yield return SizePrefix + "largest moves: " + string.Join(", ", moves.Select(m => $"{m.part} {m.from} -> {m.to} ({m.steps})"));

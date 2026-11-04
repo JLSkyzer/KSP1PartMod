@@ -133,6 +133,15 @@ namespace KSP1PartMod
             }
             try
             {
+                // 0.16.0, own Harmony id, independent of enabled: size labels from the stack nodes Redux measures.
+                SizeFromNodes.TryApply(new Harmony(SizeFromNodes.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.EngineSizeLines.SizeStopped("(arming) " + e));
+            }
+            try
+            {
                 // Before Redux's import (the curve must be in the part JSON); independent of enabled.
                 EngineCurveFix.TryApply(new Harmony(EngineCurveFix.HarmonyId), Animations);
             }

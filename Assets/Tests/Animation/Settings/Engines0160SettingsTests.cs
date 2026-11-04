@@ -5,15 +5,15 @@ using UnityEngine;
 
 namespace KSP1PartMod.Tests.Animation.Settings
 {
-    /// <summary>The engine keys of 0.16.0.</summary>
+    /// <summary>The engine, size and rescale keys of 0.16.0.</summary>
     public class Engines0160SettingsTests
     {
         private static readonly string ShippedPath =
             Path.Combine(Application.dataPath, "KSP1PartMod", "Copied", "animations.json");
 
-        private static readonly string[] Keys = { "sep_procedural_engines", "ksp1_engine_modes_fallback" };
+        private static readonly string[] Keys = { "sep_procedural_engines", "ksp1_engine_modes_fallback", "ksp1_size_from_nodes" };
 
-        private static bool[] Values(AnimationSettings s) => new[] { s.SepProceduralEngines, s.Ksp1EngineModesFallback };
+        private static bool[] Values(AnimationSettings s) => new[] { s.SepProceduralEngines, s.Ksp1EngineModesFallback, s.Ksp1SizeFromNodes };
 
         private static void AssertDefaults(AnimationSettings s)
         {
@@ -44,7 +44,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
 
         [Test] public void WrongTypes_KeepTheDefault()
         {
-            var s = AnimationSettings.Parse("{\"sep_procedural_engines\": 0, \"ksp1_engine_modes_fallback\": \"no\"}", out var e);
+            var s = AnimationSettings.Parse("{\"sep_procedural_engines\": 0, \"ksp1_engine_modes_fallback\": \"no\", \"ksp1_size_from_nodes\": null}", out var e);
             AssertDefaults(s);
             foreach (var key in Keys) StringAssert.Contains(key, e);
         }

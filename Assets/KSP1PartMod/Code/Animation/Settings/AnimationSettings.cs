@@ -244,6 +244,10 @@ namespace KSP1PartMod.Animation.Settings
         /// in cfg order (<c>ksp1_engine_modes_fallback</c>, default true; false: one <c>Module_Engine</c> per module, the last
         /// one wins, as 0.15.1).</summary>
         public bool Ksp1EngineModesFallback => _engines0160.EngineModesFallback;
+        /// <summary>0.16.0: a stack part is labelled by its largest stack node's size (measured by Redux from the model); a part
+        /// whose <c>bulkheadProfiles</c> Redux does not know reads its <c>sizeNpM</c> token (<c>ksp1_size_from_nodes</c>, default
+        /// true; false: Redux's label, as 0.15.1).</summary>
+        public bool Ksp1SizeFromNodes => _engines0160.SizeFromNodes;
 
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
@@ -325,7 +329,7 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>The engine and size keys of 0.16.0, read together.</summary>
         private sealed class Switches0160
         {
-            public bool SepProceduralEngines = true, EngineModesFallback = true;
+            public bool SepProceduralEngines = true, EngineModesFallback = true, SizeFromNodes = true;
         }
 
         private readonly Switches0160 _engines0160;
@@ -573,6 +577,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "ksp1_saf_fairings": ReadBool(p, ref fairings.Saf, problems); break;
                         case "sep_procedural_engines": ReadBool(p, ref engines0160.SepProceduralEngines, problems); break;
                         case "ksp1_engine_modes_fallback": ReadBool(p, ref engines0160.EngineModesFallback, problems); break;
+                        case "ksp1_size_from_nodes": ReadBool(p, ref engines0160.SizeFromNodes, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;

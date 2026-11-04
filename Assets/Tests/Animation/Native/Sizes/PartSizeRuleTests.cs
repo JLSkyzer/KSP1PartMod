@@ -77,7 +77,7 @@ namespace KSP1PartMod.Tests.Animation.Native.Sizes
             t.Note("Bluedog_DB", "c", "SM", "LG+", SizeSource.Token, 5, true);
             CollectionAssert.AreEqual(new[]
             {
-                "[KSP1PartMod] size: Bluedog_DB: 1 from nodes (2 by 2+ steps), 1 from tokens, 1 unchanged",
+                "[KSP1PartMod] size: Bluedog_DB: 1 from nodes, 1 from tokens, 1 unchanged; 2 moved by 2+ steps",
                 "[KSP1PartMod] size: largest moves: c SM -> LG+ (5), a SM -> MD (2)",
                 "[KSP1PartMod] size: docking parts relabelled: c SM -> LG+",
             }, EngineSizeLines.SizeSummary(t, 10));
