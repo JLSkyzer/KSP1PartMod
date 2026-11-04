@@ -49,11 +49,39 @@ namespace KSP1PartMod.Tests.Animation.Native.Rescale
             Assert.IsTrue(RescaleRule.IsExcluded(PartOf("PART\n{\nname = kerbalEVA\nmodule = kerbaleva\n}\n")));
         }
 
+        [Test] public void StockPrebuiltOverlays_AreExcluded()
+        {
+            // KSP1's stock kerbalEVA*.cfg and flag.cfg have no module value (they complete prefabs).
+            Assert.IsTrue(RescaleRule.IsExcluded(PartOf("PART\n{\nname = kerbalEVAfemaleVintage\nMODULE\n{\nname = ModuleScienceExperiment\n}\n}\n")));
+            Assert.IsTrue(RescaleRule.IsExcluded(PartOf("PART\n{\nname = flag\nMODULE\n{\n__OVERLOAD = True\nname = FlagSite\n}\n}\n")));
+            Assert.IsFalse(RescaleRule.IsExcluded(PartOf("PART\n{\nname = liquidEngine\nmodule = Part\n}\n")));
+            Assert.IsFalse(RescaleRule.IsExcluded(PartOf("PART\n{\nname = evaTank\n}\n")));
+        }
+
         [Test] public void ModelPositionFactor()
         {
             Assert.AreEqual(0.625f, RescaleRule.ModelPositionFactor(0.625f));
             Assert.AreEqual(1f, RescaleRule.ModelPositionFactor(0f));
             Assert.AreEqual(1f, RescaleRule.ModelPositionFactor(float.NaN));
+        }
+
+        [Test] public void WheelRadius_FollowsTheFactor_UnlessFittedToTheMesh()
+        {
+            Assert.AreEqual(0.4725f, RescaleRule.WheelRadius(0.378f, 1.25f, false), 1e-6f);
+            Assert.AreEqual(0.378f, RescaleRule.WheelRadius(0.378f, 1.25f, true), "KSP2 measures the scaled mesh");
+            Assert.AreEqual(0.378f, RescaleRule.WheelRadius(0.378f, 1f, false));
+            Assert.AreEqual(0.378f, RescaleRule.WheelRadius(0.378f, float.NaN, false));
+            Assert.AreEqual(0.378f, RescaleRule.WheelRadius(0.378f, -2f, false));
+            Assert.AreEqual(0.175f, RescaleRule.WheelRadius(0.28f, 0.625f, false), 1e-6f);
+            Assert.AreEqual("ModuleWheelBase: radius 0.378 x rescaleFactor 1.25 = 0.4725 m (KSP2 sizes the wheel in metres, not with the part)",
+                EngineSizeLines.WheelRadiusNote(0.378f, 1.25f, 0.4725f));
+        }
+
+        [Test] public void NodeKeys_AnyCase_AsRedux()
+        {
+            Assert.IsTrue(RescaleRule.IsNodeKey("NODE_STACK_top"));
+            Assert.IsTrue(RescaleRule.IsNodeKey("Node_Attach"));
+            Assert.IsFalse(RescaleRule.IsNodeKey("node_attachX"));
         }
 
         [Test] public void Lines()

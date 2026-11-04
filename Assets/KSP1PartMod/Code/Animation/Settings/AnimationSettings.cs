@@ -248,6 +248,19 @@ namespace KSP1PartMod.Animation.Settings
         /// whose <c>bulkheadProfiles</c> Redux does not know reads its <c>sizeNpM</c> token (<c>ksp1_size_from_nodes</c>, default
         /// true; false: Redux's label, as 0.15.1).</summary>
         public bool Ksp1SizeFromNodes => _engines0160.SizeFromNodes;
+        /// <summary>0.16.0: a part without <c>rescaleFactor</c> gets KSP1's default 1.25 (kerbals and the flag excluded)
+        /// (<c>ksp1_default_rescale</c>, default true; false: Redux's 1, as 0.15.1).</summary>
+        public bool Ksp1DefaultRescale => _engines0160.DefaultRescale;
+        /// <summary>0.16.0: each attach node's position is multiplied by the cfg's <c>scale</c> value met before it, as KSP1
+        /// does (<c>ksp1_legacy_node_scale</c>, default true; false: ignored, as 0.15.1).</summary>
+        public bool Ksp1LegacyNodeScale => _engines0160.LegacyNodeScale;
+        /// <summary>0.16.0: a <c>MODEL</c>'s <c>position</c> is multiplied by the part's <c>rescaleFactor</c>, as KSP1 does
+        /// (<c>ksp1_model_position_rescale</c>, default true; false: unscaled, as 0.15.1).</summary>
+        public bool Ksp1ModelPositionRescale => _engines0160.ModelPositionRescale;
+        /// <summary>0.16.0: a KSP1 wheel's radius is multiplied by its part's <c>rescaleFactor</c>, since KSP2 sizes the wheel
+        /// collider in metres whatever the part's scale (<c>wheel_radius_rescale</c>, default true; false: the cfg radius, as
+        /// 0.15.1).</summary>
+        public bool WheelRadiusRescale => _engines0160.WheelRadiusRescale;
 
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
@@ -330,6 +343,7 @@ namespace KSP1PartMod.Animation.Settings
         private sealed class Switches0160
         {
             public bool SepProceduralEngines = true, EngineModesFallback = true, SizeFromNodes = true;
+            public bool DefaultRescale = true, LegacyNodeScale = true, ModelPositionRescale = true, WheelRadiusRescale = true;
         }
 
         private readonly Switches0160 _engines0160;
@@ -578,6 +592,10 @@ namespace KSP1PartMod.Animation.Settings
                         case "sep_procedural_engines": ReadBool(p, ref engines0160.SepProceduralEngines, problems); break;
                         case "ksp1_engine_modes_fallback": ReadBool(p, ref engines0160.EngineModesFallback, problems); break;
                         case "ksp1_size_from_nodes": ReadBool(p, ref engines0160.SizeFromNodes, problems); break;
+                        case "ksp1_default_rescale": ReadBool(p, ref engines0160.DefaultRescale, problems); break;
+                        case "ksp1_legacy_node_scale": ReadBool(p, ref engines0160.LegacyNodeScale, problems); break;
+                        case "ksp1_model_position_rescale": ReadBool(p, ref engines0160.ModelPositionRescale, problems); break;
+                        case "wheel_radius_rescale": ReadBool(p, ref engines0160.WheelRadiusRescale, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;

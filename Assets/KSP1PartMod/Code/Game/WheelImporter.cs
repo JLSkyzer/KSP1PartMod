@@ -284,7 +284,19 @@ namespace KSP1PartMod.Game
                     var deployment = FirstNode(context.PartNode, WheelMapping.DeploymentModule);
                     var m = WheelMapping.Base(node, deployment == null ? null : new Ksp1NodeAdapter(deployment),
                         _settings?.WheelKsp1Friction ?? true, _settings?.WheelKsp1DeployTiming ?? true);
-                    return (m.Converted, m.Values, m.NotReproduced, m.UnusedBySolver, m.Notes);
+                    var notes = m.Notes;
+                    if (m.Converted && (_settings?.WheelRadiusRescale ?? true) && context.PartNode != null)
+                    {
+                        // 0.16.0: KSP2 uses the radius in metres whatever the host's scale; the model follows rescaleFactor.
+                        context.PartNode.TryGetFloat("rescaleFactor", out var factor, 1f); // Redux's own default
+                        var radius = Native.Rescale.RescaleRule.WheelRadius(m.Values.Radius, factor, m.Values.FitWheelColliderToMesh);
+                        if (radius != m.Values.Radius)
+                        {
+                            notes = notes.Concat(new[] { Native.EngineSizeLines.WheelRadiusNote(m.Values.Radius, factor, radius) }).ToList();
+                            m.Values.Radius = radius;
+                        }
+                    }
+                    return (m.Converted, m.Values, m.NotReproduced, m.UnusedBySolver, notes);
                 }
                 case WheelKind.Suspension:
                 {

@@ -165,6 +165,10 @@ namespace KSP1PartMod.Native
         public static string RescaleMemberMissing(string member, string key) => RescalePrefix + member + " not found: " + key + " off";
         public static string RescaleStopped(string key, string error) => RescalePrefix + key + " stopped for this session: " + error;
 
+        /// <summary>A wheel note (0.16.0, <c>wheel_radius_rescale</c>), printed with the part's other wheel notes.</summary>
+        public static string WheelRadiusNote(float radius, float factor, float result) =>
+            $"ModuleWheelBase: radius {Inv(radius)} x rescaleFactor {Inv(factor)} = {Inv(result)} m (KSP2 sizes the wheel in metres, not with the part)";
+
         public static string NodeCountMismatch(string part, int values, int nodes) =>
             RescalePrefix + $"{part}: {values} node value(s) in the cfg, {nodes} node(s) parsed: node scale skipped";
     }

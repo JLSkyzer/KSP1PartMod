@@ -140,6 +140,31 @@ namespace KSP1PartMod
             {
                 Log.LogError(KSP1PartMod.Native.EngineSizeLines.SizeStopped("(arming) " + e));
             }
+            // 0.16.0, KSP1's scaling rules, before Redux's import; independent of enabled; one Harmony id and one try each.
+            try
+            {
+                RescalePatches.TryApplyDefault(new Harmony(RescalePatches.DefaultId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.EngineSizeLines.RescaleStopped(RescalePatches.DefaultKey, "(arming) " + e));
+            }
+            try
+            {
+                RescalePatches.TryApplyNodeScale(new Harmony(RescalePatches.NodeScaleId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.EngineSizeLines.RescaleStopped(RescalePatches.NodeScaleKey, "(arming) " + e));
+            }
+            try
+            {
+                RescalePatches.TryApplyModelPosition(new Harmony(RescalePatches.ModelPositionId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError(KSP1PartMod.Native.EngineSizeLines.RescaleStopped(RescalePatches.ModelPositionKey, "(arming) " + e));
+            }
             try
             {
                 // Before Redux's import (the curve must be in the part JSON); independent of enabled.
