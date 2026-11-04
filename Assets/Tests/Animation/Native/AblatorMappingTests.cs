@@ -225,10 +225,10 @@ PART
             TestContext.WriteLine($"{parts} part(s), {noResource} without Ablator, pyrolysisLossFactor above 6000 on {highFactor}, " +
                                   "thresholds " + string.Join(", ", thresholds.Select(kv => kv.Key + " K x" + kv.Value)));
             CollectionAssert.IsEmpty(notes);
-            Assert.AreEqual(21, parts);
+            Assert.AreEqual(22, parts, "21, + 1 with the mods of 2026-10-30");
             Assert.AreEqual(0, noResource);
             Assert.AreEqual(1, highFactor);
-            CollectionAssert.AreEqual(new Dictionary<double, int> { [500] = 17, [1000] = 3, [1500] = 1 }, thresholds);
+            CollectionAssert.AreEqual(new Dictionary<double, int> { [500] = 17, [1000] = 4, [1500] = 1 }, thresholds);
         }
     }
 }

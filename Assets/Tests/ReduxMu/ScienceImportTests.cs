@@ -546,11 +546,12 @@ MODULE
             TestContext.WriteLine($"{withModule} part(s) with Module_ScienceExperiment, {storage} with report storage, {failed} failure(s); " +
                                   $"B9 subtypes editing a science module: {b9Subtypes} ({b9Blocks} MODULE block(s))");
             Assert.AreEqual(0, failed, string.Join("\n", _lines.Where(l => l.Contains("not converted"))));
-            Assert.AreEqual(286, withModule, "the pure census: 286 parts get Module_ScienceExperiment");
-            StringAssert.StartsWith("[KSP1PartMod] native: science: 286 part(s) got Module_ScienceExperiment", summary);
-            // Counted on 2026-10-28 (stock ScienceDefs.cfg installed): 286 with the module + 26 container-only parts.
-            Assert.AreEqual(312, storage);
-            StringAssert.Contains("report storage on 312 part(s) (74 container(s)); merged: 72;", summary);
+            Assert.AreEqual(287, withModule, "the pure census: 287 parts get Module_ScienceExperiment");
+            StringAssert.StartsWith("[KSP1PartMod] native: science: 287 part(s) got Module_ScienceExperiment", summary);
+            // Counted on 2026-10-28 (stock ScienceDefs.cfg installed): 286 with the module + 26 container-only parts; re-pinned
+            // 2026-11-04 for the mods installed on 2026-10-30: 287 + 28.
+            Assert.AreEqual(315, storage);
+            StringAssert.Contains("report storage on 315 part(s) (77 container(s)); merged: 72;", summary);
             // The installed IDENTIFIER blocks that name a science module belong to ModuleB9AssignUiGroups (UI groups), not to subtypes.
             Assert.AreEqual(0, b9Subtypes, "no installed B9 subtype edits a science module");
         }

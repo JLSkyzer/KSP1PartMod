@@ -122,8 +122,8 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.Greater(compared, 0);
             var dropped = _lines.Single(l => l.StartsWith("[KSP1PartMod] mm: BEFORE/AFTER of an absent mod: "));
             var total = int.Parse(dropped.Substring("[KSP1PartMod] mm: BEFORE/AFTER of an absent mod: ".Length).Split(' ')[0]);
-            Assert.That(total, NUnit.Framework.Is.InRange(110, 134),
-                "BEFORE/AFTER drops after NEEDS, pinned at 122 ±12 (2026-10-28): update the CHANGELOG and the checklist if the files changed");
+            Assert.That(total, NUnit.Framework.Is.InRange(125, 153),
+                "BEFORE/AFTER drops after NEEDS, pinned at 139 ±14 (2026-11-04; 122 on 2026-10-28, before the mods of 2026-10-30): update the CHANGELOG and the checklist if the files changed");
             CollectionAssert.IsEmpty(missingParts, "parts are never removed");
             CollectionAssert.IsEmpty(lost.Distinct().ToList(), "saved animation state would be lost");
         }

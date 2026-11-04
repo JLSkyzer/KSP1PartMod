@@ -181,7 +181,7 @@ PART
             }
             TestContext.WriteLine($"{parts} part(s), {modules} module(s), {extra} extra, techRequired {tech}, crossfeedStatus {overrides}, start on {startOn}");
             CollectionAssert.IsEmpty(other);
-            Assert.AreEqual(13, tech);
+            Assert.AreEqual(14, tech, "13, + 1 with the mods of 2026-10-30");
             Assert.Greater(parts, 100);
         }
     }

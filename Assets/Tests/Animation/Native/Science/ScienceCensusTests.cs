@@ -217,10 +217,10 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             Assert.AreEqual(55, t.Definitions, "plan (g): 55 EXPERIMENT_DEFINITIONs on disk, all BDB");
             Assert.AreEqual(55, c.PerMod["Bluedog_DB"].Definitions);
             Assert.AreEqual(0, c.MmEdits, "0 MM edits installed");
-            Assert.AreEqual(298, t.Parts, "298 parts with a mapped experiment module");
-            Assert.AreEqual(286, t.WithModule, "286 get Module_ScienceExperiment");
+            Assert.AreEqual(299, t.Parts, "299 parts with a mapped experiment module (298 before the mods of 2026-10-30)");
+            Assert.AreEqual(287, t.WithModule, "287 get Module_ScienceExperiment");
             Assert.AreEqual(269, t.Generated, "generated");
-            Assert.AreEqual(48, t.Identical, "crewReport -> CrewObservation");
+            Assert.AreEqual(49, t.Identical, "crewReport -> CrewObservation");
             Assert.AreEqual(41, t.Closest, "stock instruments without a definition on disk");
             Assert.AreEqual(18, t.Skipped, "kerbal experiments, ROCScience, bd_GooLab");
             Assert.AreEqual(VariantsInstalled, c.Variants, "the DMagic modules with sitMask = 48 get their own definitions");
@@ -239,16 +239,16 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             var t = c.Total;
             Assert.AreEqual(73, t.Definitions, "55 BDB + 18 stock");
             Assert.AreEqual(18, c.PerMod["Squad"].Definitions);
-            Assert.AreEqual(298, t.Parts);
+            Assert.AreEqual(299, t.Parts);
             var b = Run(InstalledKsp1.Root, InstalledWithoutStockDefs()).Total;
             Assert.AreEqual(b.Generated + b.Identical + b.Closest + b.Skipped, t.Generated + t.Identical + t.Closest + t.Skipped,
                 "the same KSP1 ids are resolved, only their kind changes");
             TestContext.WriteLine($"with the stock file: {t.WithModule} with module, {t.Generated} generated, {t.Identical} identical, " +
                                   $"{t.Closest} closest, {t.Skipped} skipped");
-            // Counted on 2026-10-28 with the stock file of the user's KSP1 1.12 install.
-            Assert.AreEqual(286, t.WithModule);
+            // Counted on 2026-10-28 with the stock file of the user's KSP1 1.12 install; re-pinned 2026-11-04 (Launchers Pack adds one crew report part).
+            Assert.AreEqual(287, t.WithModule);
             Assert.AreEqual(310, t.Generated, "269 + the 41 stock instruments");
-            Assert.AreEqual(48, t.Identical);
+            Assert.AreEqual(49, t.Identical);
             Assert.AreEqual(0, t.Closest, "every stock instrument now has its definition");
             Assert.AreEqual(18, t.Skipped);
         }
@@ -286,7 +286,7 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
                                   $"{t.ExperimentOnly} experiment only");
             foreach (var kv in c.PerMod.Where(kv => kv.Value.Storage > 0))
                 TestContext.WriteLine($"  {kv.Key}: {kv.Value.Storage} ({kv.Value.ContainerOnly} container only, {kv.Value.ExperimentOnly} experiment only)");
-            Assert.AreEqual(74, t.Containers, "plan (g): 74 ModuleScienceContainer parts");
+            Assert.AreEqual(77, t.Containers, "plan (g): 74 ModuleScienceContainer parts, 77 with the mods of 2026-10-30");
             Assert.AreEqual(t.Storage, t.WithModule + t.ContainerOnly, "every resolved part stores, and every container");
             var off = Run(InstalledKsp1.Root, InstalledKsp1.AllCfg(), "{\"science_report_storage\": false}");
             Assert.AreEqual(0, off.Total.Storage);
@@ -310,10 +310,10 @@ namespace KSP1PartMod.Tests.Animation.Native.Science
             foreach (var kv in c.PerMod.Where(kv => kv.Value.OutOfScope.Count > 0))
                 TestContext.WriteLine($"  {kv.Key}: {string.Join(", ", kv.Value.OutOfScope.Select(x => x.Key + " " + x.Value))}");
             var t = c.Total.OutOfScope;
-            Assert.AreEqual(12, t.TryGetValue("ModuleScienceLab", out var lab) ? lab : 0, "plan (g)");
-            Assert.AreEqual(12, t.TryGetValue("ModuleScienceConverter", out var conv) ? conv : 0, "plan (g)");
+            Assert.AreEqual(14, t.TryGetValue("ModuleScienceLab", out var lab) ? lab : 0, "plan (g) 12, + 2 SEP");
+            Assert.AreEqual(14, t.TryGetValue("ModuleScienceConverter", out var conv) ? conv : 0, "plan (g) 12, + 2 SEP");
             Assert.AreEqual(0, t.TryGetValue("specialised DMagic", out var dm) ? dm : 0, "plan (g)");
-            Assert.AreEqual(247, t.TryGetValue("ModuleTestSubject", out var ts) ? ts : 0, "plan (g)");
+            Assert.AreEqual(252, t.TryGetValue("ModuleTestSubject", out var ts) ? ts : 0, "plan (g) 247, + 5 Launchers Pack");
         }
 
         [Test] public void GameData_EveryDefinitionBuilds_EveryPartResolves()

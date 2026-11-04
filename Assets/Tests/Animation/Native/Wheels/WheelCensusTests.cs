@@ -233,24 +233,25 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             Print("installed mods/KSP1", c);
             CollectionAssert.IsEmpty(c.Failures, string.Join("\n", c.Failures));
             var t = c.Total.Tally;
-            Assert.AreEqual(36, c.Total.Parts, "plan (d): 36 parts with a wheel module");
-            Assert.AreEqual(36, t.Converted(WheelKind.Base));
-            Assert.AreEqual(23, t.Bases(WheelTypeName.LEG));
+            Assert.AreEqual(37, c.Total.Parts, "plan (d): 36 parts with a wheel module, + the Starship leg (2026-10-30)");
+            Assert.AreEqual(37, t.Converted(WheelKind.Base));
+            Assert.AreEqual(24, t.Bases(WheelTypeName.LEG));
             Assert.AreEqual(7, t.Bases(WheelTypeName.FREE));
             Assert.AreEqual(6, t.Bases(WheelTypeName.MOTORIZED));
-            Assert.AreEqual(36, t.Converted(WheelKind.Suspension));
+            Assert.AreEqual(37, t.Converted(WheelKind.Suspension));
             Assert.AreEqual(9, t.Converted(WheelKind.Steering));
             Assert.AreEqual(5, t.Converted(WheelKind.Motor));
             Assert.AreEqual(1, t.Converted(WheelKind.MotorSteering));
             Assert.AreEqual(12, t.Converted(WheelKind.Brakes));
-            Assert.AreEqual(35, t.Converted(WheelKind.Damage));
-            Assert.AreEqual(23, t.Converted(WheelKind.Lock));
-            Assert.AreEqual(12, t.Converted(WheelKind.Bogey));
+            Assert.AreEqual(36, t.Converted(WheelKind.Damage));
+            Assert.AreEqual(24, t.Converted(WheelKind.Lock));
+            Assert.AreEqual(13, t.Converted(WheelKind.Bogey));
             Assert.AreEqual(0, t.RefusedTotal, "no refusal");
             Assert.AreEqual(13, c.PerMod["Squad"].Parts);
             Assert.AreEqual(20, c.PerMod["KerbalReusabilityExpansion"].Parts);
             Assert.AreEqual(2, c.PerMod["Bluedog_DB"].Parts);
             Assert.AreEqual(1, c.PerMod["SquadExpansion"].Parts);
+            Assert.AreEqual(1, c.PerMod["StarshipLegs"].Parts);
         }
 
         /// <summary>Plan (d): one B9 subtype edits a wheel module, and it is a state field (<c>frictionMultiplier</c> of
@@ -374,6 +375,7 @@ namespace KSP1PartMod.Tests.Animation.Native.Wheels
             "Squad/landingLeg1: 'piston_collider' Found",
             "Squad/landingLeg1-2: 'piston_collider' Found",
             "Squad/GearLarge: 'DamperCollider' Found",
+            "StarshipLegs/Starship Landing Leg: 'piston_collider' Found",
         };
 
         [Test] public void Installed_SuspensionColliders_StateInTheModel()

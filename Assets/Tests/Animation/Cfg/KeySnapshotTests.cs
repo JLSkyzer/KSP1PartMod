@@ -330,7 +330,7 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             var table = new KSP1PartMod.Native.IsruResources(null, null, null, null);
             var wheelParts = RealParts().Where(p => p.Modules.Any(m =>
                 KSP1PartMod.Native.Wheels.WheelMapping.TryKind(m.GetValue("name"), out _))).ToList();
-            Assert.AreEqual(36, wheelParts.Count, "plan (d): 36 installed wheel parts");
+            Assert.AreEqual(37, wheelParts.Count, "plan (d): 36 installed wheel parts, + the Starship leg (2026-10-30)");
             foreach (var (name, modules) in wheelParts)
             {
                 var line = Hex(name, 12) + " " + Hex(KeysOf(modules, Last032Kind), 16);

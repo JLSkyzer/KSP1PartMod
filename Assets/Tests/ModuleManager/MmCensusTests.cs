@@ -53,12 +53,12 @@ namespace KSP1PartMod.Tests.ModuleManager
         private static void Bump<T>(Dictionary<T, int> counts, T key) =>
             counts[key] = counts.TryGetValue(key, out var n) ? n + 1 : 1;
 
-        /// <summary>A count pinned to its 2026-10-28 value, ±10%, so drift in the data or the parser shows up.</summary>
+        /// <summary>A count pinned to its census value (2026-10-28, re-pinned 2026-11-04 for the mods installed on 2026-10-30), ±10%, so drift in the data or the parser shows up.</summary>
         private static void AssertNear(int expected, int actual, string what)
         {
             var tolerance = Math.Max(1, (int)Math.Ceiling(expected * 0.1));
             Assert.That(actual, NUnit.Framework.Is.InRange(expected - tolerance, expected + tolerance),
-                $"{what}: {actual}, pinned at {expected} ±{tolerance} (2026-10-28 census); update the pin if the files changed");
+                $"{what}: {actual}, pinned at {expected} ±{tolerance} (census of 2026-11-04); update the pin if the files changed");
         }
 
         private static string Format<T>(Dictionary<T, int> counts) =>
@@ -111,11 +111,11 @@ namespace KSP1PartMod.Tests.ModuleManager
             TestContext.WriteLine($"  indices total {valueIndex.Values.Sum() + nodeIndex.Values.Sum()}");
             TestContext.WriteLine($"  delete lines with a wildcard (raw cfg lines, NEEDS not applied) {deleteWildcards}");
             Assert.IsEmpty(failures, "lines passed back:\n" + string.Join("\n", failures.Take(30)));
-            AssertNear(475, supported, "supported operators");
+            AssertNear(480, supported, "supported operators");
             AssertNear(141, unsupported, "counted-only operators");
-            AssertNear(40, valueIndex.Values.Sum(), "value indices");
-            AssertNear(310, nodeIndex.Values.Sum(), "node indices");
-            AssertNear(8, vectorWithOperator, "vector component edits skipped");
+            AssertNear(42, valueIndex.Values.Sum(), "value indices");
+            AssertNear(328, nodeIndex.Values.Sum(), "node indices");
+            AssertNear(11, vectorWithOperator, "vector component edits skipped");
             AssertNear(1, deleteWildcards, "delete lines with a wildcard");
         }
 
@@ -222,7 +222,7 @@ namespace KSP1PartMod.Tests.ModuleManager
             Assert.IsTrue(forNames.Contains("zzBluedog_DB"));
             Assert.IsFalse(byMod.ContainsKey("zzBluedog_DB"), "zzBluedog_DB is a FOR name and must never be dropped");
             Assert.IsFalse(byMod.ContainsKey("Bluedog_DB"));
-            AssertNear(277, byReason.Values.Sum(), "patches dropped by the BEFORE/AFTER rule");
+            AssertNear(307, byReason.Values.Sum(), "patches dropped by the BEFORE/AFTER rule");
         }
 
         // ---- 4. key fields touched by index or arithmetic edits (plan (g)) ----
