@@ -138,6 +138,15 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
   "wheel_bogeys": true,
   "wheel_ksp1_friction": true,
   "wheel_ksp1_deploy_timing": true,
+  "ksp1_procedural_fairings": true,
+  "ksp1_saf_fairings": true,
+  "sep_procedural_engines": true,
+  "ksp1_engine_modes_fallback": true,
+  "ksp1_size_from_nodes": true,
+  "ksp1_default_rescale": true,
+  "ksp1_legacy_node_scale": true,
+  "ksp1_model_position_rescale": true,
+  "wheel_radius_rescale": true,
   "shader_property_map": {
     "_EmissiveColor": ["_EmissionColor", "_EmissiveColor"],
     "_TintColor": ["_TintColor"],
@@ -190,6 +199,7 @@ Located in `mods/KSP1PartMod/`, read at startup (restart the game after a change
 - Science (0.12.0, see that section): `ksp1_science`, `science_generate_definitions`, `science_definitions_via_patch_manager`, `science_report_storage`, `science_value_scale`, `science_transmit_split`, `science_native_ids`, `science_fallback_ids`, `science_skip_ids`, `science_deploy_animations`, `science_wait_for_animation`.
 - Wheels (0.14.0, see that section): `ksp1_wheels`, `wheel_steering`, `wheel_motors`, `wheel_brakes`, `wheel_leg_locks`, `wheel_damage`, `wheel_bogeys`, `wheel_ksp1_friction`, `wheel_ksp1_deploy_timing`.
 - Fairings (0.15.0, see that section): `ksp1_procedural_fairings`, `ksp1_saf_fairings`.
+- Engines and sizes (0.16.0, see that section): `sep_procedural_engines`, `ksp1_engine_modes_fallback`, `ksp1_size_from_nodes`, `ksp1_default_rescale`, `ksp1_legacy_node_scale`, `ksp1_model_position_rescale`, `wheel_radius_rescale`.
 - `shader_property_map`: KSP1 material property to the KSP2 property names to try, in order; the first one the material has is used. When present it replaces the built-in map. Since 0.4.0 the default tries `_EmissionColor` before `_EmissiveColor` for `_EmissiveColor`, and adds `_TintColor` and `_Color`. The values are starting guesses, not verified in game. A `animations.json` from 0.3.2 keeps its old map: copy the new one to get the new default.
 
 ### Phase 2a: material, light and glow curves (0.4.0)
@@ -326,6 +336,27 @@ Redux drops every KSP1 science module. Since 0.12.0 the mod imports `ModuleScien
 - **Honest numbers.** Nested phases are labelled "of which", what our timings do not cover is labelled "other" or "outside our timings", a frame p95 is the upper bound of its histogram bucket (within about 13 %), and the cost of the timestamps themselves is printed (`timer overhead`, `timing overhead`).
 - **Safety.** A timing patch that throws stops the whole load timeline for the session (`perf: load: stopped`), and Redux's code runs as it is. A failure of the frame cost turns it off with one line.
 
+## Engines and sizes (0.16.0)
+
+Fixes for what the first in-game test of 2026-11-04 showed: KSP1 engines with several engine modules, size labels, and KSP1's own scale rules that Redux's import misses. All at Redux's import, in memory (whatever `enabled` is); no cfg or model file is changed. Built, not verified in game. Checklist (French): `docs/testing/2026-11-04-engines-sizes-in-game-checklist.md`. Lines `[KSP1PartMod] engines:`, `size:` and `rescale:`.
+
+| Key | Default | Effect | `false` |
+|---|---|---|---|
+| `sep_procedural_engines` | `true` | An SEP booster cluster (`ModuleSEPEngineSwitch`) becomes one engine with SEP's modes in their order (All Engines, Middle Inner, Center Three). Thrust and engine mass come from the cfg's `ENGINESET`s and the engine count in the model: 19,140 / 7,540 / 1,740 kN and +44.5 t on `SEP_25`. | One `Module_Engine` per module at the cfg's 1000 kN, mass 0, as 0.15.1. |
+| `ksp1_engine_modes_fallback` | `true` | A part with two or more engine modules and no switch Redux knows (Titan LR91 and AJ260 with their verniers, Merlin 1C, escape towers) becomes one engine with one mode per module, in cfg order: mode 0 is the main engine. | One `Module_Engine` per module; only the last one runs, as 0.15.1. |
+| `ksp1_size_from_nodes` | `true` | A part with stack nodes takes the size of its largest stack node, which Redux measures on the model. A part with surface nodes only keeps Redux's label, but unknown `sizeNpM` bulkhead tokens are read. | Redux's label from `bulkheadProfiles` only. |
+| `ksp1_default_rescale` | `true` | A part without `rescaleFactor` gets KSP1's default 1.25 (19 stock parts on the author's set; kerbals and the flag excluded). | Redux's 1: those parts are 0.8 × their KSP1 size. |
+| `ksp1_legacy_node_scale` | `true` | Node positions × the cfg's `scale` met before them, as KSP1 (old stock parts with `scale = 0.1`). | `scale` ignored: their nodes are about 8 times too far out. |
+| `ksp1_model_position_rescale` | `true` | `MODEL position` × `rescaleFactor`, as KSP1 (3 BDB Gemini parts). | Unscaled. |
+| `wheel_radius_rescale` | `true` | A wheel's radius, suspension travel and offset × its part's `rescaleFactor`, as KSP1 (KSP2 reads them in metres). Not the radius of a collider fitted to the mesh. | The cfg values. |
+
+- **Modes, not a sum.** The main engine and its verniers no longer run together: mode 0 is the main engine alone (thrust lost against KSP1's sum: AJ260 0.5 %, LR91 3 to 11 %, Merlin 14 to 16 %). Merging run-together engines into one mode is not clean (different Isp curves, one thrust transform per mode, escape motors that must never fire together) and is a roadmap item.
+- **SEP modes are assumed cumulative** (mode *k* runs its own set and every set after it), from SEP's mode names and its list of active engines; SEP's plugin does not run under Redux. The `engines:` line prints the count per set, so a change is one rule. The default `ENGINETYPE` (the 33-engine layout) is the one built; SEP's own GUI (install or remove engines, covers, the 29-engine layout of `SEP_23`) is not reproduced.
+- **Saved crafts.** A craft saved in 0.15.x runs mode 0, and its mode dropdown now shows mode 0 too (`engines: <part>: saved mode '…' … shown as …`). The 19 rescaled parts grow 1.25 ×: a saved craft keeps its part positions and may overlap or show gaps until it is rebuilt in the VAB. The LV-T30's top node is at 0.90 m.
+- **What the size label changes.** The size key also drives the engine exhaust damage radius, the docking node's reach (and multi-joint docking above 2 m), the airstream shield and the icon camera. The `size:` lines list the largest moves and the docking parts relabelled.
+- **Wheels.** Radius and suspension scale with the part, as in KSP1. The top speed is the cfg's `wheelMaxSpeed` (KSP1 scaled it by the factor; KSP2 does not).
+- **Audit.** Columns `size_key`, `size_source` (`nodes`, `tokens`, `redux`), `rescale` (`cfg`, `default`, `none`) and `engine_modes` (count, mode 0 id and thrust); lines `audit: engines: <s> SEP, <f> fallback, <m> parts with more than one Module_Engine` (expected 0) and `audit: sizes: <n> from nodes, <t> from tokens, <r> Redux's`.
+
 ## Fairings (0.15.0)
 
 Redux has no importer for KSP1's `ModuleProceduralFairing` and `ModuleSimpleAdjustableFairing` (BDB's SAF), so a KSP1 fairing base was a bare ring. Since 0.15.0 the mod imports both as KSP2's own procedural fairing, `Module_Fairing`, at Redux's import (whatever `enabled` is). KSP2 does all the work: the fairing editor in the VAB, clamshell jettison by staging or the Jettison action, aero shielding, and the payload shielding of Redux's `Module_CargoBay`. Built, not verified in game. Checklist (French): `docs/testing/2026-10-30-fairings-in-game-checklist.md`. Lines `[KSP1PartMod] native:` and `[KSP1PartMod] fairing:`.
@@ -399,6 +430,7 @@ Redux puts the KSP1 parts in one VAB category per KSP1 mod. When such a category
 - Science (0.12.0): built, not verified in game. Only checked in game: the values against KSP2's own experiments (`science_value_scale`), the Patch Manager route of the generated definitions, their names through Redux's localizer, the clips of Redux followers, and what the R&D archive shows of stored KSP1 reports once the definitions are missing. The definition scan reads the raw part cfgs, so ModuleManager part patches that edit a science module (`experimentID`, `sitMask`, `bioMask`, `xmitDataScalar`, `usageReqMask…`, `FxModules`) do not reach the generated definitions (a DMagic mask variant, the data/sample split); they are counted on the `definitions: read` line (17 raw patches on the author's set, most for absent mods). The import itself reads Redux's patched parts.
 - Wheels (0.14.0): built, not verified in game. The kN·m unit, the `1 − TsubSys` retraction point, KSP1 geometry on Redux's solver (leg radii of 0.1 m, friction 4 on KRE legs) and whether the held deploy clip and the suspension show together are only checked in game; a wheel whose deployable Redux kept as `Ksp1Module_Deployable` rolls while folded.
 - Fairings (0.15.0): built, not verified in game. The placement of the panels on the part's own transform, the shared material's colour, the mass unit, jettison, payload shielding and the SAF transform names are only checked in game.
+- Engines and sizes (0.16.0): built, not verified in game. SEP's mode meaning (cumulative), the engine counts read from the model's transform names, the size labels from the measured nodes, the 1.25 × parts in saved crafts and the scaled wheel radii are only checked in game. Run-together engines (main + verniers) are separate modes, not summed.
 - Engine shrouds (0.7.0): built, not verified in game. `ignoreNodes` shrouds keep their reentry geometry after a jettison.
 - Animations: phases 1, 2a and 2b (all built; none verified in game yet beyond what the checklists record). The items under "Not done yet" in phase 2b are not played.
 - The table is a judgement of which KSP2 node plays the same role; use `overrides.json` where you disagree.
