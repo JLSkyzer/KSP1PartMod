@@ -13,6 +13,17 @@ namespace KSP1PartMod.Tests.ReduxMu
         [SetUp] public void SetUp() => EcsTypeRegistration.ResetForTests();
         [TearDown] public void TearDown() => EcsTypeRegistration.ResetForTests();
 
+        private sealed class PlainClass { }
+
+        [Test] public void IsEcsComponent_FollowsIComponentData()
+        {
+            // Against the 26w42c game the editor references, PartComponentModule still implements IComponentData;
+            // in 26w46a it does not, and TryRegister then skips the type instead of failing.
+            Assert.That(EcsTypeRegistration.IsEcsComponent(typeof(PartComponentModule_Ksp1Animations)),
+                Is.EqualTo(typeof(KSP.Sim.impl.PartComponentModule).GetInterfaces().Any(i => i.FullName == "Unity.Entities.IComponentData")));
+            Assert.That(EcsTypeRegistration.IsEcsComponent(typeof(PlainClass)), Is.False);
+        }
+
         [Test] public void Find_ResolvesEveryMember()
         {
             Assert.IsNotNull(EcsTypeRegistration.TypeManagerApi.Find(out var missing), missing);

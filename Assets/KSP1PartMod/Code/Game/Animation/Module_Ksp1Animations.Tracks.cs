@@ -380,8 +380,14 @@ namespace KSP1PartMod.Game.Animation
             var watched = 0;
             foreach (var mesh in GetComponentsInChildren<ReentryMesh>(true))
             {
-                var group = mesh == null ? null : mesh.ReentryGroupData;
-                if (group == null) continue;
+                if (mesh == null) continue;
+                var group = mesh.ReentryGroupData;
+                if (group == null)
+                {
+                    // 26w46a "Reentry glow": it writes the part's own renderers (see ReentryGlowWatch).
+                    watched += WatchGlowTargets(mesh.gameObject);
+                    continue;
+                }
                 if (group.Sources != null)
                     foreach (var source in group.Sources)
                         if (source != null && Watch(source.Renderer, mesh.gameObject)) watched++;
@@ -391,6 +397,31 @@ namespace KSP1PartMod.Game.Animation
             }
             if (watched > 0 && LoggedReentry.Add(_name))
                 Log($"{_name} {watched} renderer(s) rewritten every frame while their reentry hull is active");
+        }
+
+        private readonly HashSet<GameObject> _watchedGlows = new HashSet<GameObject>();
+
+        /// <summary>Redux 26w46a's part glow (<see cref="ReentryGlowWatch"/>): every renderer we write is rewritten every
+        /// frame while <paramref name="glow"/> is active. Idempotent per glow object.</summary>
+        internal void WatchGlow(GameObject glow)
+        {
+            if (_sink == null || WriterPolicy.For(WriterPolicy.ReentryMesh) != WriterDecision.EveryFrame) return;
+            var watched = WatchGlowTargets(glow);
+            if (watched > 0 && LoggedReentry.Add(_name + "|glow"))
+                Log($"{_name} {watched} renderer(s) rewritten every frame while the part's reentry glow is active");
+        }
+
+        private int WatchGlowTargets(GameObject glow)
+        {
+            if (glow == null || _sink == null || _sink.RendererCount == 0 || !_watchedGlows.Add(glow)) return 0;
+            var watched = 0;
+            for (var t = 0; ; t++)
+            {
+                var o = _sink.TargetObject(t);
+                if (o == null) break;
+                if (o is Renderer r && Watch(r, glow)) watched++;
+            }
+            return watched;
         }
 
         private bool Watch(Renderer r, GameObject hull)

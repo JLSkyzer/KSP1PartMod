@@ -8,7 +8,7 @@ Status: 0.2.1. Unit-tested outside the game (430 EditMode tests); a first in-gam
 
 ## Requirements
 
-- KSP2 Redux 0.2.9 (26w42c) or later, which includes Space Warp 2.
+- KSP2 Redux 0.2.9 26w46a or later, which includes Space Warp 2 (0.16.0 and earlier: 26w42c).
 - KSP1 parts in the game's `mods/KSP1` folder, which Redux imports. This mod ships none of them.
 
 ## Install

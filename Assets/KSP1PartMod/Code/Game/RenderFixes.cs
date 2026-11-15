@@ -9,7 +9,6 @@ using KSP1PartMod.Animation.Runtime;
 using Redux.Assets.PartIconRendering;
 using Redux.Ksp1Import.Assets;
 using Redux.Rendering;
-using Redux.VFX.ReentryMeshGeneration;
 using UnityEngine;
 
 namespace KSP1PartMod.Game
@@ -18,8 +17,8 @@ namespace KSP1PartMod.Game
     /// <para><b>Material-less renderers</b> (<c>hide_material_less_renderers</c>): a Harmony postfix on Redux 26w42c's
     /// <c>PatchManager.Parts.Patchers.PartModuleLoadPatcher.ApplyOnGameObject</c>, which every part GameObject goes
     /// through: the OAB template (<c>ObjectAssemblyPartTracker.OnPartPrefabLoaded</c>), each flight view
-    /// (<c>SimulationObjectView</c>) and the main-menu vessels. It runs after Redux generated the reentry hull there
-    /// (<c>RuntimeReentryMeshFallback.EnsureGenerated</c>). See <see cref="RendererCleanup"/>.</para>
+    /// (<c>SimulationObjectView</c>) and the main-menu vessels. Redux 26w42c generated a separate reentry hull there
+    /// (<c>RuntimeReentryMeshFallback</c>, removed in 26w46a, where <c>ReentryMesh</c> glows the part's own renderers). See <see cref="RendererCleanup"/>.</para>
     /// <para><b>Icons</b> (<c>fix_part_icons</c>): a Harmony prefix on <c>PartIconRenderer.RenderTexture2D</c> that wraps
     /// the subject hook of KSP1 parts so their renderers share the rendering layers of the studio lights (and turns on
     /// <c>hotswapPartShaders</c>, a no-op so far). See <see cref="IconFix"/>.</para>
@@ -109,7 +108,7 @@ namespace KSP1PartMod.Game
                 var materials = r.sharedMaterials;
                 var nulls = materials.Count(m => m == null);
                 var hull = r.GetComponentInParent<ReentryMesh>(true);
-                var inHull = hull != null || r.GetComponentInParent<GeneratedReentryMeshRoot>(true) != null;
+                var inHull = hull != null;
                 var info = new PartRendererInfo(PathOf(r.transform, root.transform), materials.Length, nulls, inHull,
                     r.gameObject.activeInHierarchy, r.enabled);
                 if (inHull && info.AllMaterialsNull)
@@ -124,7 +123,7 @@ namespace KSP1PartMod.Game
                         hidden.Add(info.Path);
                         break;
                     case CleanupAction.DeactivateHull:
-                        var hullObject = hull != null ? hull.gameObject : r.GetComponentInParent<GeneratedReentryMeshRoot>(true)?.gameObject;
+                        var hullObject = hull != null ? hull.gameObject : null;
                         if (hullObject != null && hullObject.activeSelf)
                         {
                             hullObject.SetActive(false);

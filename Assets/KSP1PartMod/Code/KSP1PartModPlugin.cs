@@ -22,7 +22,7 @@ namespace KSP1PartMod
     public class KSP1PartModPlugin : KerbalMod
     {
         public const string ModId = "KSP1PartMod";
-        public const string Version = "0.16.0";
+        public const string Version = "0.16.1";
         public const string AnimationSettingsFile = "animations.json";
 
         private static string _modFolder;
@@ -248,6 +248,15 @@ namespace KSP1PartMod
             catch (Exception e)
             {
                 Log.LogError(KSP1PartMod.Native.Wheels.WheelLines.PatchFailed(e.ToString()));
+            }
+            try
+            {
+                // Redux 26w46a: the part reentry glow writes our renderers' property blocks while active.
+                ReentryGlowWatch.TryApply(new Harmony(ReentryGlowWatch.HarmonyId), Animations);
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] anim: reentry glow watch failed to arm: " + e);
             }
             try
             {

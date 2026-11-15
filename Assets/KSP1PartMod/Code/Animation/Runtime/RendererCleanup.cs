@@ -9,7 +9,7 @@ namespace KSP1PartMod.Animation.Runtime
         public readonly string Path;
         public readonly int MaterialSlots;
         public readonly int NullMaterials;
-        /// <summary>Under Redux's generated reentry hull (a <c>ReentryMesh</c> / <c>GeneratedReentryMeshRoot</c>).</summary>
+        /// <summary>Under Redux's generated reentry hull (under a <c>ReentryMesh</c>; 26w42c also had <c>GeneratedReentryMeshRoot</c>).</summary>
         public readonly bool InReentryHull;
         public readonly bool ActiveInHierarchy;
         public readonly bool Enabled;

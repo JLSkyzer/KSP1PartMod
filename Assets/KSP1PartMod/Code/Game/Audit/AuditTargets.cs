@@ -46,7 +46,9 @@ namespace KSP1PartMod.Game.Audit
             Property(typeof(OABSessionInformation), "AllKnownParts", null, miss);
 
             if (AccessTools.Constructor(typeof(OABPartData), new[] { typeof(PartCore) }) == null) miss.Add("OABPartData(PartCore)");
-            Method(typeof(OABPartData), "CreateEditorPart", new[] { typeof(List<SerializedPartModule>), typeof(ObjectAssemblyAssets) }, miss);
+            // 26w46a added an optional bool (createModelPlaceholder); 26w42c has two parameters.
+            if (AccessTools.Method(typeof(OABPartData), "CreateEditorPart", new[] { typeof(List<SerializedPartModule>), typeof(ObjectAssemblyAssets), typeof(bool) }) == null)
+                Method(typeof(OABPartData), "CreateEditorPart", new[] { typeof(List<SerializedPartModule>), typeof(ObjectAssemblyAssets) }, miss);
             Property(typeof(OABPartData), "ModelPrefab", typeof(GameObject), miss);
             if (AccessTools.Constructor(typeof(ObjectAssemblyBuilderEvents), Type.EmptyTypes) == null) miss.Add("ObjectAssemblyBuilderEvents()");
             Field(typeof(ObjectAssemblyBuilderEvents), "IsLoadingVessel", typeof(bool), miss);

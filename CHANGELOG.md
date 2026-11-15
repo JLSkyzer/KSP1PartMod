@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.16.1 - 2026-11-15
+
+Compatibility with Redux 26w46a (Unity 6000.6.8f1). Found by comparing the decompiled Ksp2Redux.dll of 26w42c and 26w46a and by compiling the mod against both; not run in game yet.
+
+- **KSP1 animations were off in 26w46a.** Redux no longer adds part modules to ECS entities (`PartComponentModule` is a plain class, no `AddComponentObject`), so registering our flight module with the ECS `TypeManager` failed and the load step added no `Module_Ksp1Animations` at all: no animations, shrouds, radiator, science or gear bridges, no canopy reset. A module type that is not an ECS component is now skipped (`anim: ECS type … is not an ECS component in this Redux, no registration needed`).
+- **Reentry glow.** 26w46a dropped the generated reentry hull: a "Reentry glow" child now writes the property block of the part's own renderers every frame while active. Our renderers are rewritten every frame while it is active (`… renderer(s) rewritten every frame while the part's reentry glow is active`), so emission, lights and clip colours are not lost during reentry. The material-less renderer cleanup no longer refers to the removed hull type (it stopped for the session in 26w46a).
+- **ModuleManager patches** follow Redux's new per-campaign KSP1 mod features: files of a disabled KSP1 mod no longer count for `:FOR`/`BEFORE`/`AFTER`, and a disabled mod's folder is not seen as an installed plugin.
+- **Audit mode** accepts `CreateEditorPart`'s new optional parameter (it refused to start in 26w46a).
+- Built for 26w46a: the DLL calls 26w46a's `CreateEditorPart`, so the audit mode does not run on 26w42c. No SDK template for 26w46a exists yet; the release DLL is compiled with Unity's own compiler and the project's response file against the game's 26w46a assemblies (identical member references to the Unity build except that call).
+- Behaviour that changed in Redux and that you may notice: the crossfeed toggle of converted KSP1 parts appears only once `tNode_0v_fuelLines` is researched (as for stock parts); deployables (legs, radiators, science arms) no longer move on a vessel without control; control surfaces stop in vacuum; engine plumes follow thrust instead of throttle.
+
 ## 0.16.0 - 2026-11-04
 
 Engines and sizes: fixes for what the in-game test of 2026-11-04 showed. Built, not run in game yet; checklist (French): `docs/testing/2026-11-04-engines-sizes-in-game-checklist.md`. Everything happens at Redux's import, in memory: no cfg or model file is changed, no per-frame code.

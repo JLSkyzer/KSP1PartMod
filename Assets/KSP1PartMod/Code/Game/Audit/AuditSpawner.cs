@@ -13,7 +13,6 @@ using KSP.Sim.ResourceSystem;
 using KSP.VFX.Reentry;
 using KSP1PartMod.Audit;
 using Redux.Ksp1Import.Assets;
-using Redux.VFX.ReentryMeshGeneration;
 using UnityEngine;
 using VSwift.Modules.Data;
 using VSwift.Modules.Transformers;
@@ -321,8 +320,7 @@ namespace KSP1PartMod.Game.Audit
                 if (materials.Any(m => m == null))
                 {
                     // Reentry hulls get their material from ReentryMesh.OnEnable, as RenderFixes assumes.
-                    var inHull = r.GetComponentInParent<ReentryMesh>(true) != null ||
-                                 r.GetComponentInParent<GeneratedReentryMeshRoot>(true) != null;
+                    var inHull = r.GetComponentInParent<ReentryMesh>(true) != null;
                     if (!inHull)
                     {
                         rec.Materialless++;

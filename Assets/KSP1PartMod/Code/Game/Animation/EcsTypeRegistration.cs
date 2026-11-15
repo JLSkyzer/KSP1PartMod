@@ -54,6 +54,13 @@ namespace KSP1PartMod.Game.Animation
                         _info($"[KSP1PartMod] anim: ECS type {type.Name} already registered as index {existing}");
                         continue;
                     }
+                    if (!typeof(UnityEngine.Object).IsAssignableFrom(type) && !IsEcsComponent(type))
+                    {
+                        // Redux 26w46a: PartComponentModule is a plain class and modules are no longer added with
+                        // AddComponentObject, so such a type needs no index (and TypeManager would refuse it).
+                        _info($"[KSP1PartMod] anim: ECS type {type.Name} is not an ECS component in this Redux, no registration needed");
+                        continue;
+                    }
                     var how = "UnityEngine.Object";
                     if (typeof(UnityEngine.Object).IsAssignableFrom(type)) api.GetOrCreate(type);
                     else how = "managed component, " + api.CreateUnsafe(type);
@@ -69,6 +76,11 @@ namespace KSP1PartMod.Game.Animation
                 return Fail("registration threw: " + (e is TargetInvocationException t && t.InnerException != null ? t.InnerException : e));
             }
         }
+
+        /// <summary>True when the type implements Unity.Entities.IComponentData (26w42c's PartComponentModule does,
+        /// 26w46a's does not). Read by name so the check builds against both.</summary>
+        internal static bool IsEcsComponent(Type type) =>
+            type.GetInterfaces().Any(i => i.FullName == "Unity.Entities.IComponentData");
 
         private static bool Fail(string why)
         {

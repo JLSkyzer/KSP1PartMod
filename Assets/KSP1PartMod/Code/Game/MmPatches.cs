@@ -194,7 +194,7 @@ namespace KSP1PartMod.Game
                 var partMods = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var file in __0)
                 {
-                    if (file?.Node == null) continue;
+                    if (file?.Node == null || !ModEnabled.File(file)) continue;
                     foreach (var node in file.Node.Nodes)
                     {
                         rootNames.Add(node.Name);
@@ -375,13 +375,46 @@ namespace KSP1PartMod.Game
             if (mod.IndexOf('/') < 0 && mod.IndexOf('\\') < 0 || string.IsNullOrEmpty(gameDataRoot)) return false;
             try
             {
-                var parts = new[] { gameDataRoot }.Concat(mod.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries)).ToArray();
+                var segments = mod.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+                if (segments.Length == 0 || !ModEnabled.Name(segments[0])) return false;
+                var parts = new[] { gameDataRoot }.Concat(segments).ToArray();
                 return Directory.Exists(Path.Combine(parts));
             }
             catch (Exception)
             {
                 return false;
             }
+        }
+
+        /// <summary>Redux 26w46a gates KSP1 mods per campaign (<c>Ksp1ConfigFile.IsEnabled</c>,
+        /// <c>Ksp1ModListDiscovery.IsModEnabled</c>) and its finalizer skips disabled ones; 26w42c has neither, and every
+        /// mod counts as enabled. Looked up once by reflection so the code builds against both.</summary>
+        private static class ModEnabled
+        {
+            private static readonly Func<Ksp1ConfigFile, bool> FileGetter;
+            private static readonly Func<string, bool> NameTest;
+
+            static ModEnabled()
+            {
+                try
+                {
+                    var getter = AccessTools.PropertyGetter(typeof(Ksp1ConfigFile), "IsEnabled");
+                    if (getter != null && getter.ReturnType == typeof(bool))
+                        FileGetter = (Func<Ksp1ConfigFile, bool>)Delegate.CreateDelegate(typeof(Func<Ksp1ConfigFile, bool>), getter);
+                    var discovery = AccessTools.TypeByName("Redux.Ksp1Import.Ksp1ModListDiscovery");
+                    var test = discovery == null ? null : AccessTools.Method(discovery, "IsModEnabled", new[] { typeof(string) });
+                    if (test != null && test.IsStatic && test.ReturnType == typeof(bool))
+                        NameTest = (Func<string, bool>)Delegate.CreateDelegate(typeof(Func<string, bool>), test);
+                }
+                catch (Exception)
+                {
+                    FileGetter = null;
+                    NameTest = null;
+                }
+            }
+
+            public static bool File(Ksp1ConfigFile file) => FileGetter == null || FileGetter(file);
+            public static bool Name(string mod) => NameTest == null || NameTest(mod);
         }
 
         private static void BeforeCopy()
