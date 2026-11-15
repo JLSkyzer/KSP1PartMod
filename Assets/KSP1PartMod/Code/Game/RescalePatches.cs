@@ -123,7 +123,12 @@ namespace KSP1PartMod.Game
             _addValue = (Action<Ksp1ConfigNode, string, string>)Delegate.CreateDelegate(typeof(Action<Ksp1ConfigNode, string, string>), add);
             harmony.Patch(translate, prefix: new HarmonyMethod(typeof(RescalePatches), nameof(BeforeTranslate)) { priority = Priority.First });
             var rebuild = FindRebuild();
-            if (rebuild != null) harmony.Patch(rebuild, prefix: new HarmonyMethod(typeof(RescalePatches), nameof(BeforeRebuild)) { priority = Priority.First });
+            if (rebuild != null)
+            {
+                // Its own try: the import prefix is already live, a failure here only affects rebuilds.
+                try { harmony.Patch(rebuild, prefix: new HarmonyMethod(typeof(RescalePatches), nameof(BeforeRebuild)) { priority = Priority.First }); }
+                catch (Exception e) { Warn(EngineSizeLines.RescalePrefix + "rebuild patch failed: a rebuild reads the node the import already completed: " + e.Message); }
+            }
             else Warn(EngineSizeLines.RescalePrefix + "Ksp1PartTranslator.RebuildRegisteredPrefab not found: a rebuild reads the node the import already completed");
             ArmLines();
             Info(EngineSizeLines.RescaleArmed(DefaultKey));

@@ -89,7 +89,12 @@ namespace KSP1PartMod.Game
             harmony.Patch(ordered, postfix: new HarmonyMethod(typeof(EngineModes), nameof(AfterOrdered)));
             _armed = true;
             var complete = AccessTools.Method(typeof(Ksp1ImportedPartRegistry), nameof(Ksp1ImportedPartRegistry.MarkImportComplete));
-            if (complete != null) harmony.Patch(complete, postfix: new HarmonyMethod(typeof(EngineModes), nameof(AfterImportComplete)));
+            if (complete != null)
+            {
+                // Its own try: the main patch is already live, a failure here only loses the summary line.
+                try { harmony.Patch(complete, postfix: new HarmonyMethod(typeof(EngineModes), nameof(AfterImportComplete))); }
+                catch (Exception e) { Warn(EngineSizeLines.EnginePrefix + "summary patch failed, no summary line: " + e.Message); }
+            }
             else Warn(EngineSizeLines.EnginePrefix + "Ksp1ImportedPartRegistry.MarkImportComplete not found, no summary line");
             Info(EngineSizeLines.EnginesArmed(sep, fallback));
             return true;

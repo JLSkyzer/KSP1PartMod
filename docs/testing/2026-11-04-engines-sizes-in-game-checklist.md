@@ -9,7 +9,7 @@ modèle n'est modifié) :
   et Mercury) : Redux ne gardait que le **dernier** moteur. Elles deviennent un seul moteur multi-modes, mode 0 = moteur
   principal.
 - **Étiquettes de taille** : elles suivent désormais le plus grand nœud d'empilement mesuré sur le modèle.
-- **Règles d'échelle de KSP1** : `rescaleFactor` absent = 1,25 (19 pièces de série), `scale` des anciens nœuds, position
+- **Règles d'échelle de KSP1** : `rescaleFactor` absent = 1,25 (19 pièces : 17 de série, 2 BDB), `scale` des anciens nœuds, position
   des `MODEL`, rayon et suspension des roues.
 
 Tout a été lu dans la décompilation de Redux 26w42c ou dans les cfg, et testé dans l'éditeur (EditMode). **Rien n'a été
@@ -41,7 +41,7 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`. Fil
 - [ ] `engines: summary: 2 SEP part(s), 12 fallback part(s), 0 refused`. **Recopier la ligne.**
 - [ ] `size: <mod>: …` pour chaque mod, `size: largest moves: …` et `size: docking parts relabelled: …`. **Recopier ces
   lignes**, en particulier celles de Launchers Pack et de Bluedog_DB.
-- [ ] `rescale: 19 part(s) without rescaleFactor set to 1.25, 7 excluded (KerbalEVA, FlagSite)`,
+- [ ] `rescale: 19 part(s) without rescaleFactor set to 1.25, 7 excluded (KerbalEVA, FlagSite)`, le nombre exclu peut être inférieur à 7 (Redux saute avant nous une pièce dont le nom existe déjà dans KSP2),
   `rescale: node scale on 13 part(s)`, `rescale: MODEL position x rescaleFactor on 3 model(s)` (attendus d'après les cfg
   bruts ; ModuleManager peut changer ces nombres).
 - [ ] La ligne `b9: …` se termine par `<d> engine edit(s) now on a multi-mode engine, <e> dropped on SEP clusters`.
@@ -104,7 +104,7 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`. Fil
 
 - [ ] Un vaisseau 0.15.1 avec une grappe SEP ou un LR91 se charge sans erreur. Le moteur tourne en mode 0 et le menu
   déroulant affiche le même mode (ligne `engines: <pièce>: saved mode '…' (a 0.15.x craft) shown as '…'`).
-- [ ] Un vaisseau 0.15.1 avec une des 19 pièces de série agrandies : il se charge. Les pièces gardent leur position et
+- [ ] Un vaisseau 0.15.1 avec une des 19 pièces agrandies (dont la pince de lancement BDB, le parachute simple, la pince `smallClaw`, le RAPIER) : il se charge. Les pièces gardent leur position et
   peuvent se chevaucher ou laisser un jour **jusqu'à la reconstruction au VAB** : attendu, à noter.
 
 ## 8. Chaque clé à `false`
@@ -120,7 +120,7 @@ Une clé à la fois, redémarrer le jeu à chaque fois. Chaque clé à `false` r
 
 ## 9. Audit (facultatif)
 
-- [ ] Avec `audit_on_vab_entry` à `true` : `audit: engines: 2 SEP, 12 fallback, 0 parts with more than one Module_Engine`
+- [ ] Avec `audit_on_vab_entry` à `true` : `audit: engines: 2 SEP, 12 fallback, 0 parts with more than one Module_Engine` (les deux premiers nombres comptent la règle choisie, pas le résultat : regarder aussi `SEP values not set`)
   (le dernier nombre doit être 0) et `audit: sizes: <n> from nodes, <t> from tokens, <r> Redux's`. **Recopier les deux
   lignes.**
 - [ ] Le CSV a les colonnes `size_key`, `size_source`, `rescale` et `engine_modes` (par exemple `3:AllEngines:19140`).

@@ -77,7 +77,12 @@ namespace KSP1PartMod.Game
             else Warn(EngineSizeLines.SizePrefix + "Ksp1PartTranslator.MapSize not found: bulkheadProfiles tokens are not read, stack nodes still are");
             harmony.Patch(build, postfix: new HarmonyMethod(typeof(SizeFromNodes), nameof(AfterBuildConfiguredPrefab)));
             var complete = AccessTools.Method(typeof(Ksp1ImportedPartRegistry), nameof(Ksp1ImportedPartRegistry.MarkImportComplete));
-            if (complete != null) harmony.Patch(complete, postfix: new HarmonyMethod(typeof(SizeFromNodes), nameof(AfterImportComplete)));
+            if (complete != null)
+            {
+                // Its own try: the main patch is already live, a failure here only loses the summary line.
+                try { harmony.Patch(complete, postfix: new HarmonyMethod(typeof(SizeFromNodes), nameof(AfterImportComplete))); }
+                catch (Exception e) { Warn(EngineSizeLines.SizePrefix + "summary patch failed, no summary line: " + e.Message); }
+            }
             else Warn(EngineSizeLines.SizePrefix + "Ksp1ImportedPartRegistry.MarkImportComplete not found, no summary line");
             Info(EngineSizeLines.SizeArmed);
             return true;
