@@ -23,7 +23,10 @@ namespace KSP1PartMod.Game
     {
         public const string HarmonyId = "KSP1PartMod.SavedTypeResolver";
         private static readonly Assembly Own = typeof(SavedTypeResolver).Assembly;
-        private static readonly string OwnName = Own.GetName().Name;
+        /// <summary>Our name, and the name the hand-compiled 0.16.1 and 0.16.2 builds wrongly carried
+        /// ("KSP1PartMod-26w46a", taken from the output file name): crafts saved with those builds name our types with it.</summary>
+        private static readonly HashSet<string> Names = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "KSP1PartMod", "KSP1PartMod-26w46a", Own.GetName().Name };
         private static bool _installed, _servedLogged, _broken;
 
         public static void InstallResolver()
@@ -37,7 +40,7 @@ namespace KSP1PartMod.Game
         {
             try
             {
-                if (args?.Name == null || !string.Equals(new AssemblyName(args.Name).Name, OwnName, StringComparison.OrdinalIgnoreCase))
+                if (args?.Name == null || !Names.Contains(new AssemblyName(args.Name).Name))
                     return null;
                 if (!_servedLogged)
                 {

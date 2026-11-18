@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.3 - 2026-11-18
+
+- **The real cause of 0.16.2's bug: the 0.16.1 and 0.16.2 DLLs had the wrong assembly name.** They were compiled by hand for 26w46a with an output file named `KSP1PartMod-26w46a.dll`, and the compiler takes the assembly name from it. Crafts saved before name our types `…, KSP1PartMod`, which no loaded assembly matched any more; the 0.16.2 resolver compared against the wrong name too and never answered (the guard still kept the vessel). The DLL is named `KSP1PartMod` again, and the resolver also answers for `KSP1PartMod-26w46a`, the name written by crafts saved with 0.16.1 and 0.16.2.
+
 ## 0.16.2 - 2026-11-18
 
 - **Saved crafts with KSP1 parts were skipped as corrupted in Redux 26w46a** (found in game on 2026-11-18). A craft saves our module types by assembly-qualified name; Space Warp loads mod assemblies with `Assembly.LoadFile`, and in 26w46a nothing resolved the name "KSP1PartMod" any more (`Error converting value "KSP1PartMod…" to type 'System.Type'`). The module type stayed null and Redux dropped the whole vessel, and, when it was the active vessel, the flight scene looped on a `NullReferenceException` and saves failed. The mod now resolves its own assembly name (`save: assembly '…' resolved to the loaded KSP1PartMod`), and a module whose saved type still cannot be resolved is dropped alone (`save: dropped saved module …`) instead of the vessel.
