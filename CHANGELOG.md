@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.2 - 2026-11-18
+
+- **Saved crafts with KSP1 parts were skipped as corrupted in Redux 26w46a** (found in game on 2026-11-18). A craft saves our module types by assembly-qualified name; Space Warp loads mod assemblies with `Assembly.LoadFile`, and in 26w46a nothing resolved the name "KSP1PartMod" any more (`Error converting value "KSP1PartMod…" to type 'System.Type'`). The module type stayed null and Redux dropped the whole vessel, and, when it was the active vessel, the flight scene looped on a `NullReferenceException` and saves failed. The mod now resolves its own assembly name (`save: assembly '…' resolved to the loaded KSP1PartMod`), and a module whose saved type still cannot be resolved is dropped alone (`save: dropped saved module …`) instead of the vessel.
+
 ## 0.16.1 - 2026-11-15
 
 Compatibility with Redux 26w46a (Unity 6000.6.8f1). Found by comparing the decompiled Ksp2Redux.dll of 26w42c and 26w46a and by compiling the mod against both; not run in game yet.

@@ -22,7 +22,7 @@ namespace KSP1PartMod
     public class KSP1PartModPlugin : KerbalMod
     {
         public const string ModId = "KSP1PartMod";
-        public const string Version = "0.16.1";
+        public const string Version = "0.16.2";
         public const string AnimationSettingsFile = "animations.json";
 
         private static string _modFolder;
@@ -43,6 +43,16 @@ namespace KSP1PartMod
         {
             Log = SWLogger;
             Instance = this;
+            try
+            {
+                // Before anything reads a save: saved crafts name our module types by assembly (26w46a).
+                SavedTypeResolver.InstallResolver();
+                SavedTypeResolver.TryApplyGuard(new Harmony(SavedTypeResolver.HarmonyId));
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] save: type resolver failed to install: " + e);
+            }
             // First: nothing about animations may cost the tech-tree placement.
             TechTreeLoadStep.Register();
             Animations = ReadAnimationSettings();
