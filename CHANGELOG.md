@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.4 - 2026-11-18
+
+- **Faster KSP1 part import** (`fast_texture_lookup`, default true). Textures took 325 to 397 s of each 463 to 622 s import on the author's set (in game, 2026-11-18, 26w46a), while 92 % of the texture calls already hit Redux's cache and a DDS loads in milliseconds. When a texture is not next to its model, Redux's `Ksp1TextureLoader.ResolveTexturePathRecursive` runs `Directory.GetFiles(root, name, AllDirectories)` once per image type, six full walks of `mods/KSP1` per missing name (0.26 to 0.37 s on 8 562 files, measured outside the game), and empties its result cache with the texture cache. The mod answers from an index of the folder built once per session: same first file, same extension order, same miss. The line `textures: lookup: … recursive lookup(s) answered from the index …, n distinct missing name(s)` gives the counts; the import time in `perf: import:` gives the gain. Not measured in game yet.
+
 ## 0.16.3 - 2026-11-18
 
 - **The real cause of 0.16.2's bug: the 0.16.1 and 0.16.2 DLLs had the wrong assembly name.** They were compiled by hand for 26w46a with an output file named `KSP1PartMod-26w46a.dll`, and the compiler takes the assembly name from it. Crafts saved before name our types `…, KSP1PartMod`, which no loaded assembly matched any more; the 0.16.2 resolver compared against the wrong name too and never answered (the guard still kept the vessel). The DLL is named `KSP1PartMod` again, and the resolver also answers for `KSP1PartMod-26w46a`, the name written by crafts saved with 0.16.1 and 0.16.2.

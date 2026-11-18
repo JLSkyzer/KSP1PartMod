@@ -22,7 +22,7 @@ namespace KSP1PartMod
     public class KSP1PartModPlugin : KerbalMod
     {
         public const string ModId = "KSP1PartMod";
-        public const string Version = "0.16.3";
+        public const string Version = "0.16.4";
         public const string AnimationSettingsFile = "animations.json";
 
         private static string _modFolder;
@@ -258,6 +258,15 @@ namespace KSP1PartMod
             catch (Exception e)
             {
                 Log.LogError(KSP1PartMod.Native.Wheels.WheelLines.PatchFailed(e.ToString()));
+            }
+            try
+            {
+                // Loading speed: Redux's recursive texture search answered from an index (before the import starts).
+                TextureLookupIndex.TryApply(new Harmony(TextureLookupIndex.HarmonyId), Animations.FastTextureLookup);
+            }
+            catch (Exception e)
+            {
+                Log.LogError("[KSP1PartMod] textures: lookup: index failed to arm: " + e);
             }
             try
             {

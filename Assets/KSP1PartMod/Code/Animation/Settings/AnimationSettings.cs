@@ -261,6 +261,9 @@ namespace KSP1PartMod.Animation.Settings
         /// collider in metres whatever the part's scale (<c>wheel_radius_rescale</c>, default true; false: the cfg radius, as
         /// 0.15.1).</summary>
         public bool WheelRadiusRescale => _engines0160.WheelRadiusRescale;
+        /// <summary>0.16.4: Redux's recursive texture search (6 full walks of <c>mods/KSP1</c> per missing name) is answered
+        /// from an index of the folder built once (<c>fast_texture_lookup</c>, default true; false: Redux's search).</summary>
+        public bool FastTextureLookup => _engines0160.FastTextureLookup;
 
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
@@ -344,6 +347,7 @@ namespace KSP1PartMod.Animation.Settings
         {
             public bool SepProceduralEngines = true, EngineModesFallback = true, SizeFromNodes = true;
             public bool DefaultRescale = true, LegacyNodeScale = true, ModelPositionRescale = true, WheelRadiusRescale = true;
+            public bool FastTextureLookup = true;
         }
 
         private readonly Switches0160 _engines0160;
@@ -596,6 +600,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "ksp1_legacy_node_scale": ReadBool(p, ref engines0160.LegacyNodeScale, problems); break;
                         case "ksp1_model_position_rescale": ReadBool(p, ref engines0160.ModelPositionRescale, problems); break;
                         case "wheel_radius_rescale": ReadBool(p, ref engines0160.WheelRadiusRescale, problems); break;
+                        case "fast_texture_lookup": ReadBool(p, ref engines0160.FastTextureLookup, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;
