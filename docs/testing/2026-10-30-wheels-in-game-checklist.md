@@ -52,6 +52,10 @@ Log : `%LOCALAPPDATA%Low/Intercept Games/Kerbal Space Program 2/Player.log`, fil
 - [ ] **Groupe d'action Train d'atterrissage.** Pour un train KSP1 à `Module_Deployable` natif, le VAB ne liste **aucune**
   action Gear : c'est le même comportement que les trains KSP2, qui reçoivent leur action en vol seulement. Noter ce que le
   VAB montre. Ligne `anim: … gear bridge: Module_WheelBase already on Gear` pour ces pièces.
+  **Depuis Redux 26w47a** (lu dans le code, non testé) : une jambe ou une roue KSP1 à source unique reçoit **Gear** par
+  défaut (`Ksp1DeployableModuleBuilder`), donc le VAB peut maintenant lister une action Gear pour elle ; sur nos roues natives
+  il y a alors deux bascules Gear sur le même `toggleExtend`. **À tester en vol : une seule bascule par appui sur G**, sur une
+  pièce à roue native et sur une jambe restée en `Ksp1Module_Deployable`.
 
 ## 3. Rover
 
