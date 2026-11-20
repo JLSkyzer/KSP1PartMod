@@ -145,7 +145,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         [Test] public void SwitchOff_NothingAdded_ReduxAsIn070()
         {
             Assert.IsFalse(Arm("{\"ksp1_crossfeed_toggle\": false, \"ksp1_heatshields\": false, \"ksp1_converters\": false, " +
-                               "\"ksp1_drills\": false, \"ksp1_survey_scanners\": false, \"ksp1_resource_scanners\": false, \"ksp1_radiators\": false, \"ksp1_science\": false, \"ksp1_wheels\": false, \"ksp1_procedural_fairings\": false, \"ksp1_saf_fairings\": false}"));
+                               "\"ksp1_drills\": false, \"ksp1_survey_scanners\": false, \"ksp1_resource_scanners\": false, \"ksp1_radiators\": false, \"ksp1_science\": false, \"ksp1_wheels\": false, \"ksp1_procedural_fairings\": false, \"ksp1_saf_fairings\": false, \"ksp1_launch_clamps\": false}"));
             CollectionAssert.AreEqual(new[]
             {
                 "[KSP1PartMod] native: ModuleToggleCrossfeed -> Module_ToggleCrossfeed off (ksp1_crossfeed_toggle false)",
@@ -170,6 +170,7 @@ namespace KSP1PartMod.Tests.ReduxMu
                 "[KSP1PartMod] native: ModuleWheelBogey -> Module_WheelBogey off (ksp1_wheels or wheel_bogeys false)",
                 "[KSP1PartMod] native: ModuleProceduralFairing -> Module_Fairing off (ksp1_procedural_fairings false)",
                 "[KSP1PartMod] native: ModuleSimpleAdjustableFairing -> Module_Fairing off (ksp1_saf_fairings false)",
+                "[KSP1PartMod] native: LaunchClamp -> Module_Decouple off (ksp1_launch_clamps false)",
                 NativeLines.NoneArmed,
             }, _lines);
             Assert.IsFalse(NativeModules.IsConverterArmed(AblatorMapping.Ksp1Module));
@@ -192,6 +193,47 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.AreSame(redux, importers[CrossfeedMapping.Ksp1Module]);
             Assert.AreEqual(1, _lines.Count(l => l == "[KSP1PartMod] native: ModuleToggleCrossfeed already has a Redux importer, ours not added"),
                 "once per session");
+        }
+
+        // ------------------------------------------------------------------ launch clamps (0.19.0)
+
+        private const string ClampModule = "MODULE\n{\nname = LaunchClamp\ntrf_towerPivot_name = obj_girdercap\nanim_decouple_name = launchclamp\n}\n";
+
+        [Test] public void LaunchClamp_BecomesAnOmniDecouplerOnTheSurfaceNode_NoPush()
+        {
+            Assert.IsTrue(Arm());
+            var registry = new Ksp1PartModuleImporterRegistry();
+            var part = Part(ClampModule, "node_attach = 0, 1, 0, 0, 0, -1\n", "launchClamp1");
+            var context = Context(part);
+            context.PartData.attachNodes = new List<AttachNodeDefinition> { new AttachNodeDefinition { nodeID = "srfAttach" } };
+
+            Assert.IsTrue(registry.TryImport(part.GetNodes("MODULE").First(), context, out var module));
+
+            Assert.AreEqual(typeof(Module_Decouple), module.BehaviourType);
+            var data = context.ModuleData.OfType<Data_Decouple>().Single();
+            Assert.IsTrue(data.isOmniDecoupler);
+            Assert.IsTrue(data.IsStageable);
+            Assert.AreEqual(0f, data.ejectionForce);
+            Assert.AreEqual("srfAttach", data.explosiveNodeID);
+            CollectionAssert.AreEqual(new[] { LaunchClampMapping.NativeModule }, NativeModules.Record.ConvertedModules("launchClamp1"));
+        }
+
+        [Test] public void LaunchClamp_OnAPartWithADecoupler_IsNotImported()
+        {
+            Assert.IsTrue(Arm());
+            var registry = new Ksp1PartModuleImporterRegistry();
+            var part = Part("MODULE\n{\nname = ModuleDecouple\nejectionForce = 100\n}\n" + ClampModule, "", "twoDecouplers");
+            var context = Context(part);
+            var modules = part.GetNodes("MODULE").ToList();
+            Assert.IsTrue(registry.TryImport(modules[0], context, out _), "Redux's decoupler");
+            Assert.IsFalse(registry.TryImport(modules[1], context, out _), "one decoupler per part");
+            Assert.AreEqual(1, context.ModuleData.OfType<Data_Decouple>().Count());
+        }
+
+        [Test] public void LaunchClamp_SwitchOff_ReduxAsBefore()
+        {
+            Assert.IsTrue(Arm("{\"ksp1_launch_clamps\": false}"));
+            Assert.IsFalse(Importers(new Ksp1PartModuleImporterRegistry()).ContainsKey(LaunchClampMapping.Ksp1Module));
         }
 
         // ------------------------------------------------------------------ Redux's real import

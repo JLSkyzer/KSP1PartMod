@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.19.0 - 2026-11-20
+
+- **Launch clamps** (`ksp1_launch_clamps`, default true). Redux knows the KSP1 `LaunchClamp` module only for its staging icon: the part had no module at all, so it stayed welded to the rocket, its stage released nothing and it flew with the rocket. It is now KSP2's `Module_Decouple` (omni decoupler on the part's surface node, `srfAttach`, stageable, ejection force 0: KSP1's clamp does not push). 7 installed cfg files (the stock TT-18, six Bluedog_DB clamps and towers). A part that already has a decoupler gets nothing more (noted). Summary line `[KSP1PartMod] native: launch clamps: n part(s) got Module_Decouple`.
+- **Not reproduced** (noted per part in the log): the stretching tower (`trf_towerPivot_name`, `trf_towerStretch_name`, `trf_anchor_name`), the release animation (`trf_animationRoot_name`, `anim_decouple_name`) and KSP1's ground anchoring; the clamp's `ModuleGenerator` (pad power) was already imported by Redux. Not verified in game yet.
+
 ## 0.18.0 - 2026-11-20
 
 - **Antenna gating** (`ksp1_antenna_gating`, default true). In KSP1 a deployable antenna (`ModuleDeployableAntenna`) transmits only once extended. Redux has no importer for that module, so its imported `ModuleDataTransmitter` had no deployable to wait for: the antenna transmitted retracted, mid-deployment, and never lost the link when folded. KSP2's own `PartComponentModule_DataTransmitter` already gates on a deployable of the part (`_requiresDeployment`, `_dataDeployable`); in flight, the part module now gives it a plain `Data_Deployable` that follows the antenna's Deploy entry (written on change only), and the transmitter's own update turns the comm node on and off. 31 installed parts (Squad 6, Bluedog_DB, StarLink). The planner only marks the entry (`GatesTransmitter`): no entry key moves. An entry gated off by B9, or animations off, leaves the antenna free (extended).

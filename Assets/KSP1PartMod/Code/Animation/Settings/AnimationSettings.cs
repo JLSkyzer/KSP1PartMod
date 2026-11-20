@@ -270,6 +270,9 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>0.18.0: a deployable KSP1 antenna transmits only while extended (<c>ksp1_antenna_gating</c>, default true; false:
         /// it transmits retracted too, as in 0.17.0).</summary>
         public bool Ksp1AntennaGating => _engines0160.AntennaGating;
+        /// <summary>0.19.0: a KSP1 <c>LaunchClamp</c> becomes an omni decoupler on its surface node, so it can be released at its stage
+        /// (<c>ksp1_launch_clamps</c>, default true; false: the clamp has no module, as in 0.18.0).</summary>
+        public bool Ksp1LaunchClamps => _engines0160.LaunchClamps;
 
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
@@ -353,7 +356,7 @@ namespace KSP1PartMod.Animation.Settings
         {
             public bool SepProceduralEngines = true, EngineModesFallback = true, SizeFromNodes = true;
             public bool DefaultRescale = true, LegacyNodeScale = true, ModelPositionRescale = true, WheelRadiusRescale = true;
-            public bool FastTextureLookup = true, StructuralNodes = true, AntennaGating = true;
+            public bool FastTextureLookup = true, StructuralNodes = true, AntennaGating = true, LaunchClamps = true;
         }
 
         private readonly Switches0160 _engines0160;
@@ -609,6 +612,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "fast_texture_lookup": ReadBool(p, ref engines0160.FastTextureLookup, problems); break;
                         case "ksp1_structural_nodes": ReadBool(p, ref engines0160.StructuralNodes, problems); break;
                         case "ksp1_antenna_gating": ReadBool(p, ref engines0160.AntennaGating, problems); break;
+                        case "ksp1_launch_clamps": ReadBool(p, ref engines0160.LaunchClamps, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;

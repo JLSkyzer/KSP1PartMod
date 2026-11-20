@@ -162,6 +162,16 @@ namespace KSP1PartMod.Game
             Wheel(WheelKind.Bogey),
             Fairing(FairingKind.Procedural),
             Fairing(FairingKind.Saf),
+            new Converter
+            {
+                Ksp1Module = LaunchClampMapping.Ksp1Module,
+                NativeModule = LaunchClampMapping.NativeModule,
+                SwitchKey = "ksp1_launch_clamps",
+                IsOn = s => s.Ksp1LaunchClamps,
+                MissingMembers = LaunchClampImporter.MissingMembers,
+                Create = () => new LaunchClampImporter(),
+                Summary = LaunchClampImporter.Summary,
+            },
         };
 
         /// <summary>A KSP1 wheel module → the KSP2 wheel module of the same role (wheels plan, Task 3): <c>ksp1_wheels</c> and

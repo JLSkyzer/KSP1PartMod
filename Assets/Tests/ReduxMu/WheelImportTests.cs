@@ -34,7 +34,7 @@ namespace KSP1PartMod.Tests.ReduxMu
         public const string ArmedPairs = ", ModuleWheelBase -> Module_WheelBase, ModuleWheelSuspension -> Module_WheelSuspension, " +
                                          "ModuleWheelSteering -> Module_WheelSteering, ModuleWheelMotor -> Module_WheelMotor, " +
                                          "ModuleWheelMotorSteering -> Module_WheelMotorSteering, ModuleWheelBrakes -> Module_WheelBrakes, " +
-                                         "ModuleWheelDamage -> Module_WheelDamage, ModuleWheelLock -> Module_WheelLock, ModuleWheelBogey -> Module_WheelBogey";
+                                         "ModuleWheelDamage -> Module_WheelDamage, ModuleWheelLock -> Module_WheelLock, ModuleWheelBogey -> Module_WheelBogey, LaunchClamp -> Module_Decouple";
 
         private readonly List<string> _lines = new List<string>();
 

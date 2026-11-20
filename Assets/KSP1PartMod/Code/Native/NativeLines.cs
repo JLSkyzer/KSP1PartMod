@@ -24,6 +24,10 @@ namespace KSP1PartMod.Native
 
         public static string PartNote(string part, string note) => Prefix + part + ": " + note;
 
+        public static string LaunchClampSummary(int parts) =>
+            Prefix + $"launch clamps: {parts} part(s) got {LaunchClampMapping.NativeModule} (omni decoupler on the surface node, no ejection push); "
+            + "not reproduced: the stretching tower and the release animation";
+
         public static string CrossfeedSummary(int parts, int startOn, int techRequired) =>
             Prefix + $"crossfeed: {parts} part(s) got {CrossfeedMapping.NativeModule} ({startOn} start with crossfeed on), techRequired ignored on {techRequired}";
 
