@@ -39,13 +39,17 @@ namespace KSP1PartMod.Tests.ReduxMu
             Assert.IsTrue(EcsTypeRegistration.TryRegister("test", info.Add, errors.Add), string.Join(" | ", errors));
             CollectionAssert.IsEmpty(errors);
             var api = EcsTypeRegistration.TypeManagerApi.Find(out _);
-            foreach (var type in EcsTypeRegistration.ModuleTypes)
+            // Since Redux 26w46a the flight module type is no longer an ECS component and is skipped, not registered.
+            var registered = EcsTypeRegistration.ModuleTypes
+                .Where(t => typeof(UnityEngine.Object).IsAssignableFrom(t) || EcsTypeRegistration.IsEcsComponent(t)).ToArray();
+            Assert.IsNotEmpty(registered);
+            foreach (var type in registered)
                 Assert.IsTrue(api.TryGetIndex(type, out var index) && index != "0", type.Name);
 
             EcsTypeRegistration.ResetForTests();
             info.Clear();
             Assert.IsTrue(EcsTypeRegistration.TryRegister("again", info.Add, errors.Add));
-            Assert.AreEqual(2, info.FindAll(l => l.Contains("already registered")).Count, string.Join(" | ", info));
+            Assert.AreEqual(registered.Length, info.FindAll(l => l.Contains("already registered")).Count, string.Join(" | ", info));
         }
     }
 }

@@ -14,7 +14,7 @@ namespace KSP1PartMod.Tests.Animation
     /// location with the <c>KSP1_ROOT</c> environment variable.</summary>
     internal static class InstalledKsp1
     {
-        public const string DefaultRoot = @"I:\SteamLibrary\steamapps\common\Kerbal Space Program 2\mods\KSP1";
+        public const string DefaultRoot = @"G:\SteamLibrary\steamapps\common\Kerbal Space Program 2\mods\KSP1";
 
         public static string Root
         {

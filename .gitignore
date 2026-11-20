@@ -96,4 +96,6 @@ Deploy/
 Assets/Mods
 Packages/packages-lock.json
 ksp2.catalog
+Assets/ReduxSDK/Generated/
+Assets/ReduxSDK/Generated.meta
 
