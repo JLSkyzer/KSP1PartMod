@@ -12,10 +12,10 @@ namespace KSP1PartMod.Tests.Animation.Settings
             Path.Combine(Application.dataPath, "KSP1PartMod", "Copied", "animations.json");
 
         private static readonly string[] Keys = { "sep_procedural_engines", "ksp1_engine_modes_fallback", "ksp1_size_from_nodes", "ksp1_default_rescale", "ksp1_legacy_node_scale",
-            "ksp1_model_position_rescale", "wheel_radius_rescale", "fast_texture_lookup", "ksp1_structural_nodes" };
+            "ksp1_model_position_rescale", "wheel_radius_rescale", "fast_texture_lookup", "ksp1_structural_nodes", "ksp1_antenna_gating" };
 
         private static bool[] Values(AnimationSettings s) => new[] { s.SepProceduralEngines, s.Ksp1EngineModesFallback, s.Ksp1SizeFromNodes, s.Ksp1DefaultRescale, s.Ksp1LegacyNodeScale,
-            s.Ksp1ModelPositionRescale, s.WheelRadiusRescale, s.FastTextureLookup, s.Ksp1StructuralNodes };
+            s.Ksp1ModelPositionRescale, s.WheelRadiusRescale, s.FastTextureLookup, s.Ksp1StructuralNodes, s.Ksp1AntennaGating };
 
         private static void AssertDefaults(AnimationSettings s)
         {
@@ -46,7 +46,7 @@ namespace KSP1PartMod.Tests.Animation.Settings
 
         [Test] public void WrongTypes_KeepTheDefault()
         {
-            var s = AnimationSettings.Parse("{\"sep_procedural_engines\": 0, \"ksp1_engine_modes_fallback\": \"no\", \"ksp1_size_from_nodes\": null, \"ksp1_default_rescale\": 1, \"ksp1_legacy_node_scale\": \"x\", \"ksp1_model_position_rescale\": [], \"wheel_radius_rescale\": {}, \"fast_texture_lookup\": 7, \"ksp1_structural_nodes\": 3}", out var e);
+            var s = AnimationSettings.Parse("{\"sep_procedural_engines\": 0, \"ksp1_engine_modes_fallback\": \"no\", \"ksp1_size_from_nodes\": null, \"ksp1_default_rescale\": 1, \"ksp1_legacy_node_scale\": \"x\", \"ksp1_model_position_rescale\": [], \"wheel_radius_rescale\": {}, \"fast_texture_lookup\": 7, \"ksp1_structural_nodes\": 3, \"ksp1_antenna_gating\": 4}", out var e);
             AssertDefaults(s);
             foreach (var key in Keys) StringAssert.Contains(key, e);
         }

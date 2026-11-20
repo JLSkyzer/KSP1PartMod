@@ -146,6 +146,10 @@ namespace KSP1PartMod.Animation.Cfg
         /// <c>TransformNames[0]</c>.</summary>
         public bool MeshToggle;
 
+        /// <summary>Deploy (0.18.0): the entry of a <c>ModuleDeployableAntenna</c> on a part that has a <c>ModuleDataTransmitter</c>: the
+        /// transmitter works only while this entry is extended (see <see cref="KSP1PartMod.Animation.Behaviours.AntennaRules"/>).</summary>
+        public bool GatesTransmitter;
+
         /// <summary>The B9PartSwitch subtypes that switch this entry's module off (<c>moduleActive = false</c>), one
         /// gate per switch (<see cref="B9GatePlanner"/>); null when no switch does. Any kind.</summary>
         public B9Gate[] Gates;

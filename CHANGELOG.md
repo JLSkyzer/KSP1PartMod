@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.18.0 - 2026-11-20
+
+- **Antenna gating** (`ksp1_antenna_gating`, default true). In KSP1 a deployable antenna (`ModuleDeployableAntenna`) transmits only once extended. Redux has no importer for that module, so its imported `ModuleDataTransmitter` had no deployable to wait for: the antenna transmitted retracted, mid-deployment, and never lost the link when folded. KSP2's own `PartComponentModule_DataTransmitter` already gates on a deployable of the part (`_requiresDeployment`, `_dataDeployable`); in flight, the part module now gives it a plain `Data_Deployable` that follows the antenna's Deploy entry (written on change only), and the transmitter's own update turns the comm node on and off. 31 installed parts (Squad 6, Bluedog_DB, StarLink). The planner only marks the entry (`GatesTransmitter`): no entry key moves. An entry gated off by B9, or animations off, leaves the antenna free (extended).
+- **Not done**: the shield of docking ports (`ModuleDockingNode.deployAnimationController`, 9 cfg files). KSP2's docking port gates on a deployable too, but it also manages a dynamic node around it, so it needs its own study and test. Not verified in game yet.
+
 ## 0.17.0 - 2026-11-20
 
 - **Structural nodes** (`ksp1_structural_nodes`, default true). KSP1's `ModuleStructuralNode` names a root object of the model (an interstage cap, a truss) and the attach nodes it covers: the root is shown while a part is attached to at least one of those nodes. Redux has no importer for it, so every cap and truss stayed visible all the time, attached or not. They now follow the nodes, in the VAB and in flight, and are hidden while their B9 gate is closed. 38 installed cfg files carry it (Squad fairings 1 to 3, Making History fairings 1.5 and 4 and the 1.5 m lander pod, Bluedog_DB fairing bases), 421 entries.

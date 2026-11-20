@@ -99,9 +99,9 @@ namespace KSP1PartMod.Animation.Cfg
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules,
             bool pluginModules, bool b9Gates, bool shrouds = false, bool ablatorChar = false,
             IReadOnlyDictionary<string, string[]> shaderPropertyMap = null, Func<VariantSwitch, bool> b9AppendSet = null,
-            bool structures = false) =>
+            bool structures = false, bool antennas = false) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules,
-                pluginModules, b9Gates, shrouds, ablatorChar, shaderPropertyMap, b9AppendSet, structures);
+                pluginModules, b9Gates, shrouds, ablatorChar, shaderPropertyMap, b9AppendSet, structures, antennas);
 
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
         /// table. The plugin modules and the B9 gates are off unless asked for: older callers keep the 0.4.0 plan.</summary>
@@ -109,7 +109,7 @@ namespace KSP1PartMod.Animation.Cfg
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
             bool followRedux = false, ISet<string> skipModules = null, bool pluginModules = false, bool b9Gates = false,
             bool shrouds = false, bool ablatorChar = false, IReadOnlyDictionary<string, string[]> shaderPropertyMap = null,
-            Func<VariantSwitch, bool> b9AppendSet = null, bool structures = false)
+            Func<VariantSwitch, bool> b9AppendSet = null, bool structures = false, bool antennas = false)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -226,6 +226,11 @@ namespace KSP1PartMod.Animation.Cfg
                     Add(entries, se);
                 }
             }
+
+            // Antenna gating (0.18.0): the Deploy entry of a ModuleDeployableAntenna gates the part's transmitter. A flag only: no key moves.
+            if (antennas && modules.Any(m => "ModuleDataTransmitter".Equals(NameOf(m), StringComparison.OrdinalIgnoreCase)))
+                foreach (var ae in entries.Where(o => o.Kind == EntryKind.Deploy && KSP1PartMod.Animation.Behaviours.AntennaRules.MarksModule(NameOf(modules[o.ModuleIndex]), true)))
+                    ae.GatesTransmitter = true;
 
             // The ablator char (0.8.0): after the shrouds and the structures, last of all, so that no older Color key moves. It is not planned
             // when another entry of the part writes the same shader property (a KV pod's light changer, which would never

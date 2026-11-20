@@ -820,6 +820,7 @@ namespace KSP1PartMod.Game.Animation
                 counts[(int)e.Feature]++;
             }
             StepBridge();
+            StepAntenna();
             if (perf) t = ChannelFlush.Lap(window, PerfFeature.Bridge, t);
             StepScience();
             if (perf) t = ChannelFlush.Lap(window, PerfFeature.Science, t);

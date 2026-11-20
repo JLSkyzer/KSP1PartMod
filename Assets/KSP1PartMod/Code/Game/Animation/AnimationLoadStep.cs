@@ -189,6 +189,8 @@ namespace KSP1PartMod.Game.Animation
                 shrouds: ShroudImport.IsArmed,
                 // Structural nodes (0.17.0): the interstage caps and trusses follow their attach nodes.
                 structures: KSP1PartModPlugin.Animations.Ksp1StructuralNodes,
+                // Antenna gating (0.18.0): a deployable antenna's Deploy entry gates the transmitter.
+                antennas: KSP1PartModPlugin.Animations.Ksp1AntennaGating,
                 // The char follows the ablator only when our heat shield importer is armed (ksp1_heatshields).
                 ablatorChar: KSP1PartModPlugin.Animations.AblatorChar && NativeModules.IsConverterArmed(KSP1PartMod.Native.AblatorMapping.Ksp1Module),
                 // A char never takes a slot another entry writes (the KV pods' lights), compared through this map.
