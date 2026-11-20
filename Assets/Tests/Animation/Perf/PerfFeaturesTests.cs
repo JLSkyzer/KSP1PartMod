@@ -33,8 +33,8 @@ namespace KSP1PartMod.Tests.Animation.Perf
                 EntryKind.EngineDeploy, EntryKind.EngineMode, EntryKind.LookAt, EntryKind.DecouplerClip, EntryKind.RcsGlow,
                 EntryKind.RcsEmissive, EntryKind.MeshHider, EntryKind.ScienceToggle, EntryKind.AccelSpring, EntryKind.LandingBag,
             }, KindsOf(PerfFeature.Plugins));
-            CollectionAssert.AreEquivalent(new[] { EntryKind.Shroud }, KindsOf(PerfFeature.Shrouds));
-            Assert.AreEqual(22, Enum.GetValues(typeof(EntryKind)).Length);
+            CollectionAssert.AreEquivalent(new[] { EntryKind.Shroud, EntryKind.Structure }, KindsOf(PerfFeature.Shrouds));
+            Assert.AreEqual(23, Enum.GetValues(typeof(EntryKind)).Length);
         }
 
         /// <summary>The runtime's form (resolved once per entry at bind): every kind as <see cref="PerfFeatures.Of"/>, and an

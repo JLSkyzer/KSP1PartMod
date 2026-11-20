@@ -7,9 +7,11 @@ namespace KSP1PartMod.Animation.Cfg
     /// source, whose Mecanim copy does not move; we draw its legacy clip from Redux's state. ChuteFollower: the same for
     /// ModuleParachute (Clip = semi, SecondClip = full, SpeedFactorIn / Out = semi / full deployment speed). The last ten kinds are the
     /// plugin modules of <see cref="PluginEntryParser"/> (DeployableEngines, Bluedog_DB, DMagic, FXModuleAnimateRCS).
-    /// Shroud (appended last, 0.7.0): the jettison shroud of a KSP1 <c>ModuleJettison</c>, see <see cref="ShroudParser"/>.</summary>
+    /// Shroud (appended, 0.7.0): the jettison shroud of a KSP1 <c>ModuleJettison</c>, see <see cref="ShroudParser"/>.
+    /// Structure (appended last, 0.17.0): a <c>ModuleStructuralNode</c> root object shown while a part is attached to one of its
+    /// nodes, see <see cref="StructureParser"/>.</summary>
     public enum EntryKind { Toggle, Deploy, Gear, Throttle, Heat, Color, Group, AeroGate, GearBridge, ReduxFollower, ChuteFollower,
-        EngineDeploy, EngineMode, LookAt, DecouplerClip, RcsGlow, RcsEmissive, MeshHider, ScienceToggle, AccelSpring, LandingBag, Shroud }
+        EngineDeploy, EngineMode, LookAt, DecouplerClip, RcsGlow, RcsEmissive, MeshHider, ScienceToggle, AccelSpring, LandingBag, Shroud, Structure }
 
     /// <summary>The scalar a Color entry follows besides KSP1's FX setter: None (the toggle, or the setter when
     /// <see cref="AnimEntryDef.ScalarLinked"/>), Ablator (the part's ablator fraction, 0.8.0). Values are only ever appended.</summary>
@@ -137,6 +139,12 @@ namespace KSP1PartMod.Animation.Cfg
         /// enabled (<see cref="ShroudVariantPlanner"/>); an empty or null array means always enabled. Parallel to
         /// <see cref="TransformNames"/>.</summary>
         public B9Gate[][] NameGates;
+
+        /// <summary>Structure: the part's <c>ModuleStructuralNodeToggle</c> mesh toggle lives on this entry (the first one of the
+        /// part): a VAB-only PAM button that hides every structure root of the part. <see cref="StartLabel"/> is its
+        /// <c>MeshMenuName</c>. The attach nodes of a Structure entry are <see cref="TargetNames"/> and its root object is
+        /// <c>TransformNames[0]</c>.</summary>
+        public bool MeshToggle;
 
         /// <summary>The B9PartSwitch subtypes that switch this entry's module off (<c>moduleActive = false</c>), one
         /// gate per switch (<see cref="B9GatePlanner"/>); null when no switch does. Any kind.</summary>

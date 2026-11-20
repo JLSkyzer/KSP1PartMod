@@ -17,12 +17,13 @@ namespace KSP1PartMod.Animation.Runtime
             kind == EntryKind.Toggle || kind == EntryKind.Deploy || kind == EntryKind.Gear
             || kind == EntryKind.Color || kind == EntryKind.Group
             || kind == EntryKind.EngineDeploy || kind == EntryKind.DecouplerClip || kind == EntryKind.ScienceToggle
-            || kind == EntryKind.LandingBag || kind == EntryKind.AccelSpring || kind == EntryKind.Shroud;
+            || kind == EntryKind.LandingBag || kind == EntryKind.AccelSpring || kind == EntryKind.Shroud
+            || kind == EntryKind.Structure;
 
         /// <summary>Buttons that exist in the editor only (KSP1 editor events): no action-group action. The shroud's
         /// hide/show toggle is one (KSP1 <c>ModuleJettison</c>, editor only).</summary>
         public static bool EditorOnly(EntryKind kind) =>
-            kind == EntryKind.EngineDeploy || kind == EntryKind.DecouplerClip || kind == EntryKind.Shroud;
+            kind == EntryKind.EngineDeploy || kind == EntryKind.DecouplerClip || kind == EntryKind.Shroud || kind == EntryKind.Structure;
 
         /// <summary>Entries with an action-group action (the Gear bridge has only that).</summary>
         public static bool HasAction(EntryKind kind) => HasButton(kind) && !EditorOnly(kind) || kind == EntryKind.GearBridge;
@@ -40,6 +41,7 @@ namespace KSP1PartMod.Animation.Runtime
                 case EntryKind.EngineDeploy: return inEditor && e.EditorToggle;
                 case EntryKind.DecouplerClip: return inEditor;
                 case EntryKind.Shroud: return inEditor && e.AllowShroudToggle;
+                case EntryKind.Structure: return inEditor && e.MeshToggle;
                 default: return inEditor ? e.ToggleInEditor : e.ToggleInFlight;
             }
         }
@@ -47,6 +49,7 @@ namespace KSP1PartMod.Animation.Runtime
         /// <summary>The PAM label. Shroud: "on" is the hide override, so the label names the action that applies next.</summary>
         public static string Button(AnimEntryDef e, bool on) =>
             e.Kind == EntryKind.Shroud ? (on ? ShroudLines.ShowLabel : ShroudLines.HideLabel)
+            : e.Kind == EntryKind.Structure ? StructureLines.Button(e.StartLabel, on)
             : e.Kind == EntryKind.DecouplerClip
                 ? Text(e.StartLabel) ?? DecouplerPreview
                 : Text(on ? e.EndLabel : e.StartLabel) ?? Text(e.ActionLabel) ?? Default(e, on);

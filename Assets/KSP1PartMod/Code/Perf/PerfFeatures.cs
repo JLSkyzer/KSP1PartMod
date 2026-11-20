@@ -73,6 +73,7 @@ namespace KSP1PartMod.Perf
                 case EntryKind.LandingBag:
                     return PerfFeature.Plugins;
                 case EntryKind.Shroud:
+                case EntryKind.Structure:
                     return PerfFeature.Shrouds;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(kind), kind, "entry kind without a perf feature");

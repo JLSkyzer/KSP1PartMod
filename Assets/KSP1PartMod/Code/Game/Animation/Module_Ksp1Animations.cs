@@ -221,6 +221,7 @@ namespace KSP1PartMod.Game.Animation
             // Gates before controls and before any entry is driven: an inactive entry never shows its button or its pose.
             BindVariants();
             ResolveShrouds();
+            ResolveStructures();
             try
             {
                 if (_tracksWanted && !_tracksPending) BindTracks(tracks, generation, inEditor, late: false);
@@ -519,6 +520,11 @@ namespace KSP1PartMod.Game.Animation
                     e.ShroudRt = new ShroudRuntime(def);
                     e.Machine = e.ShroudRt.Machine;
                     break; // its objects, node and name gates are resolved once the variants are bound (ResolveShrouds)
+                case EntryKind.Structure:
+                    e.StructureRt = new StructureRuntime(def);
+                    e.StructureRt.ApplyAll = SetAllStructuresHidden;
+                    e.Machine = e.StructureRt.Machine;
+                    break; // its root and nodes are resolved once the variants are bound (ResolveStructures)
                 case EntryKind.AccelSpring:
                 {
                     if (!StatesOrTracks(e, def.Clip, tracks, false, ref note, out var length)) return null;
@@ -683,6 +689,7 @@ namespace KSP1PartMod.Game.Animation
             {
                 var kind = e.Def.Kind;
                 if (e.Disabled || !ControlLabels.HasControl(kind)) continue;
+                if (kind == EntryKind.Structure && !e.Def.MeshToggle) continue; // only the part's first entry carries the toggle
                 try
                 {
                     AddControl(e, inEditor, ref buttons, ref actions, ref dynamicLabels);
@@ -873,6 +880,7 @@ namespace KSP1PartMod.Game.Animation
                     // B9 gate closed: the rest pose once (RestInactive did it before the other entries), no machine tick.
                     if (!e.Rested) Rest(e);
                     if (e.ShroudRt != null) StepShroud(e, inEditor); // an inactive entry hides its shroud
+                    if (e.StructureRt != null) StepStructure(e, inEditor); // and its structure root
                     RefreshControls(e, inEditor);
                     return;
                 }
@@ -991,6 +999,9 @@ namespace KSP1PartMod.Game.Animation
                         break;
                     case EntryKind.Shroud:
                         StepShroud(e, inEditor);
+                        break;
+                    case EntryKind.Structure:
+                        StepStructure(e, inEditor);
                         break;
                     case EntryKind.AccelSpring:
                         e.Spring.Tick(dt, PluginRules.SpringAcceleration(inEditor, e.Accel != null, e.Accel != null ? e.Accel() : 0f));
@@ -1136,6 +1147,7 @@ namespace KSP1PartMod.Game.Animation
                 case EntryKind.Color: return e.Color.On;
                 case EntryKind.GearBridge: return e.ReduxState != null && e.ReduxState.GetValue();
                 case EntryKind.Shroud: return e.ShroudRt.Machine.HideOverride; // "on": the player hid it
+                case EntryKind.Structure: return e.StructureRt.Machine.MeshHidden; // "on": the player hid the structure
                 default: return false;
             }
         }
@@ -1171,6 +1183,10 @@ namespace KSP1PartMod.Game.Animation
                     e.ReduxSet(on);
                     return true;
                 case EntryKind.Shroud: return e.ShroudRt.Machine.SetHideOverride(on); // VAB only (ControlLabels.Allowed)
+                case EntryKind.Structure:
+                    if (e.StructureRt.Machine.MeshHidden == on) return false;
+                    e.StructureRt.ApplyAll?.Invoke(on); // every structure entry of the part, VAB only
+                    return true;
                 default: return false;
             }
         }
@@ -1183,6 +1199,7 @@ namespace KSP1PartMod.Game.Animation
         {
             if (Inactive(e) || !Allowed(e.Def, inEditor)) return false;
             if (e.ShroudRt != null && e.ShroudRt.Objects == null) return false; // no shroud transform found
+            if (e.Def.Kind == EntryKind.Structure && (!e.Def.MeshToggle || e.StructureRt.Root == null)) return false; // one button per part
             if (e.Toggle != null && e.Toggle.IsFixed) return false;
             if (e.Def.Kind == EntryKind.Deploy && !inEditor && !e.Def.Retractable && e.Deploy.State == DeployState.Extended) return false;
             return true;
@@ -1375,6 +1392,8 @@ namespace KSP1PartMod.Game.Animation
             public AdvancedLookAt LookAt;
             /// <summary>Shroud: its machine, objects, node and name gates.</summary>
             public ShroudRuntime ShroudRt;
+            /// <summary>Structure: its machine and root.</summary>
+            public StructureRuntime StructureRt;
             /// <summary>An engine machine took its flight-start pose (<see cref="PluginRules.StartsNow"/>).</summary>
             public bool Started;
             public Func<ReduxDeployState> ReadDeploy;

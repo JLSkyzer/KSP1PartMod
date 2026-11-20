@@ -412,8 +412,12 @@ namespace KSP1PartMod.Tests.Animation.Cfg
             StringAssert.Contains("Shroud 1", ModuleInjection.SummaryLine("Squad", new[] { plan }));
         }
 
-        [Test] public void EntryKind_Shroud_IsAppendedLast() =>
-            Assert.AreEqual(EntryKind.Shroud, System.Enum.GetValues(typeof(EntryKind)).Cast<EntryKind>().Max());
+        [Test] public void EntryKind_Shroud_IsAppended_BeforeStructure()
+        {
+            var kinds = System.Enum.GetValues(typeof(EntryKind)).Cast<EntryKind>().OrderBy(k => (int)k).ToArray();
+            Assert.AreEqual(EntryKind.Shroud, kinds[kinds.Length - 2], "Structure (0.17.0) was appended after it");
+            Assert.AreEqual(EntryKind.Structure, kinds[kinds.Length - 1]);
+        }
 
         [Test] public void NewFields_HaveKsp1Defaults()
         {

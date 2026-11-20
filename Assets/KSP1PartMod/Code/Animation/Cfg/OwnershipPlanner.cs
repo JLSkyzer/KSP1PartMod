@@ -98,9 +98,10 @@ namespace KSP1PartMod.Animation.Cfg
         public static PartAnimationPlan Plan(IReadOnlyList<IKsp1Node> modules, bool hasNativeSolarPanel,
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, bool followRedux, ISet<string> skipModules,
             bool pluginModules, bool b9Gates, bool shrouds = false, bool ablatorChar = false,
-            IReadOnlyDictionary<string, string[]> shaderPropertyMap = null, Func<VariantSwitch, bool> b9AppendSet = null) =>
+            IReadOnlyDictionary<string, string[]> shaderPropertyMap = null, Func<VariantSwitch, bool> b9AppendSet = null,
+            bool structures = false) =>
             Plan(modules, hasNativeSolarPanel, nativeKsp2ModuleNames, ownFirstDeployable, NativeCounterparts, followRedux, skipModules,
-                pluginModules, b9Gates, shrouds, ablatorChar, shaderPropertyMap, b9AppendSet);
+                pluginModules, b9Gates, shrouds, ablatorChar, shaderPropertyMap, b9AppendSet, structures);
 
         /// <summary><see cref="Plan(IReadOnlyList{IKsp1Node},bool,ISet{string},bool)"/> with a given counterpart
         /// table. The plugin modules and the B9 gates are off unless asked for: older callers keep the 0.4.0 plan.</summary>
@@ -108,7 +109,7 @@ namespace KSP1PartMod.Animation.Cfg
             ISet<string> nativeKsp2ModuleNames, bool ownFirstDeployable, IReadOnlyDictionary<string, string[]> counterparts,
             bool followRedux = false, ISet<string> skipModules = null, bool pluginModules = false, bool b9Gates = false,
             bool shrouds = false, bool ablatorChar = false, IReadOnlyDictionary<string, string[]> shaderPropertyMap = null,
-            Func<VariantSwitch, bool> b9AppendSet = null)
+            Func<VariantSwitch, bool> b9AppendSet = null, bool structures = false)
         {
             modules = modules ?? new IKsp1Node[0];
             var native = new HashSet<string>(nativeKsp2ModuleNames ?? new HashSet<string>(), StringComparer.OrdinalIgnoreCase);
@@ -209,7 +210,24 @@ namespace KSP1PartMod.Animation.Cfg
                 for (var i = 0; i < modules.Count; i++)
                     Add(entries, ShroudParser.Parse(modules[i], i, 0));
 
-            // The ablator char (0.8.0): after the shrouds, last of all, so that no older Color key moves. It is not planned
+            // Structural nodes (0.17.0): after the shrouds, so that no older key moves. The part's mesh toggle sits on its first entry.
+            if (structures)
+            {
+                var toggleName = StructureParser.MeshToggleName(modules);
+                for (var i = 0; i < modules.Count; i++)
+                {
+                    var se = StructureParser.Parse(modules[i], i, 0);
+                    if (se == null) continue;
+                    if (toggleName != null && !entries.Any(o => o.Kind == EntryKind.Structure))
+                    {
+                        se.MeshToggle = true;
+                        se.StartLabel = toggleName;
+                    }
+                    Add(entries, se);
+                }
+            }
+
+            // The ablator char (0.8.0): after the shrouds and the structures, last of all, so that no older Color key moves. It is not planned
             // when another entry of the part writes the same shader property (a KV pod's light changer, which would never
             // show again: the char submits every frame and outranks it). Dropping the last entries moves no key.
             var map = shaderPropertyMap ?? AnimationSettings.Defaults.ShaderPropertyMap;

@@ -99,7 +99,7 @@ namespace KSP1PartMod.Animation.Cfg
         internal static string KeyName(AnimEntryDef e) =>
             FirstNonBlank(e.Clip, e.SecondClip, e.ThirdClip, e.ShaderProperty)
             ?? (e.Kind == EntryKind.AeroGate ? e.ControllerModuleIndex.ToString(CultureInfo.InvariantCulture)
-                : e.Kind == EntryKind.Shroud && e.TransformNames != null && e.TransformNames.Length > 0 ? e.TransformNames[0] : "");
+                : (e.Kind == EntryKind.Shroud || e.Kind == EntryKind.Structure) && e.TransformNames != null && e.TransformNames.Length > 0 ? e.TransformNames[0] : "");
 
         internal static void SetKey(AnimEntryDef e, int ordinal) =>
             e.Key = e.Kind.ToString().ToLowerInvariant() + ":" + KeyName(e) + ":" + ordinal.ToString(CultureInfo.InvariantCulture);

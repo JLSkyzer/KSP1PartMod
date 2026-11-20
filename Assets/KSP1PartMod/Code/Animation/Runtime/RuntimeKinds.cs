@@ -26,6 +26,7 @@ namespace KSP1PartMod.Animation.Runtime
                 case EntryKind.MeshHider:
                 case EntryKind.LookAt:
                 case EntryKind.Shroud:
+                case EntryKind.Structure:
                     return true;
                 default:
                     return false;

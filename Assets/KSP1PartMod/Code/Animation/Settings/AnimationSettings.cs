@@ -264,6 +264,9 @@ namespace KSP1PartMod.Animation.Settings
         /// <summary>0.16.4: Redux's recursive texture search (6 full walks of <c>mods/KSP1</c> per missing name) is answered
         /// from an index of the folder built once (<c>fast_texture_lookup</c>, default true; false: Redux's search).</summary>
         public bool FastTextureLookup => _engines0160.FastTextureLookup;
+        /// <summary>0.17.0: a KSP1 <c>ModuleStructuralNode</c> root (interstage cap, truss) is shown only while a part is attached
+        /// to one of its nodes (<c>ksp1_structural_nodes</c>, default true; false: the roots stay always visible as in 0.16.4).</summary>
+        public bool Ksp1StructuralNodes => _engines0160.StructuralNodes;
 
         /// <summary>KSP1 experiment modules become KSP2's <c>Module_ScienceExperiment</c> (<c>ksp1_science</c>, default true).</summary>
         public bool Ksp1Science => _science.Science;
@@ -347,7 +350,7 @@ namespace KSP1PartMod.Animation.Settings
         {
             public bool SepProceduralEngines = true, EngineModesFallback = true, SizeFromNodes = true;
             public bool DefaultRescale = true, LegacyNodeScale = true, ModelPositionRescale = true, WheelRadiusRescale = true;
-            public bool FastTextureLookup = true;
+            public bool FastTextureLookup = true, StructuralNodes = true;
         }
 
         private readonly Switches0160 _engines0160;
@@ -601,6 +604,7 @@ namespace KSP1PartMod.Animation.Settings
                         case "ksp1_model_position_rescale": ReadBool(p, ref engines0160.ModelPositionRescale, problems); break;
                         case "wheel_radius_rescale": ReadBool(p, ref engines0160.WheelRadiusRescale, problems); break;
                         case "fast_texture_lookup": ReadBool(p, ref engines0160.FastTextureLookup, problems); break;
+                        case "ksp1_structural_nodes": ReadBool(p, ref engines0160.StructuralNodes, problems); break;
                         case "ksp1_science": ReadBool(p, ref science.Science, problems); break;
                         case "science_generate_definitions": ReadBool(p, ref science.GenerateDefinitions, problems); break;
                         case "science_definitions_via_patch_manager": ReadBool(p, ref science.ViaPatchManager, problems); break;
